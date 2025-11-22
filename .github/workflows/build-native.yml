@@ -47,6 +47,7 @@ jobs:
 
       - name: Check if crates directory exists
         id: check_crates
+        shell: bash
         run: |
           if [ -d "crates/ruvector-node" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
