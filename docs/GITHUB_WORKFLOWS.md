@@ -12,17 +12,17 @@ We've implemented **7 intelligent workflows** that combine AI agent coordination
 
 ### 📦 **Core CI/CD Workflows**
 3. **Agentic-Synth CI/CD** - Main build, test, and validation pipeline
-4. **Build Native Modules** - Cross-platform native module compilation
-5. **Package Publishing** - Automated NPM package releases
+4. **Package Publishing** - Automated NPM package releases
 
 ### ⚠️ **Removed Workflows**
 
-The following Rust-based workflows have been removed as they were incompatible with this JavaScript/TypeScript monorepo:
+The following workflows have been removed as they were incompatible with this JavaScript/TypeScript monorepo:
 - ~~Intelligent Test Routing~~ (Rust cargo-based)
 - ~~Performance Benchmarking~~ (Rust cargo-based)
 - ~~Automated Model Training~~ (Rust cargo-based)
 - ~~Cost Optimization~~ (Rust cargo-based)
 - ~~Intelligent PR Analysis~~ (Rust cargo-based)
+- ~~Build Native Modules~~ (Rust compilation errors, not required for JS package)
 
 These workflows were designed for Rust projects and are not applicable to the agentic-synth JavaScript package.
 
@@ -198,22 +198,6 @@ npx claude-flow@alpha task orchestrate \
 **Matrix Testing**:
 - Node versions: 18.x, 20.x, 22.x
 - OS: Ubuntu, macOS, Windows
-
-### 2. Build Native Modules
-
-**File**: `.github/workflows/build-native.yml`
-
-**Purpose**: Build native Rust modules for multiple platforms.
-
-**Platforms**:
-- linux-x64-gnu, linux-arm64-gnu
-- darwin-x64 (Intel Mac), darwin-arm64 (Apple Silicon)
-- win32-x64-msvc (Windows)
-
-**Features**:
-- Conditional execution (skips if crates missing)
-- Cross-platform compilation
-- Artifact uploading for distribution
 
 ---
 
