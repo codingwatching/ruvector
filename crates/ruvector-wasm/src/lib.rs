@@ -217,11 +217,13 @@ impl VectorDB {
     /// Array of vector IDs
     #[wasm_bindgen(js_name = insertBatch)]
     pub fn insert_batch(&self, entries: JsValue) -> Result<Vec<String>, JsValue> {
-        let js_entries: Vec<JsValue> = from_value(entries)
-            .map_err(|e| JsValue::from_str(&format!("Invalid entries array: {}", e)))?;
+        // Convert JsValue to Array using reflection
+        let entries_array: js_sys::Array = entries.dyn_into()
+            .map_err(|_| JsValue::from_str("entries must be an array"))?;
 
         let mut vector_entries = Vec::new();
-        for js_entry in js_entries {
+        for i in 0..entries_array.length() {
+            let js_entry = entries_array.get(i);
             let vector_arr: Float32Array = Reflect::get(&js_entry, &"vector".into())?.dyn_into()?;
             let id: Option<String> = Reflect::get(&js_entry, &"id".into())?.as_string();
             let metadata = Reflect::get(&js_entry, &"metadata".into()).ok();

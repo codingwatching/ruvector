@@ -13,6 +13,8 @@
 npx ruvector
 ```
 
+> **All-in-One Package**: The core `ruvector` package includes everything — vector search, graph queries, GNN layers, tensor compression, and WASM support. No additional packages needed.
+
 ## What Problem Does RuVector Solve?
 
 Traditional vector databases just store and search. When you ask "find similar items," they return results but never get smarter.
@@ -22,6 +24,8 @@ Traditional vector databases just store and search. When you ask "find similar i
 1. **Store vectors** like any vector DB (embeddings from OpenAI, Cohere, etc.)
 2. **Query with Cypher** like Neo4j (`MATCH (a)-[:SIMILAR]->(b) RETURN b`)
 3. **The index learns** — GNN layers make search results improve over time
+4. **Compress automatically** — 2-32x memory reduction with adaptive tiered compression
+5. **Run anywhere** — Node.js, browser (WASM), or native Rust
 
 Think of it as: **Pinecone + Neo4j + PyTorch** in one Rust package.
 
@@ -55,6 +59,10 @@ const enhanced = layer.forward(query, neighbors, weights);
 
 // Compression (2-32x memory savings)
 const compressed = ruvector.compress(embedding, 0.3);
+
+// Tiny Dancer: AI agent routing
+const router = new ruvector.Router();
+const decision = router.route(candidates, { optimize: 'cost' });
 ```
 
 ### Rust
@@ -90,6 +98,7 @@ let enhanced = layer.forward(&query, &neighbors, &weights);
 | **Hyperedges** | Connect 3+ nodes at once | Model complex relationships |
 | **Tensor Compression** | f32→f16→PQ8→PQ4→Binary | 2-32x memory reduction |
 | **Differentiable Search** | Soft attention k-NN | End-to-end trainable |
+| **Tiny Dancer** | FastGRNN neural routing | Optimize LLM inference costs |
 | **WASM/Browser** | Full client-side support | Run AI search offline |
 
 ## Comparison
@@ -101,6 +110,7 @@ let enhanced = layer.forward(&query, &neighbors, &weights);
 | **Graph Queries** | ✅ Cypher | ❌ | ❌ | ❌ | ❌ |
 | **Hyperedges** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Self-Learning (GNN)** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **AI Agent Routing** | ✅ Tiny Dancer | ❌ | ❌ | ❌ | ❌ |
 | **Auto-Compression** | ✅ 2-32x | ❌ | ❌ | ✅ | ❌ |
 | **Browser/WASM** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Differentiable** | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -187,11 +197,12 @@ RETURN related
 
 ```
 crates/
-├── ruvector-core/       # Vector DB engine (HNSW, storage)
-├── ruvector-graph/      # Graph DB + Cypher parser
-├── ruvector-gnn/        # GNN layers, compression, training
-├── ruvector-gnn-wasm/   # WebAssembly bindings
-└── ruvector-gnn-node/   # Node.js bindings (napi-rs)
+├── ruvector-core/           # Vector DB engine (HNSW, storage)
+├── ruvector-graph/          # Graph DB + Cypher parser + Hyperedges
+├── ruvector-gnn/            # GNN layers, compression, training
+├── ruvector-tiny-dancer-core/  # AI agent routing (FastGRNN)
+├── ruvector-*-wasm/         # WebAssembly bindings
+└── ruvector-*-node/         # Node.js bindings (napi-rs)
 ```
 
 ## Contributing
