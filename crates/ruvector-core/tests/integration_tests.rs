@@ -2,8 +2,8 @@
 //!
 //! These tests verify that all components work together correctly.
 
-use ruvector_core::types::*;
-use ruvector_core::{DbOptions, VectorDB, VectorEntry};
+use ruvector_core::types::{DbOptions, DistanceMetric, HnswConfig, SearchQuery};
+use ruvector_core::{VectorDB, VectorEntry};
 use std::collections::HashMap;
 use tempfile::tempdir;
 

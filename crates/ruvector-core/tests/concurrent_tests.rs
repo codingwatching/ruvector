@@ -2,8 +2,8 @@
 //!
 //! These tests verify thread-safety and correct behavior under concurrent access.
 
-use ruvector_core::types::*;
-use ruvector_core::{DbOptions, VectorDB, VectorEntry};
+use ruvector_core::types::{DbOptions, HnswConfig, SearchQuery};
+use ruvector_core::{VectorDB, VectorEntry};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::thread;

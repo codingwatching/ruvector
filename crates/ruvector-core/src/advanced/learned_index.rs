@@ -374,7 +374,7 @@ mod tests {
         let data: Vec<(Vec<f32>, VectorId)> = (0..100)
             .map(|i| {
                 let x = i as f32 / 100.0;
-                (vec![x, x * x], i as VectorId)
+                (vec![x, x * x], i.to_string())
             })
             .collect();
 
@@ -389,25 +389,32 @@ mod tests {
     fn test_rmi_search() {
         let mut rmi = RecursiveModelIndex::new(1, 2);
 
-        let data = vec![(vec![0.0], 0), (vec![0.5], 1), (vec![1.0], 2)];
+        let data = vec![
+            (vec![0.0], "0".to_string()),
+            (vec![0.5], "1".to_string()),
+            (vec![1.0], "2".to_string()),
+        ];
 
         rmi.build(data).unwrap();
 
         let result = rmi.search(&[0.5]).unwrap();
-        assert_eq!(result, Some(1));
+        assert_eq!(result, Some("1".to_string()));
     }
 
     #[test]
     fn test_hybrid_index() {
         let mut hybrid = HybridIndex::new(1, 2, 10);
 
-        let static_data = vec![(vec![0.0], 0), (vec![1.0], 1)];
+        let static_data = vec![
+            (vec![0.0], "0".to_string()),
+            (vec![1.0], "1".to_string()),
+        ];
         hybrid.build_static(static_data).unwrap();
 
         // Add dynamic updates
-        hybrid.insert(vec![2.0], 2).unwrap();
+        hybrid.insert(vec![2.0], "2".to_string()).unwrap();
 
-        assert_eq!(hybrid.search(&[2.0]).unwrap(), Some(2));
-        assert_eq!(hybrid.search(&[0.0]).unwrap(), Some(0));
+        assert_eq!(hybrid.search(&[2.0]).unwrap(), Some("2".to_string()));
+        assert_eq!(hybrid.search(&[0.0]).unwrap(), Some("0".to_string()));
     }
 }

@@ -2,8 +2,8 @@
 //!
 //! These tests push the system to its limits to verify robustness.
 
-use ruvector_core::types::*;
-use ruvector_core::{DbOptions, VectorDB, VectorEntry};
+use ruvector_core::types::{DbOptions, HnswConfig, SearchQuery};
+use ruvector_core::{VectorDB, VectorEntry};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use tempfile::tempdir;

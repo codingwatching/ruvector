@@ -440,20 +440,20 @@ mod tests {
 
     #[test]
     fn test_hyperedge_creation() {
-        let nodes = vec![1, 2, 3];
+        let nodes = vec!["1".to_string(), "2".to_string(), "3".to_string()];
         let desc = "Test relationship".to_string();
         let embedding = vec![0.1, 0.2, 0.3];
         let edge = Hyperedge::new(nodes, desc, embedding, 0.95);
 
         assert_eq!(edge.order(), 3);
-        assert!(edge.contains_node(&1));
-        assert!(!edge.contains_node(&4));
+        assert!(edge.contains_node(&"1".to_string()));
+        assert!(!edge.contains_node(&"4".to_string()));
         assert_eq!(edge.confidence, 0.95);
     }
 
     #[test]
     fn test_temporal_hyperedge() {
-        let nodes = vec![1, 2];
+        let nodes = vec!["1".to_string(), "2".to_string()];
         let desc = "Temporal relationship".to_string();
         let embedding = vec![0.1, 0.2];
         let edge = Hyperedge::new(nodes, desc, embedding, 1.0);
@@ -469,13 +469,13 @@ mod tests {
         let mut index = HypergraphIndex::new(DistanceMetric::Cosine);
 
         // Add entities
-        index.add_entity(1, vec![1.0, 0.0, 0.0]);
-        index.add_entity(2, vec![0.0, 1.0, 0.0]);
-        index.add_entity(3, vec![0.0, 0.0, 1.0]);
+        index.add_entity("1".to_string(), vec![1.0, 0.0, 0.0]);
+        index.add_entity("2".to_string(), vec![0.0, 1.0, 0.0]);
+        index.add_entity("3".to_string(), vec![0.0, 0.0, 1.0]);
 
         // Add hyperedge
         let edge = Hyperedge::new(
-            vec![1, 2, 3],
+            vec!["1".to_string(), "2".to_string(), "3".to_string()],
             "Triple relationship".to_string(),
             vec![0.5, 0.5, 0.5],
             0.9,
@@ -492,36 +492,36 @@ mod tests {
         let mut index = HypergraphIndex::new(DistanceMetric::Cosine);
 
         // Create a small hypergraph
-        index.add_entity(1, vec![1.0]);
-        index.add_entity(2, vec![1.0]);
-        index.add_entity(3, vec![1.0]);
-        index.add_entity(4, vec![1.0]);
+        index.add_entity("1".to_string(), vec![1.0]);
+        index.add_entity("2".to_string(), vec![1.0]);
+        index.add_entity("3".to_string(), vec![1.0]);
+        index.add_entity("4".to_string(), vec![1.0]);
 
-        let edge1 = Hyperedge::new(vec![1, 2], "e1".to_string(), vec![1.0], 1.0);
-        let edge2 = Hyperedge::new(vec![2, 3], "e2".to_string(), vec![1.0], 1.0);
-        let edge3 = Hyperedge::new(vec![3, 4], "e3".to_string(), vec![1.0], 1.0);
+        let edge1 = Hyperedge::new(vec!["1".to_string(), "2".to_string()], "e1".to_string(), vec![1.0], 1.0);
+        let edge2 = Hyperedge::new(vec!["2".to_string(), "3".to_string()], "e2".to_string(), vec![1.0], 1.0);
+        let edge3 = Hyperedge::new(vec!["3".to_string(), "4".to_string()], "e3".to_string(), vec![1.0], 1.0);
 
         index.add_hyperedge(edge1).unwrap();
         index.add_hyperedge(edge2).unwrap();
         index.add_hyperedge(edge3).unwrap();
 
-        let neighbors = index.k_hop_neighbors(1, 2);
-        assert!(neighbors.contains(&1));
-        assert!(neighbors.contains(&2));
-        assert!(neighbors.contains(&3));
+        let neighbors = index.k_hop_neighbors("1".to_string(), 2);
+        assert!(neighbors.contains(&"1".to_string()));
+        assert!(neighbors.contains(&"2".to_string()));
+        assert!(neighbors.contains(&"3".to_string()));
     }
 
     #[test]
     fn test_causal_memory() {
         let mut memory = CausalMemory::new(DistanceMetric::Cosine);
 
-        memory.index.add_entity(1, vec![1.0, 0.0]);
-        memory.index.add_entity(2, vec![0.0, 1.0]);
+        memory.index.add_entity("1".to_string(), vec![1.0, 0.0]);
+        memory.index.add_entity("2".to_string(), vec![0.0, 1.0]);
 
         memory
             .add_causal_edge(
-                1,
-                2,
+                "1".to_string(),
+                "2".to_string(),
                 vec![],
                 "Action 1 causes effect 2".to_string(),
                 vec![0.5, 0.5],
@@ -529,7 +529,7 @@ mod tests {
             )
             .unwrap();
 
-        let results = memory.query_with_utility(&[0.6, 0.4], 1, 5);
+        let results = memory.query_with_utility(&[0.6, 0.4], "1".to_string(), 5);
         assert!(!results.is_empty());
     }
 }

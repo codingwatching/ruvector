@@ -403,9 +403,9 @@ mod tests {
         let mut index = HashIndex::new(lsh, 8);
 
         // Insert vectors
-        index.insert(0, vec![1.0, 0.0, 0.0]);
-        index.insert(1, vec![0.9, 0.1, 0.0]);
-        index.insert(2, vec![0.0, 1.0, 0.0]);
+        index.insert("0".to_string(), vec![1.0, 0.0, 0.0]);
+        index.insert("1".to_string(), vec![0.9, 0.1, 0.0]);
+        index.insert("2".to_string(), vec![0.0, 1.0, 0.0]);
 
         // Search
         let results = index.search(&[1.0, 0.0, 0.0], 2, 4);
@@ -422,7 +422,7 @@ mod tests {
 
         for i in 0..10 {
             let vec: Vec<f32> = (0..128).map(|j| (i + j) as f32 / 128.0).collect();
-            index.insert(i, vec);
+            index.insert(i.to_string(), vec);
         }
 
         let ratio = index.compression_ratio();

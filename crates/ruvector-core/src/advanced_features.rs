@@ -14,8 +14,10 @@ pub mod mmr;
 pub mod product_quantization;
 
 // Re-exports
-pub use conformal_prediction::{ConformalConfig, ConformalPredictor, PredictionSet};
+pub use conformal_prediction::{
+    ConformalConfig, ConformalPredictor, NonconformityMeasure, PredictionSet,
+};
 pub use filtered_search::{FilterExpression, FilterStrategy, FilteredSearch};
-pub use hybrid_search::{HybridConfig, HybridSearch, BM25};
+pub use hybrid_search::{BM25, HybridConfig, HybridSearch, NormalizationStrategy};
 pub use mmr::{MMRConfig, MMRSearch};
 pub use product_quantization::{EnhancedPQ, LookupTable, PQConfig};

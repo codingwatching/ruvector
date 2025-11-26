@@ -22,7 +22,7 @@ fn vector_strategy(dim: usize) -> impl Strategy<Value = Vec<f32>> {
 
 // Strategy for normalized vectors (for cosine similarity)
 fn normalized_vector_strategy(dim: usize) -> impl Strategy<Value = Vec<f32>> {
-    vector_strategy(dim).prop_map(|v| {
+    vector_strategy(dim).prop_map(move |v| {
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
             v.iter().map(|x| x / norm).collect()
