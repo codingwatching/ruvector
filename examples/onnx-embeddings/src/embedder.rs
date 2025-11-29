@@ -405,6 +405,10 @@ impl Default for EmbedderBuilder {
 mod tests {
     use super::*;
 
-    // Integration tests would go here, but require model files
-    // See examples/ for usage demonstrations
+    #[test]
+    fn test_default_config() {
+        let config = EmbedderConfig::default();
+        assert_eq!(config.pooling, PoolingStrategy::Mean);
+        assert!(config.normalize);
+    }
 }

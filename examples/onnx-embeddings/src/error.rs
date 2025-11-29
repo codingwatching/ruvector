@@ -87,6 +87,26 @@ pub enum EmbeddingError {
     /// Generic error
     #[error("{0}")]
     Other(String),
+
+    /// GPU initialization error
+    #[error("GPU initialization failed: {reason}")]
+    GpuInitFailed { reason: String },
+
+    /// GPU operation error
+    #[error("GPU operation failed: {operation} - {reason}")]
+    GpuOperationFailed { operation: String, reason: String },
+
+    /// Shader compilation error
+    #[error("Shader compilation failed: {shader} - {reason}")]
+    ShaderCompilationFailed { shader: String, reason: String },
+
+    /// GPU buffer error
+    #[error("GPU buffer error: {reason}")]
+    GpuBufferError { reason: String },
+
+    /// GPU not available
+    #[error("GPU not available: {reason}")]
+    GpuNotAvailable { reason: String },
 }
 
 impl EmbeddingError {
@@ -148,6 +168,49 @@ impl EmbeddingError {
     /// Create a generic error
     pub fn other(msg: impl Into<String>) -> Self {
         Self::Other(msg.into())
+    }
+
+    /// Create a GPU initialization error
+    pub fn gpu_init_failed(reason: impl Into<String>) -> Self {
+        Self::GpuInitFailed { reason: reason.into() }
+    }
+
+    /// Create a GPU operation error
+    pub fn gpu_operation_failed(operation: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::GpuOperationFailed {
+            operation: operation.into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Create a shader compilation error
+    pub fn shader_compilation_failed(shader: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::ShaderCompilationFailed {
+            shader: shader.into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Create a GPU buffer error
+    pub fn gpu_buffer_error(reason: impl Into<String>) -> Self {
+        Self::GpuBufferError { reason: reason.into() }
+    }
+
+    /// Create a GPU not available error
+    pub fn gpu_not_available(reason: impl Into<String>) -> Self {
+        Self::GpuNotAvailable { reason: reason.into() }
+    }
+
+    /// Check if this error is a GPU error
+    pub fn is_gpu_error(&self) -> bool {
+        matches!(
+            self,
+            Self::GpuInitFailed { .. }
+                | Self::GpuOperationFailed { .. }
+                | Self::ShaderCompilationFailed { .. }
+                | Self::GpuBufferError { .. }
+                | Self::GpuNotAvailable { .. }
+        )
     }
 
     /// Check if this error is recoverable

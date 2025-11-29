@@ -63,6 +63,32 @@ pub mod pooling;
 pub mod ruvector_integration;
 pub mod tokenizer;
 
+/// GPU acceleration module (optional, requires `gpu` feature)
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
+/// GPU module stub for when feature is disabled
+#[cfg(not(feature = "gpu"))]
+pub mod gpu {
+    //! GPU acceleration is not available without the `gpu` feature.
+    //!
+    //! Enable with: `cargo build --features gpu`
+
+    /// Placeholder for GpuConfig when GPU feature is disabled
+    #[derive(Debug, Clone, Default)]
+    pub struct GpuConfig;
+
+    impl GpuConfig {
+        /// Create default config (no-op without GPU feature)
+        pub fn auto() -> Self { Self }
+        /// CPU-only config
+        pub fn cpu_only() -> Self { Self }
+    }
+
+    /// Check if GPU is available (always false without feature)
+    pub async fn is_gpu_available() -> bool { false }
+}
+
 // Re-exports
 pub use config::{EmbedderConfig, ModelSource, PoolingStrategy};
 pub use embedder::{Embedder, EmbedderBuilder, EmbeddingOutput};
@@ -73,6 +99,13 @@ pub use ruvector_integration::{
     Distance, IndexConfig, RagPipeline, RuVectorBuilder, RuVectorEmbeddings, SearchResult, VectorId,
 };
 pub use tokenizer::Tokenizer;
+
+// GPU exports (conditional)
+#[cfg(feature = "gpu")]
+pub use gpu::{
+    GpuAccelerator, GpuConfig, GpuMode, GpuInfo, GpuBackend,
+    HybridAccelerator, is_gpu_available,
+};
 
 /// Prelude module for convenient imports
 pub mod prelude {

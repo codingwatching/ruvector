@@ -9,7 +9,7 @@ use std::time::Instant;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Create embedder with custom settings
-    let embedder = EmbedderBuilder::new()
+    let mut embedder = EmbedderBuilder::new()
         .pretrained(PretrainedModel::AllMiniLmL6V2)
         .pooling(PoolingStrategy::Mean)
         .normalize(true)

@@ -4,14 +4,13 @@ use anyhow::Result;
 use ruvector_onnx_embeddings::{
     Embedder, RuVectorEmbeddings, IndexConfig, Distance,
 };
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     println!("=== Semantic Search with RuVector ONNX Embeddings ===\n");
 
     // Initialize embedder
-    let embedder = Arc::new(Embedder::default_model().await?);
+    let embedder = Embedder::default_model().await?;
     println!("Loaded model with dimension: {}", embedder.dimension());
 
     // Create index with custom configuration
@@ -21,7 +20,7 @@ async fn main() -> Result<()> {
         ef_search: 100,
     };
 
-    let index = RuVectorEmbeddings::new("semantic_docs", embedder.clone(), config)?;
+    let index = RuVectorEmbeddings::new("semantic_docs", embedder, config)?;
 
     // Sample document corpus
     let documents = vec![

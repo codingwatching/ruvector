@@ -7,7 +7,7 @@ use ruvector_onnx_embeddings::{Embedder, EmbedderConfig, PretrainedModel};
 async fn main() -> Result<()> {
     // Create embedder with a specific model
     let config = EmbedderConfig::pretrained(PretrainedModel::AllMiniLmL6V2);
-    let embedder = Embedder::new(config).await?;
+    let mut embedder = Embedder::new(config).await?;
 
     // Embed text
     let text = "Hello, RuVector!";

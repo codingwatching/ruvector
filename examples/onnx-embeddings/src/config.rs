@@ -39,7 +39,7 @@ impl From<PretrainedModel> for ModelSource {
 }
 
 /// Pooling strategy for combining token embeddings
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PoolingStrategy {
     /// Mean pooling over all tokens (most common)
     #[default]
