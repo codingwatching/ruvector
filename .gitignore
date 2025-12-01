@@ -24,6 +24,7 @@ target
 node_modules/
 package-lock.json
 !npm/package-lock.json
+!packages/agentic-synth/package-lock.json
 
 # napi-rs build artifacts
 *.node
