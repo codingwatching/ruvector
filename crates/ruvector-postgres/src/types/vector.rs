@@ -599,63 +599,71 @@ fn ruvector_typmod_in_fn(list: pgrx::Array<&CStr>) -> i32 {
 }
 
 /// Low-level wrapper for typmod_in (for CREATE TYPE)
+///
+/// This function parses the dimension specification from ruvector(N) column types.
+/// The input is a cstring[] array containing the modifier string(s).
 #[pg_guard]
 #[no_mangle]
 pub extern "C" fn ruvector_typmod_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
     unsafe {
         // Get the cstring array argument
         let array_datum = (*fcinfo).args.as_ptr().add(0).read().value;
-
-        // Cast to ArrayType pointer and get first element directly
         let array_ptr = array_datum.cast_mut_ptr::<pg_sys::ArrayType>();
 
-        // Get array data section
-        let data_ptr = (array_ptr as *const u8).add(std::mem::size_of::<pg_sys::ArrayType>());
+        if array_ptr.is_null() {
+            pgrx::error!("ruvector type modifier array is null");
+        }
 
-        // First element offset is after the null bitmap (if any)
-        // For simple cstring arrays, data typically starts immediately
-        // This is a simplified approach - just read the first cstring
-
-        // The first element should be a pointer to the dimension string
-        // For a simple 1D cstring array: [ArrayType header][data offset][cstring1][cstring2]...
-
-        // Get the array bounds
-        let ndim = (*array_ptr).ndim;
+        // Get array metadata
+        let ndim = (*array_ptr).ndim as usize;
         if ndim != 1 {
             pgrx::error!("ruvector type modifier must be a 1D array");
         }
 
-        // For text/cstring array, parse directly using pg_detoast if needed
-        let dims_ptr = (array_ptr as *const u8).add(std::mem::offset_of!(pg_sys::ArrayType, dataoffset) + 4) as *const i32;
-        let dim0 = *dims_ptr;
+        // ARR_DIMS: pointer to dimensions array (right after ArrayType struct)
+        let dims_ptr = (array_ptr as *const u8).add(std::mem::size_of::<pg_sys::ArrayType>()) as *const i32;
+        let nelems = *dims_ptr;
 
-        if dim0 != 1 {
-            pgrx::error!("ruvector type modifier must have exactly one dimension");
+        if nelems != 1 {
+            pgrx::error!("ruvector type modifier must have exactly one dimension, got {}", nelems);
         }
 
-        // Get array data - for cstring[], each element is null-terminated
-        let dataoffset = if (*array_ptr).dataoffset == 0 {
-            // No null bitmap, data follows header + dimensions + lower bounds
-            let header_size = std::mem::size_of::<pg_sys::ArrayType>();
-            let dims_size = (ndim as usize) * std::mem::size_of::<i32>() * 2; // dims + lbounds
-            header_size + dims_size
+        // Calculate data offset
+        // For arrays without nulls: sizeof(ArrayType) + 2 * sizeof(int) * ndim (dims + lbounds), aligned
+        // For arrays with nulls: dataoffset field contains the offset
+        let data_offset = if (*array_ptr).dataoffset == 0 {
+            // No null bitmap - calculate MAXALIGN offset
+            let overhead = std::mem::size_of::<pg_sys::ArrayType>() + 2 * std::mem::size_of::<i32>() * ndim;
+            // MAXALIGN to 8 bytes
+            (overhead + 7) & !7
         } else {
             (*array_ptr).dataoffset as usize
         };
 
-        // First cstring element
-        let first_elem = (array_ptr as *const u8).add(dataoffset) as *const i8;
-        let dim_str = CStr::from_ptr(first_elem);
-        let dim_str_rust = dim_str.to_str().unwrap_or("0");
+        // Get pointer to data
+        let data_ptr = (array_ptr as *const u8).add(data_offset) as *const i8;
 
-        let dimensions: i32 = dim_str_rust.parse().unwrap_or_else(|_| {
-            pgrx::error!("invalid dimension specification: {}", dim_str_rust);
-        });
+        // Read the first cstring (dimension specification)
+        let dim_cstr = CStr::from_ptr(data_ptr);
+        let dim_str = match dim_cstr.to_str() {
+            Ok(s) => s.trim(),
+            Err(_) => pgrx::error!("invalid UTF-8 in dimension specification"),
+        };
+
+        // Parse the dimension value
+        let dimensions: i32 = match dim_str.parse() {
+            Ok(d) => d,
+            Err(_) => pgrx::error!("invalid dimension specification: '{}'", dim_str),
+        };
 
         // Validate dimensions
-        if dimensions < 1 || dimensions > MAX_DIMENSIONS as i32 {
+        if dimensions < 1 {
+            pgrx::error!("dimensions must be at least 1, got {}", dimensions);
+        }
+
+        if dimensions > MAX_DIMENSIONS as i32 {
             pgrx::error!(
-                "dimensions must be between 1 and {}, got {}",
+                "dimensions must be at most {}, got {}",
                 MAX_DIMENSIONS,
                 dimensions
             );
