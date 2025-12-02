@@ -29,6 +29,7 @@ members = [
     "crates/ruvector-attention",
     "crates/ruvector-attention-wasm",
     "crates/ruvector-attention-node",
+    "crates/ruvector-postgres",
     "examples/refrag-pipeline",
     "examples/scipix",
 ]

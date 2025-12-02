@@ -1,0 +1,111 @@
+[package]
+name = "ruvector-postgres"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "High-performance PostgreSQL vector similarity search extension - pgvector drop-in replacement"
+repository = "https://github.com/ruvnet/ruvector"
+keywords = ["postgresql", "vector", "similarity", "search", "pgvector"]
+categories = ["database", "science"]
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+default = ["pg16"]
+pg14 = ["pgrx/pg14", "pgrx-tests/pg14"]
+pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
+pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
+pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
+pg_test = []
+
+# SIMD features
+simd-avx2 = []
+simd-avx512 = []
+simd-neon = []
+simd-auto = []  # Auto-detect at runtime (default behavior)
+
+# Quantization features
+quantization-scalar = []
+quantization-product = []
+quantization-binary = []
+quantization-all = ["quantization-scalar", "quantization-product", "quantization-binary"]
+
+# Optional features
+hybrid-search = []
+filtered-search = []
+neon-compat = []  # Neon-specific optimizations
+
+[dependencies]
+# PostgreSQL extension framework
+pgrx = "0.12"
+
+# SIMD acceleration (leverages existing ruvector-core capabilities)
+simsimd = "5.9"
+
+# Half-precision floating point
+half = { version = "2.4", features = ["std", "serde"] }
+
+# Concurrency and synchronization
+parking_lot = "0.12"
+dashmap = "6.0"
+crossbeam = "0.8"
+
+# Parallel processing
+rayon = "1.10"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "2.0.0-rc.3"
+rkyv = "0.8"
+
+# Memory management
+memmap2 = "0.9"
+
+# Random number generation (for HNSW)
+rand = "0.8"
+rand_chacha = "0.3"
+
+# Bit manipulation (for binary quantization)
+bitvec = "1.0"
+
+# Ordered floats for sorting
+ordered-float = "4.2"
+
+# Heap for top-k
+priority-queue = "2.0"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Optional: Use ruvector-core for shared implementations
+# Uncomment to link with existing ruvector-core crate
+# ruvector-core = { path = "../ruvector-core", optional = true }
+
+[dev-dependencies]
+pgrx-tests = "0.12"
+criterion = "0.5"
+proptest = "1.4"
+approx = "0.5"
+rand = "0.8"
+tempfile = "3.10"
+
+[[bench]]
+name = "distance_bench"
+harness = false
+
+[[bin]]
+name = "pgrx_embed_ruvector-postgres"
+path = "./src/bin/pgrx_embed.rs"
+
+[package.metadata.pgrx]
+# Extension metadata for pgrx
+pg14 = "pg14"
+pg15 = "pg15"
+pg16 = "pg16"
+pg17 = "pg17"
