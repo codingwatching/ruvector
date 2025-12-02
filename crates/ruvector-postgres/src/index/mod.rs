@@ -1,14 +1,27 @@
 //! Index implementations for vector similarity search
 //!
 //! Provides HNSW and IVFFlat index types compatible with pgvector.
+//! Includes parallel query execution and background worker support.
 
 mod hnsw;
+mod hnsw_am;
 mod ivfflat;
+mod ivfflat_am;
+mod ivfflat_storage;
 mod scan;
+pub mod parallel;
+pub mod bgworker;
+pub mod parallel_ops;
 
 pub use hnsw::*;
+pub use hnsw_am::*;
 pub use ivfflat::*;
+pub use ivfflat_am::*;
+pub use ivfflat_storage::*;
 pub use scan::*;
+pub use parallel::*;
+pub use bgworker::*;
+pub use parallel_ops::*;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 

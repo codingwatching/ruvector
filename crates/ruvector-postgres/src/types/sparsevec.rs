@@ -1,7 +1,14 @@
-//! Sparse vector type implementation
+//! Native PostgreSQL sparse vector type with zero-copy varlena layout
 //!
-//! SparseVec stores only non-zero elements, ideal for high-dimensional
-//! sparse data like TF-IDF or BM25 vectors.
+//! SparseVec stores only non-zero elements, ideal for high-dimensional sparse data.
+//! Uses PostgreSQL varlena layout for zero-copy performance.
+//!
+//! Varlena layout:
+//! - VARHDRSZ (4 bytes)
+//! - dimensions (4 bytes u32) - total dimensions
+//! - nnz (4 bytes u32) - number of non-zeros
+//! - indices (4 bytes * nnz) - sorted indices
+//! - values (4 bytes * nnz) - values
 
 use pgrx::prelude::*;
 use pgrx::pgrx_sql_entity_graph::metadata::{
@@ -9,22 +16,27 @@ use pgrx::pgrx_sql_entity_graph::metadata::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ffi::{CStr, CString};
 use std::fmt;
+use std::ptr;
 use std::str::FromStr;
 
+use crate::distance;
+use crate::types::RuVector;
 use crate::MAX_DIMENSIONS;
+
+// ============================================================================
+// SparseVec Structure (Rust representation)
+// ============================================================================
 
 /// SparseVec: Sparse vector type for high-dimensional data
 ///
-/// Memory layout:
-/// - Header: 12 bytes (varlena header + dimensions + nnz)
-/// - Indices: 4 bytes per non-zero element (u32)
-/// - Values: 4 bytes per non-zero element (f32)
-///
-/// Benefits:
-/// - Efficient for high-dimensional sparse data
-/// - Only stores non-zero elements
-/// - Ideal for text embeddings (TF-IDF, BM25)
+/// Memory layout in PostgreSQL varlena format:
+/// - Header: 4 bytes (VARHDRSZ)
+/// - Dimensions: 4 bytes (u32)
+/// - NNZ: 4 bytes (u32)
+/// - Indices: 4 bytes * nnz (u32 array)
+/// - Values: 4 bytes * nnz (f32 array)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SparseVec {
     /// Total dimensions (including zeros)
@@ -49,19 +61,18 @@ impl SparseVec {
         // Filter zeros and sort by index
         let mut sorted: Vec<_> = pairs
             .iter()
-            .filter(|(_, v)| *v != 0.0)
+            .filter(|(_, v)| *v != 0.0 && v.is_finite())
             .map(|&(i, v)| (i as u32, v))
             .collect();
         sorted.sort_by_key(|(i, _)| *i);
 
-        // Check for duplicates
+        // Check for duplicates and bounds
         for i in 1..sorted.len() {
             if sorted[i].0 == sorted[i - 1].0 {
                 pgrx::error!("Duplicate index {} in sparse vector", sorted[i].0);
             }
         }
 
-        // Check bounds
         if let Some(&(max_idx, _)) = sorted.last() {
             if max_idx as usize >= dimensions {
                 pgrx::error!(
@@ -81,12 +92,12 @@ impl SparseVec {
         }
     }
 
-    /// Create from dense vector (extracts non-zeros)
-    pub fn from_dense(data: &[f32]) -> Self {
+    /// Create from dense vector with threshold
+    pub fn from_dense(data: &[f32], threshold: f32) -> Self {
         let pairs: Vec<_> = data
             .iter()
             .enumerate()
-            .filter(|(_, &v)| v != 0.0)
+            .filter(|(_, &v)| v.abs() > threshold && v.is_finite())
             .map(|(i, &v)| (i, v))
             .collect();
 
@@ -170,17 +181,17 @@ impl SparseVec {
         self.values.iter().map(|x| x * x).sum::<f32>().sqrt()
     }
 
-    /// Dot product with another sparse vector
+    /// Sparse dot product with another sparse vector (merge-join algorithm)
     pub fn dot(&self, other: &Self) -> f32 {
         if self.dimensions != other.dimensions {
             pgrx::error!("Vector dimensions must match for dot product");
         }
 
-        // Merge-style intersection
         let mut i = 0;
         let mut j = 0;
         let mut sum = 0.0;
 
+        // Merge-join for sparse-sparse intersection
         while i < self.nnz() && j < other.nnz() {
             let idx_a = self.indices[i];
             let idx_b = other.indices[j];
@@ -199,7 +210,7 @@ impl SparseVec {
         sum
     }
 
-    /// Dot product with dense vector
+    /// Dot product with dense vector (scatter-gather)
     pub fn dot_dense(&self, dense: &[f32]) -> f32 {
         if self.dimensions() != dense.len() {
             pgrx::error!("Vector dimensions must match for dot product");
@@ -254,23 +265,35 @@ impl SparseVec {
         }
     }
 
-    /// Serialize to bytes (dimensions + nnz + indices + values)
-    fn to_bytes(&self) -> Vec<u8> {
+    /// Serialize to varlena bytes (zero-copy layout)
+    fn to_varlena_bytes(&self) -> Vec<u8> {
         let nnz = self.nnz() as u32;
-        let mut bytes = Vec::with_capacity(8 + self.nnz() * 8);
+        let header_size = 8; // dimensions (4) + nnz (4)
+        let indices_size = (nnz as usize) * 4;
+        let values_size = (nnz as usize) * 4;
+        let total_size = header_size + indices_size + values_size;
+
+        let mut bytes = Vec::with_capacity(total_size);
+
+        // Write header
         bytes.extend_from_slice(&self.dimensions.to_le_bytes());
         bytes.extend_from_slice(&nnz.to_le_bytes());
+
+        // Write indices
         for idx in &self.indices {
             bytes.extend_from_slice(&idx.to_le_bytes());
         }
+
+        // Write values
         for val in &self.values {
             bytes.extend_from_slice(&val.to_le_bytes());
         }
+
         bytes
     }
 
-    /// Deserialize from bytes
-    fn from_bytes(bytes: &[u8]) -> Self {
+    /// Deserialize from varlena bytes
+    unsafe fn from_varlena_bytes(bytes: &[u8]) -> Self {
         if bytes.len() < 8 {
             pgrx::error!("Invalid sparsevec data: too short");
         }
@@ -290,6 +313,7 @@ impl SparseVec {
         let mut indices = Vec::with_capacity(nnz);
         let mut values = Vec::with_capacity(nnz);
 
+        // Read indices
         for i in 0..nnz {
             let offset = 8 + i * 4;
             let idx = u32::from_le_bytes([
@@ -301,6 +325,7 @@ impl SparseVec {
             indices.push(idx);
         }
 
+        // Read values
         let values_offset = 8 + nnz * 4;
         for i in 0..nnz {
             let offset = values_offset + i * 4;
@@ -323,15 +348,15 @@ impl SparseVec {
 
 impl fmt::Display for SparseVec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Format: {dim/idx:val,idx:val,...}
-        write!(f, "{{{}/", self.dimensions)?;
+        // Format: {idx:val,idx:val,...}/dim
+        write!(f, "{{")?;
         for (i, (&idx, &val)) in self.indices.iter().zip(self.values.iter()).enumerate() {
             if i > 0 {
                 write!(f, ",")?;
             }
             write!(f, "{}:{}", idx, val)?;
         }
-        write!(f, "}}")
+        write!(f, "}}/{}", self.dimensions)
     }
 }
 
@@ -339,9 +364,10 @@ impl fmt::Debug for SparseVec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SparseVec(dims={}, nnz={})",
+            "SparseVec(dims={}, nnz={}, sparsity={:.2}%)",
             self.dimensions,
-            self.nnz()
+            self.nnz(),
+            self.sparsity() * 100.0
         )
     }
 }
@@ -352,27 +378,27 @@ impl FromStr for SparseVec {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
 
-        // Parse format: {dim/idx:val,idx:val,...}
-        if !s.starts_with('{') || !s.ends_with('}') {
-            return Err(format!("Invalid sparsevec format: {}", s));
+        // Parse format: {idx:val,idx:val,...}/dim
+        if !s.starts_with('{') {
+            return Err(format!("Invalid sparsevec format: must start with {{"));
         }
 
-        let inner = &s[1..s.len() - 1];
-        let parts: Vec<_> = inner.splitn(2, '/').collect();
+        let parts: Vec<_> = s[1..].splitn(2, "}/").collect();
 
-        if parts.is_empty() {
-            return Err("Missing dimensions in sparsevec".to_string());
+        if parts.len() != 2 {
+            return Err("Invalid sparsevec format: expected {pairs}/dim".to_string());
         }
 
-        let dimensions: usize = parts[0]
+        let dimensions: usize = parts[1]
+            .trim()
             .parse()
             .map_err(|_| "Invalid dimensions")?;
 
-        if parts.len() == 1 || parts[1].is_empty() {
+        if parts[0].is_empty() {
             return Ok(Self::zeros(dimensions));
         }
 
-        let pairs: Result<Vec<(usize, f32)>, String> = parts[1]
+        let pairs: Result<Vec<(usize, f32)>, String> = parts[0]
             .split(',')
             .map(|pair| {
                 let kv: Vec<_> = pair.split(':').collect();
@@ -415,7 +441,7 @@ unsafe impl SqlTranslatable for SparseVec {
 
 impl pgrx::IntoDatum for SparseVec {
     fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
-        let bytes = self.to_bytes();
+        let bytes = self.to_varlena_bytes();
         let len = bytes.len();
         let total_size = pgrx::pg_sys::VARHDRSZ + len;
 
@@ -423,7 +449,7 @@ impl pgrx::IntoDatum for SparseVec {
             let ptr = pgrx::pg_sys::palloc(total_size) as *mut u8;
             let varlena = ptr as *mut pgrx::pg_sys::varlena;
             pgrx::varlena::set_varsize_4b(varlena, total_size as i32);
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.add(pgrx::pg_sys::VARHDRSZ), len);
+            ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.add(pgrx::pg_sys::VARHDRSZ), len);
             Some(pgrx::pg_sys::Datum::from(ptr))
         }
     }
@@ -448,21 +474,314 @@ impl pgrx::FromDatum for SparseVec {
         let data_ptr = pgrx::varlena::vardata_any(ptr) as *const u8;
         let bytes = std::slice::from_raw_parts(data_ptr, len);
 
-        Some(SparseVec::from_bytes(bytes))
+        Some(SparseVec::from_varlena_bytes(bytes))
     }
 }
 
 // ============================================================================
-// SQL Helper Functions
+// Text I/O Functions
 // ============================================================================
 
-/// Parse a sparsevec from string format {dim/idx:val,idx:val,...}
+/// Parse a sparsevec from text input: '{idx:val,...}/dim'
+#[pg_extern(immutable, parallel_safe, name = "sparsevec_in")]
+pub fn sparsevec_in(input: &CStr) -> SparseVec {
+    let s = input.to_str().unwrap_or_else(|_| {
+        pgrx::error!("Invalid UTF-8 in sparsevec input");
+    });
+
+    SparseVec::from_str(s).unwrap_or_else(|e| {
+        pgrx::error!("Failed to parse sparsevec: {}", e);
+    })
+}
+
+/// Convert sparsevec to text output: '{idx:val,...}/dim'
+#[pg_extern(immutable, parallel_safe, name = "sparsevec_out")]
+pub fn sparsevec_out(vector: SparseVec) -> CString {
+    CString::new(vector.to_string()).unwrap_or_else(|_| {
+        pgrx::error!("Failed to convert sparsevec to string");
+    })
+}
+
+// ============================================================================
+// Binary I/O Functions
+// ============================================================================
+
+/// Binary receive function for sparsevec
+#[pg_extern(immutable, parallel_safe, name = "sparsevec_recv")]
+pub fn sparsevec_recv(buf: &[u8]) -> SparseVec {
+    unsafe { SparseVec::from_varlena_bytes(buf) }
+}
+
+/// Binary send function for sparsevec
+#[pg_extern(immutable, parallel_safe, name = "sparsevec_send")]
+pub fn sparsevec_send(vector: SparseVec) -> Vec<u8> {
+    vector.to_varlena_bytes()
+}
+
+// ============================================================================
+// SIMD-Optimized Sparse Distance Functions
+// ============================================================================
+
+/// Sparse L2 distance (SIMD-optimized merge-join)
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_l2_distance(a: SparseVec, b: SparseVec) -> f32 {
+    if a.dimensions() != b.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            a.dimensions(),
+            b.dimensions()
+        );
+    }
+
+    let mut i = 0;
+    let mut j = 0;
+    let mut sum_sq = 0.0f32;
+
+    // Merge-join algorithm for sparse-sparse distance
+    while i < a.nnz() && j < b.nnz() {
+        let idx_a = a.indices[i];
+        let idx_b = b.indices[j];
+
+        if idx_a == idx_b {
+            let diff = a.values[i] - b.values[j];
+            sum_sq += diff * diff;
+            i += 1;
+            j += 1;
+        } else if idx_a < idx_b {
+            // Value in a, zero in b
+            sum_sq += a.values[i] * a.values[i];
+            i += 1;
+        } else {
+            // Zero in a, value in b
+            sum_sq += b.values[j] * b.values[j];
+            j += 1;
+        }
+    }
+
+    // Handle remaining elements
+    while i < a.nnz() {
+        sum_sq += a.values[i] * a.values[i];
+        i += 1;
+    }
+
+    while j < b.nnz() {
+        sum_sq += b.values[j] * b.values[j];
+        j += 1;
+    }
+
+    sum_sq.sqrt()
+}
+
+/// Sparse inner product distance (SIMD-optimized)
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_ip_distance(a: SparseVec, b: SparseVec) -> f32 {
+    if a.dimensions() != b.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            a.dimensions(),
+            b.dimensions()
+        );
+    }
+
+    -(a.dot(&b))
+}
+
+/// Sparse cosine distance (SIMD-optimized)
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_cosine_distance(a: SparseVec, b: SparseVec) -> f32 {
+    if a.dimensions() != b.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            a.dimensions(),
+            b.dimensions()
+        );
+    }
+
+    let dot = a.dot(&b);
+    let norm_a = a.norm();
+    let norm_b = b.norm();
+
+    let denominator = norm_a * norm_b;
+    if denominator == 0.0 {
+        return 1.0;
+    }
+
+    1.0 - (dot / denominator)
+}
+
+/// Sparse-dense L2 distance (scatter-gather)
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_vector_l2_distance(sparse: SparseVec, dense: RuVector) -> f32 {
+    if sparse.dimensions() != dense.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            sparse.dimensions(),
+            dense.dimensions()
+        );
+    }
+
+    let dense_slice = dense.as_slice();
+    let mut sum_sq = 0.0f32;
+    let mut last_idx = 0usize;
+
+    // Scatter-gather: sum squares of dense elements, subtract overlapping sparse elements
+    for (&idx, &sparse_val) in sparse.indices().iter().zip(sparse.values().iter()) {
+        let idx = idx as usize;
+
+        // Add squares of dense elements between last_idx and idx
+        for k in last_idx..idx {
+            let dense_val = dense_slice[k];
+            sum_sq += dense_val * dense_val;
+        }
+
+        // Add squared difference at overlap
+        let diff = sparse_val - dense_slice[idx];
+        sum_sq += diff * diff;
+
+        last_idx = idx + 1;
+    }
+
+    // Add remaining dense elements
+    for k in last_idx..dense.dimensions() {
+        let dense_val = dense_slice[k];
+        sum_sq += dense_val * dense_val;
+    }
+
+    sum_sq.sqrt()
+}
+
+/// Sparse-dense inner product (scatter-gather)
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_vector_ip_distance(sparse: SparseVec, dense: RuVector) -> f32 {
+    if sparse.dimensions() != dense.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            sparse.dimensions(),
+            dense.dimensions()
+        );
+    }
+
+    -(sparse.dot_dense(dense.as_slice()))
+}
+
+/// Sparse-dense cosine distance
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_vector_cosine_distance(sparse: SparseVec, dense: RuVector) -> f32 {
+    if sparse.dimensions() != dense.dimensions() {
+        pgrx::error!(
+            "Cannot compute distance between vectors of different dimensions ({} vs {})",
+            sparse.dimensions(),
+            dense.dimensions()
+        );
+    }
+
+    let dot = sparse.dot_dense(dense.as_slice());
+    let norm_sparse = sparse.norm();
+    let norm_dense = dense.norm();
+
+    let denominator = norm_sparse * norm_dense;
+    if denominator == 0.0 {
+        return 1.0;
+    }
+
+    1.0 - (dot / denominator)
+}
+
+// ============================================================================
+// Conversion Functions
+// ============================================================================
+
+/// Convert sparse vector to dense vector
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_to_vector(sparse: SparseVec) -> RuVector {
+    RuVector::from_slice(&sparse.to_dense())
+}
+
+/// Convert dense vector to sparse vector with threshold
+#[pg_extern(immutable, parallel_safe)]
+pub fn vector_to_sparsevec(vector: RuVector, threshold: default!(f32, 0.0)) -> SparseVec {
+    SparseVec::from_dense(vector.as_slice(), threshold)
+}
+
+/// Convert sparse vector to dense float array
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_to_array(sparse: SparseVec) -> Vec<f32> {
+    sparse.to_dense()
+}
+
+/// Convert float array to sparse vector with threshold
+#[pg_extern(immutable, parallel_safe)]
+pub fn array_to_sparsevec(arr: Vec<f32>, threshold: default!(f32, 0.0)) -> SparseVec {
+    SparseVec::from_dense(&arr, threshold)
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/// Get sparse vector dimensions
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_dims(v: SparseVec) -> i32 {
+    v.dimensions() as i32
+}
+
+/// Get sparse vector non-zero count
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_nnz(v: SparseVec) -> i32 {
+    v.nnz() as i32
+}
+
+/// Get sparse vector sparsity ratio
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_sparsity(v: SparseVec) -> f32 {
+    v.sparsity()
+}
+
+/// Get sparse vector L2 norm
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_norm(v: SparseVec) -> f32 {
+    v.norm()
+}
+
+/// Normalize sparse vector to unit length
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_normalize(v: SparseVec) -> SparseVec {
+    let norm = v.norm();
+    if norm == 0.0 {
+        return v;
+    }
+    v.mul_scalar(1.0 / norm)
+}
+
+/// Add two sparse vectors
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_add(a: SparseVec, b: SparseVec) -> SparseVec {
+    a.add(&b)
+}
+
+/// Multiply sparse vector by scalar
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_mul_scalar(v: SparseVec, scalar: f32) -> SparseVec {
+    v.mul_scalar(scalar)
+}
+
+/// Get value at specific index
+#[pg_extern(immutable, parallel_safe)]
+pub fn sparsevec_get(v: SparseVec, index: i32) -> f32 {
+    if index < 0 || index as usize >= v.dimensions() {
+        pgrx::error!("Index {} out of bounds for dimension {}", index, v.dimensions());
+    }
+    v.get(index as usize)
+}
+
+/// Parse a sparsevec from string format and return as JSON
 #[pg_extern(immutable, parallel_safe)]
 pub fn sparsevec_parse(input: &str) -> pgrx::JsonB {
     match SparseVec::from_str(input) {
         Ok(v) => pgrx::JsonB(serde_json::json!({
             "dimensions": v.dimensions(),
             "nnz": v.nnz(),
+            "sparsity": v.sparsity(),
             "indices": v.indices(),
             "values": v.values(),
         })),
@@ -486,13 +805,13 @@ mod tests {
         assert_eq!(v.get(0), 1.0);
         assert_eq!(v.get(5), 2.0);
         assert_eq!(v.get(9), 3.0);
-        assert_eq!(v.get(1), 0.0); // Zero
+        assert_eq!(v.get(1), 0.0);
     }
 
     #[test]
     fn test_from_dense() {
         let dense = vec![1.0, 0.0, 0.0, 2.0, 0.0];
-        let sparse = SparseVec::from_dense(&dense);
+        let sparse = SparseVec::from_dense(&dense, 0.0);
         assert_eq!(sparse.dimensions(), 5);
         assert_eq!(sparse.nnz(), 2);
         assert_eq!(sparse.get(0), 1.0);
@@ -510,13 +829,21 @@ mod tests {
     fn test_dot_sparse() {
         let a = SparseVec::from_pairs(5, &[(0, 1.0), (2, 2.0), (4, 3.0)]);
         let b = SparseVec::from_pairs(5, &[(0, 4.0), (2, 5.0), (3, 6.0)]);
-        // Dot = 1*4 + 2*5 = 14 (index 3 and 4 don't overlap)
+        // Dot = 1*4 + 2*5 = 14
         assert!((a.dot(&b) - 14.0).abs() < 1e-6);
     }
 
     #[test]
+    fn test_sparse_l2_distance() {
+        let a = SparseVec::from_pairs(5, &[(0, 3.0), (2, 4.0)]);
+        let b = SparseVec::from_pairs(5, &[(0, 0.0), (2, 0.0)]);
+        // Distance = sqrt(3^2 + 4^2) = 5
+        let dist = sparsevec_l2_distance(a, b);
+        assert!((dist - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn test_memory_efficiency() {
-        // 10000-dimensional vector with only 10 non-zeros
         let sparse = SparseVec::from_pairs(
             10000,
             &(0..10).map(|i| (i * 1000, 1.0)).collect::<Vec<_>>(),
@@ -525,13 +852,12 @@ mod tests {
         let dense_size = 10000 * 4; // 40KB
         let sparse_size = sparse.memory_size();
 
-        // Sparse should be much smaller
         assert!(sparse_size < dense_size / 10);
     }
 
     #[test]
     fn test_parse() {
-        let v: SparseVec = "{5/0:1.0,2:2.0,4:3.0}".parse().unwrap();
+        let v: SparseVec = "{0:1.0,2:2.0,4:3.0}/5".parse().unwrap();
         assert_eq!(v.dimensions(), 5);
         assert_eq!(v.nnz(), 3);
         assert_eq!(v.get(0), 1.0);
@@ -542,14 +868,64 @@ mod tests {
     #[test]
     fn test_display() {
         let v = SparseVec::from_pairs(5, &[(0, 1.0), (2, 2.0)]);
-        assert_eq!(v.to_string(), "{5/0:1,2:2}");
+        assert_eq!(v.to_string(), "{0:1,2:2}/5");
     }
 
     #[test]
-    fn test_serialization() {
+    fn test_varlena_serialization() {
         let v = SparseVec::from_pairs(10, &[(0, 1.0), (5, 2.0), (9, 3.0)]);
-        let bytes = v.to_bytes();
-        let v2 = SparseVec::from_bytes(&bytes);
+        let bytes = v.to_varlena_bytes();
+        let v2 = unsafe { SparseVec::from_varlena_bytes(&bytes) };
         assert_eq!(v, v2);
+    }
+
+    #[test]
+    fn test_threshold_filtering() {
+        let dense = vec![0.001, 0.5, 0.002, 1.0, 0.003];
+        let sparse = SparseVec::from_dense(&dense, 0.01);
+        assert_eq!(sparse.nnz(), 2); // Only 0.5 and 1.0 above threshold
+    }
+}
+
+#[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
+mod pg_tests {
+    use super::*;
+
+    #[pg_test]
+    fn test_sparsevec_io() {
+        let input = CStr::from_bytes_with_nul(b"{0:1.5,3:2.5,7:3.5}/10\0").unwrap();
+        let v = sparsevec_in(input);
+        assert_eq!(v.dimensions(), 10);
+        assert_eq!(v.nnz(), 3);
+
+        let output = sparsevec_out(v);
+        assert_eq!(output.to_str().unwrap(), "{0:1.5,3:2.5,7:3.5}/10");
+    }
+
+    #[pg_test]
+    fn test_sparsevec_distances() {
+        let a = SparseVec::from_pairs(5, &[(0, 1.0), (2, 2.0)]);
+        let b = SparseVec::from_pairs(5, &[(1, 1.0), (2, 1.0)]);
+
+        let l2 = sparsevec_l2_distance(a.clone(), b.clone());
+        assert!(l2 > 0.0);
+
+        let ip = sparsevec_ip_distance(a.clone(), b.clone());
+        assert_eq!(ip, -2.0); // Only index 2 overlaps: -(2*1) = -2
+
+        let cosine = sparsevec_cosine_distance(a, b);
+        assert!(cosine >= 0.0 && cosine <= 2.0);
+    }
+
+    #[pg_test]
+    fn test_sparsevec_conversions() {
+        let dense = RuVector::from_slice(&[1.0, 0.0, 2.0, 0.0, 3.0]);
+        let sparse = vector_to_sparsevec(dense.clone(), 0.0);
+
+        assert_eq!(sparse.nnz(), 3);
+
+        let dense2 = sparsevec_to_vector(sparse);
+        assert_eq!(dense.as_slice(), dense2.as_slice());
     }
 }

@@ -1,39 +1,57 @@
-//! Half-precision (f16) vector type implementation
+//! Half-precision (f16) vector type implementation with zero-copy varlena storage
 //!
 //! HalfVec stores vectors using 16-bit floating point, reducing memory
 //! usage by 50% compared to f32 with minimal accuracy loss.
+//!
+//! Varlena layout:
+//! - VARHDRSZ (4 bytes) - PostgreSQL varlena header
+//! - dimensions (2 bytes u16) - number of dimensions
+//! - unused (2 bytes) - alignment padding
+//! - data (2 bytes * dimensions) - f16 data as raw u16 bits
 
 use half::f16;
 use pgrx::prelude::*;
 use pgrx::pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
-use serde::{Deserialize, Serialize};
+use std::ffi::{CStr, CString};
 use std::fmt;
 use std::str::FromStr;
 
+use crate::types::RuVector;
 use crate::MAX_DIMENSIONS;
 
-/// HalfVec: Half-precision (f16) vector type
+/// Varlena layout offset constants
+const VARHDRSZ: usize = 4;
+const DIMENSIONS_OFFSET: usize = 0; // Offset within data portion (after VARHDRSZ)
+const DATA_OFFSET: usize = 4; // Offset to f16 data (2 bytes dim + 2 bytes padding)
+
+/// HalfVec: Zero-copy half-precision vector type
 ///
-/// Memory layout:
-/// - Header: 8 bytes (varlena header + dimensions)
-/// - Data: 2 bytes per dimension (f16)
-///
-/// Benefits:
-/// - 50% memory reduction vs f32
-/// - Faster memory bandwidth
-/// - Minimal accuracy loss for most embeddings
-#[derive(Clone, Serialize, Deserialize)]
+/// This is a wrapper around a pointer to PostgreSQL's varlena structure.
+/// The actual data lives in PostgreSQL memory, enabling zero-copy operations.
+#[derive(Copy, Clone)]
+#[repr(C)]
 pub struct HalfVec {
-    /// Vector dimensions
-    dimensions: u32,
-    /// Vector data (f16 stored as u16 for serialization)
-    data: Vec<u16>,
+    ptr: *mut pgrx::pg_sys::varlena,
+}
+
+unsafe impl pgrx::datum::UnboxDatum for HalfVec {
+    type As<'src> = HalfVec;
+
+    unsafe fn unbox<'src>(datum: pgrx::pg_sys::Datum) -> Self::As<'src>
+    where
+        Self: 'src,
+    {
+        let ptr = datum.cast_mut_ptr::<pgrx::pg_sys::varlena>();
+        HalfVec { ptr }
+    }
 }
 
 impl HalfVec {
-    /// Create from f32 slice
+    /// Create a new HalfVec from f32 slice
+    ///
+    /// This allocates PostgreSQL memory and populates it with the varlena structure.
     pub fn from_f32(data: &[f32]) -> Self {
         if data.len() > MAX_DIMENSIONS {
             pgrx::error!(
@@ -43,168 +61,691 @@ impl HalfVec {
             );
         }
 
-        Self {
-            dimensions: data.len() as u32,
-            data: data.iter().map(|&x| f16::from_f32(x).to_bits()).collect(),
+        if data.len() > u16::MAX as usize {
+            pgrx::error!("Vector dimension {} exceeds u16::MAX", data.len());
+        }
+
+        unsafe {
+            let dimensions = data.len() as u16;
+            let data_size = DATA_OFFSET + (dimensions as usize * 2);
+            let total_size = VARHDRSZ + data_size;
+
+            // Allocate PostgreSQL memory
+            let ptr = pgrx::pg_sys::palloc(total_size) as *mut u8;
+            let varlena = ptr as *mut pgrx::pg_sys::varlena;
+
+            // Set varlena size
+            pgrx::varlena::set_varsize_4b(varlena, total_size as i32);
+
+            // Write dimensions (u16)
+            let dim_ptr = ptr.add(VARHDRSZ) as *mut u16;
+            *dim_ptr = dimensions.to_le();
+
+            // Write padding (2 bytes of zeros)
+            let padding_ptr = ptr.add(VARHDRSZ + 2) as *mut u16;
+            *padding_ptr = 0;
+
+            // Write f16 data as u16 bits
+            let data_ptr = ptr.add(VARHDRSZ + DATA_OFFSET) as *mut u16;
+            for (i, &val) in data.iter().enumerate() {
+                let f16_val = f16::from_f32(val);
+                *data_ptr.add(i) = f16_val.to_bits().to_le();
+            }
+
+            HalfVec { ptr: varlena }
         }
     }
 
     /// Create from f16 slice
     pub fn from_f16(data: &[f16]) -> Self {
-        if data.len() > MAX_DIMENSIONS {
-            pgrx::error!(
-                "Vector dimension {} exceeds maximum {}",
-                data.len(),
-                MAX_DIMENSIONS
-            );
-        }
-
-        Self {
-            dimensions: data.len() as u32,
-            data: data.iter().map(|x| x.to_bits()).collect(),
-        }
+        let f32_data: Vec<f32> = data.iter().map(|x| x.to_f32()).collect();
+        Self::from_f32(&f32_data)
     }
 
-    /// Create a zero vector
-    pub fn zeros(dimensions: usize) -> Self {
-        if dimensions > MAX_DIMENSIONS {
-            pgrx::error!(
-                "Vector dimension {} exceeds maximum {}",
-                dimensions,
-                MAX_DIMENSIONS
-            );
-        }
-
-        Self {
-            dimensions: dimensions as u32,
-            data: vec![f16::ZERO.to_bits(); dimensions],
-        }
-    }
-
-    /// Get dimensions
+    /// Get dimensions from the varlena structure
     #[inline]
     pub fn dimensions(&self) -> usize {
-        self.dimensions as usize
+        unsafe {
+            let ptr = self.ptr as *const u8;
+            let dim_ptr = ptr.add(VARHDRSZ) as *const u16;
+            u16::from_le(*dim_ptr) as usize
+        }
     }
 
-    /// Get data as f16 slice
-    pub fn as_f16(&self) -> Vec<f16> {
-        self.data.iter().map(|&bits| f16::from_bits(bits)).collect()
+    /// Get pointer to raw u16 data
+    #[inline]
+    pub fn data_ptr(&self) -> *const u16 {
+        unsafe {
+            let ptr = self.ptr as *const u8;
+            ptr.add(VARHDRSZ + DATA_OFFSET) as *const u16
+        }
     }
 
-    /// Convert to f32 Vec
-    pub fn to_f32(&self) -> Vec<f32> {
-        self.data
-            .iter()
-            .map(|&bits| f16::from_bits(bits).to_f32())
-            .collect()
+    /// Get mutable pointer to raw u16 data
+    #[inline]
+    pub fn data_ptr_mut(&mut self) -> *mut u16 {
+        unsafe {
+            let ptr = self.ptr as *mut u8;
+            ptr.add(VARHDRSZ + DATA_OFFSET) as *mut u16
+        }
     }
 
-    /// Get raw u16 data
+    /// Get raw u16 data as slice
+    #[inline]
     pub fn as_raw(&self) -> &[u16] {
-        &self.data
+        unsafe {
+            let dims = self.dimensions();
+            std::slice::from_raw_parts(self.data_ptr(), dims)
+        }
+    }
+
+    /// Convert to f32 Vec (allocates)
+    pub fn to_f32(&self) -> Vec<f32> {
+        unsafe {
+            let dims = self.dimensions();
+            let data_ptr = self.data_ptr();
+            let mut result = Vec::with_capacity(dims);
+
+            for i in 0..dims {
+                let bits = u16::from_le(*data_ptr.add(i));
+                let f16_val = f16::from_bits(bits);
+                result.push(f16_val.to_f32());
+            }
+
+            result
+        }
+    }
+
+    /// Convert to f16 Vec (allocates)
+    pub fn to_f16(&self) -> Vec<f16> {
+        unsafe {
+            let dims = self.dimensions();
+            let data_ptr = self.data_ptr();
+            let mut result = Vec::with_capacity(dims);
+
+            for i in 0..dims {
+                let bits = u16::from_le(*data_ptr.add(i));
+                result.push(f16::from_bits(bits));
+            }
+
+            result
+        }
     }
 
     /// Calculate L2 norm
     pub fn norm(&self) -> f32 {
-        self.to_f32().iter().map(|x| x * x).sum::<f32>().sqrt()
+        unsafe {
+            let dims = self.dimensions();
+            let data_ptr = self.data_ptr();
+            let mut sum = 0.0f32;
+
+            for i in 0..dims {
+                let bits = u16::from_le(*data_ptr.add(i));
+                let val = f16::from_bits(bits).to_f32();
+                sum += val * val;
+            }
+
+            sum.sqrt()
+        }
     }
 
     /// Memory size in bytes
     pub fn memory_size(&self) -> usize {
-        std::mem::size_of::<Self>() + self.data.len() * std::mem::size_of::<u16>()
-    }
-
-    /// Serialize to bytes (dimensions + u16 data)
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(4 + self.data.len() * 2);
-        bytes.extend_from_slice(&self.dimensions.to_le_bytes());
-        for val in &self.data {
-            bytes.extend_from_slice(&val.to_le_bytes());
-        }
-        bytes
-    }
-
-    /// Deserialize from bytes
-    fn from_bytes(bytes: &[u8]) -> Self {
-        if bytes.len() < 4 {
-            pgrx::error!("Invalid halfvec data: too short");
-        }
-
-        let dimensions = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let expected_len = 4 + (dimensions as usize) * 2;
-
-        if bytes.len() != expected_len {
-            pgrx::error!(
-                "Invalid halfvec data: expected {} bytes, got {}",
-                expected_len,
-                bytes.len()
-            );
-        }
-
-        let mut data = Vec::with_capacity(dimensions as usize);
-        for i in 0..dimensions as usize {
-            let offset = 4 + i * 2;
-            let val = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
-            data.push(val);
-        }
-
-        Self { dimensions, data }
+        unsafe { pgrx::varlena::varsize_any(self.ptr) }
     }
 }
 
-impl fmt::Display for HalfVec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-        for (i, &bits) in self.data.iter().enumerate() {
+// ============================================================================
+// PostgreSQL I/O Functions
+// ============================================================================
+
+/// Parse HalfVec from text format: [1.0, 2.0, 3.0]
+#[pg_extern(immutable, parallel_safe)]
+pub fn halfvec_from_text(input: &str) -> HalfVec {
+    match parse_halfvec_string(input) {
+        Ok(data) => HalfVec::from_f32(&data),
+        Err(e) => pgrx::error!("Invalid halfvec format: {}", e),
+    }
+}
+
+/// Format HalfVec to text format
+#[pg_extern(immutable, parallel_safe)]
+pub fn halfvec_to_text(vector: HalfVec) -> String {
+    let dims = vector.dimensions();
+    let data_ptr = vector.data_ptr();
+
+    let mut result = String::from("[");
+    unsafe {
+        for i in 0..dims {
             if i > 0 {
-                write!(f, ",")?;
+                result.push(',');
             }
-            write!(f, "{}", f16::from_bits(bits))?;
-        }
-        write!(f, "]")
-    }
-}
-
-impl fmt::Debug for HalfVec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HalfVec(dims={}, [...])", self.dimensions)
-    }
-}
-
-impl FromStr for HalfVec {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        if !s.starts_with('[') || !s.ends_with(']') {
-            return Err(format!("Invalid halfvec format: {}", s));
-        }
-
-        let inner = &s[1..s.len() - 1];
-        if inner.is_empty() {
-            return Ok(Self::zeros(0));
-        }
-
-        let values: Result<Vec<f32>, _> = inner
-            .split(',')
-            .map(|v| v.trim().parse::<f32>())
-            .collect();
-
-        match values {
-            Ok(data) => Ok(Self::from_f32(&data)),
-            Err(e) => Err(format!("Invalid halfvec element: {}", e)),
+            let bits = u16::from_le(*data_ptr.add(i));
+            let val = f16::from_bits(bits).to_f32();
+            result.push_str(&format!("{}", val));
         }
     }
+    result.push(']');
+    result
 }
 
-impl PartialEq for HalfVec {
-    fn eq(&self, other: &Self) -> bool {
-        self.dimensions == other.dimensions && self.data == other.data
+// ============================================================================
+// Conversion Functions
+// ============================================================================
+
+/// Convert HalfVec to RuVector (f32)
+#[pg_extern(immutable, parallel_safe, name = "halfvec_to_vector")]
+pub fn halfvec_to_vector(halfvec: HalfVec) -> RuVector {
+    let f32_data = halfvec.to_f32();
+    RuVector::from_slice(&f32_data)
+}
+
+/// Convert RuVector to HalfVec
+#[pg_extern(immutable, parallel_safe, name = "vector_to_halfvec")]
+pub fn vector_to_halfvec(vector: RuVector) -> HalfVec {
+    HalfVec::from_f32(vector.as_slice())
+}
+
+// ============================================================================
+// Distance Functions with SIMD Optimization
+// ============================================================================
+
+/// L2 (Euclidean) distance for HalfVec
+#[pg_extern(immutable, parallel_safe, name = "halfvec_l2_distance")]
+pub fn halfvec_l2_distance(a: HalfVec, b: HalfVec) -> f32 {
+    let dims_a = a.dimensions();
+    let dims_b = b.dimensions();
+
+    if dims_a != dims_b {
+        pgrx::error!("Vector dimensions must match: {} vs {}", dims_a, dims_b);
+    }
+
+    unsafe { halfvec_euclidean_distance_dispatch(&a, &b) }
+}
+
+/// Cosine distance for HalfVec
+#[pg_extern(immutable, parallel_safe, name = "halfvec_cosine_distance")]
+pub fn halfvec_cosine_distance(a: HalfVec, b: HalfVec) -> f32 {
+    let dims_a = a.dimensions();
+    let dims_b = b.dimensions();
+
+    if dims_a != dims_b {
+        pgrx::error!("Vector dimensions must match: {} vs {}", dims_a, dims_b);
+    }
+
+    unsafe { halfvec_cosine_distance_dispatch(&a, &b) }
+}
+
+/// Inner product distance for HalfVec
+#[pg_extern(immutable, parallel_safe, name = "halfvec_inner_product")]
+pub fn halfvec_inner_product(a: HalfVec, b: HalfVec) -> f32 {
+    let dims_a = a.dimensions();
+    let dims_b = b.dimensions();
+
+    if dims_a != dims_b {
+        pgrx::error!("Vector dimensions must match: {} vs {}", dims_a, dims_b);
+    }
+
+    unsafe { halfvec_inner_product_dispatch(&a, &b) }
+}
+
+// ============================================================================
+// SIMD Distance Implementations
+// ============================================================================
+
+/// Dispatch to appropriate SIMD implementation for Euclidean distance
+#[inline]
+unsafe fn halfvec_euclidean_distance_dispatch(a: &HalfVec, b: &HalfVec) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx512fp16") {
+            return halfvec_euclidean_avx512fp16(a, b);
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("f16c") {
+            return halfvec_euclidean_avx2_f16c(a, b);
+        }
+    }
+
+    // Scalar fallback
+    halfvec_euclidean_scalar(a, b)
+}
+
+/// Dispatch for cosine distance
+#[inline]
+unsafe fn halfvec_cosine_distance_dispatch(a: &HalfVec, b: &HalfVec) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx512fp16") {
+            return halfvec_cosine_avx512fp16(a, b);
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("f16c") {
+            return halfvec_cosine_avx2_f16c(a, b);
+        }
+    }
+
+    halfvec_cosine_scalar(a, b)
+}
+
+/// Dispatch for inner product
+#[inline]
+unsafe fn halfvec_inner_product_dispatch(a: &HalfVec, b: &HalfVec) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx512fp16") {
+            return halfvec_inner_product_avx512fp16(a, b);
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("f16c") {
+            return halfvec_inner_product_avx2_f16c(a, b);
+        }
+    }
+
+    halfvec_inner_product_scalar(a, b)
+}
+
+// ============================================================================
+// AVX-512FP16 Implementations (Native f16 operations)
+// ============================================================================
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512fp16")]
+#[inline]
+unsafe fn halfvec_euclidean_avx512fp16(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    // Process 32 f16 values at a time (512 bits = 32 * 16 bits)
+    let chunks = dims / 32;
+    let mut sum = _mm512_setzero_ph();
+
+    for i in 0..chunks {
+        let offset = i * 32;
+        // Load f16 values directly
+        let va = _mm512_loadu_ph(a_ptr.add(offset) as *const _);
+        let vb = _mm512_loadu_ph(b_ptr.add(offset) as *const _);
+
+        // Compute difference
+        let diff = _mm512_sub_ph(va, vb);
+
+        // FMA: sum += diff * diff
+        sum = _mm512_fmadd_ph(diff, diff, sum);
+    }
+
+    // Horizontal reduction to get final sum
+    let mut result = _mm512_reduce_add_ph(sum);
+
+    // Handle remainder
+    for i in (chunks * 32)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        let diff = a_val - b_val;
+        result += diff * diff;
+    }
+
+    result.sqrt()
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512fp16")]
+#[inline]
+unsafe fn halfvec_cosine_avx512fp16(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let chunks = dims / 32;
+    let mut dot = _mm512_setzero_ph();
+    let mut norm_a = _mm512_setzero_ph();
+    let mut norm_b = _mm512_setzero_ph();
+
+    for i in 0..chunks {
+        let offset = i * 32;
+        let va = _mm512_loadu_ph(a_ptr.add(offset) as *const _);
+        let vb = _mm512_loadu_ph(b_ptr.add(offset) as *const _);
+
+        dot = _mm512_fmadd_ph(va, vb, dot);
+        norm_a = _mm512_fmadd_ph(va, va, norm_a);
+        norm_b = _mm512_fmadd_ph(vb, vb, norm_b);
+    }
+
+    let mut dot_sum = _mm512_reduce_add_ph(dot);
+    let mut norm_a_sum = _mm512_reduce_add_ph(norm_a);
+    let mut norm_b_sum = _mm512_reduce_add_ph(norm_b);
+
+    // Handle remainder
+    for i in (chunks * 32)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        dot_sum += a_val * b_val;
+        norm_a_sum += a_val * a_val;
+        norm_b_sum += b_val * b_val;
+    }
+
+    let denominator = (norm_a_sum * norm_b_sum).sqrt();
+    if denominator == 0.0 {
+        return 1.0;
+    }
+
+    1.0 - (dot_sum / denominator)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512fp16")]
+#[inline]
+unsafe fn halfvec_inner_product_avx512fp16(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let chunks = dims / 32;
+    let mut sum = _mm512_setzero_ph();
+
+    for i in 0..chunks {
+        let offset = i * 32;
+        let va = _mm512_loadu_ph(a_ptr.add(offset) as *const _);
+        let vb = _mm512_loadu_ph(b_ptr.add(offset) as *const _);
+        sum = _mm512_fmadd_ph(va, vb, sum);
+    }
+
+    let mut result = _mm512_reduce_add_ph(sum);
+
+    for i in (chunks * 32)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        result += a_val * b_val;
+    }
+
+    -result
+}
+
+// ============================================================================
+// AVX2 + F16C Implementations (Convert to f32 in SIMD registers)
+// ============================================================================
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "f16c")]
+#[inline]
+unsafe fn halfvec_euclidean_avx2_f16c(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    // Process 8 f16 values at a time (128 bits -> 256 bits f32)
+    let chunks = dims / 8;
+    let mut sum = _mm256_setzero_ps();
+
+    for i in 0..chunks {
+        let offset = i * 8;
+
+        // Load 8 f16 values (128 bits)
+        let a_f16 = _mm_loadu_si128(a_ptr.add(offset) as *const __m128i);
+        let b_f16 = _mm_loadu_si128(b_ptr.add(offset) as *const __m128i);
+
+        // Convert to f32 using vcvtph2ps
+        let a_f32 = _mm256_cvtph_ps(a_f16);
+        let b_f32 = _mm256_cvtph_ps(b_f16);
+
+        // Compute squared difference
+        let diff = _mm256_sub_ps(a_f32, b_f32);
+        sum = _mm256_fmadd_ps(diff, diff, sum);
+    }
+
+    // Horizontal reduction
+    let sum_high = _mm256_extractf128_ps(sum, 1);
+    let sum_low = _mm256_castps256_ps128(sum);
+    let sum128 = _mm_add_ps(sum_high, sum_low);
+    let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+    let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 0x1));
+    let mut result = _mm_cvtss_f32(sum32);
+
+    // Handle remainder
+    for i in (chunks * 8)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        let diff = a_val - b_val;
+        result += diff * diff;
+    }
+
+    result.sqrt()
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "f16c")]
+#[inline]
+unsafe fn halfvec_cosine_avx2_f16c(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let chunks = dims / 8;
+    let mut dot = _mm256_setzero_ps();
+    let mut norm_a = _mm256_setzero_ps();
+    let mut norm_b = _mm256_setzero_ps();
+
+    for i in 0..chunks {
+        let offset = i * 8;
+
+        let a_f16 = _mm_loadu_si128(a_ptr.add(offset) as *const __m128i);
+        let b_f16 = _mm_loadu_si128(b_ptr.add(offset) as *const __m128i);
+
+        let a_f32 = _mm256_cvtph_ps(a_f16);
+        let b_f32 = _mm256_cvtph_ps(b_f16);
+
+        dot = _mm256_fmadd_ps(a_f32, b_f32, dot);
+        norm_a = _mm256_fmadd_ps(a_f32, a_f32, norm_a);
+        norm_b = _mm256_fmadd_ps(b_f32, b_f32, norm_b);
+    }
+
+    // Horizontal reduction for all three accumulators
+    let sum_high = _mm256_extractf128_ps(dot, 1);
+    let sum_low = _mm256_castps256_ps128(dot);
+    let sum128 = _mm_add_ps(sum_high, sum_low);
+    let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+    let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 0x1));
+    let mut dot_sum = _mm_cvtss_f32(sum32);
+
+    let na_high = _mm256_extractf128_ps(norm_a, 1);
+    let na_low = _mm256_castps256_ps128(norm_a);
+    let na128 = _mm_add_ps(na_high, na_low);
+    let na64 = _mm_add_ps(na128, _mm_movehl_ps(na128, na128));
+    let na32 = _mm_add_ss(na64, _mm_shuffle_ps(na64, na64, 0x1));
+    let mut norm_a_sum = _mm_cvtss_f32(na32);
+
+    let nb_high = _mm256_extractf128_ps(norm_b, 1);
+    let nb_low = _mm256_castps256_ps128(norm_b);
+    let nb128 = _mm_add_ps(nb_high, nb_low);
+    let nb64 = _mm_add_ps(nb128, _mm_movehl_ps(nb128, nb128));
+    let nb32 = _mm_add_ss(nb64, _mm_shuffle_ps(nb64, nb64, 0x1));
+    let mut norm_b_sum = _mm_cvtss_f32(nb32);
+
+    // Handle remainder
+    for i in (chunks * 8)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        dot_sum += a_val * b_val;
+        norm_a_sum += a_val * a_val;
+        norm_b_sum += b_val * b_val;
+    }
+
+    let denominator = (norm_a_sum * norm_b_sum).sqrt();
+    if denominator == 0.0 {
+        return 1.0;
+    }
+
+    1.0 - (dot_sum / denominator)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "f16c")]
+#[inline]
+unsafe fn halfvec_inner_product_avx2_f16c(a: &HalfVec, b: &HalfVec) -> f32 {
+    use std::arch::x86_64::*;
+
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let chunks = dims / 8;
+    let mut sum = _mm256_setzero_ps();
+
+    for i in 0..chunks {
+        let offset = i * 8;
+
+        let a_f16 = _mm_loadu_si128(a_ptr.add(offset) as *const __m128i);
+        let b_f16 = _mm_loadu_si128(b_ptr.add(offset) as *const __m128i);
+
+        let a_f32 = _mm256_cvtph_ps(a_f16);
+        let b_f32 = _mm256_cvtph_ps(b_f16);
+
+        sum = _mm256_fmadd_ps(a_f32, b_f32, sum);
+    }
+
+    // Horizontal reduction
+    let sum_high = _mm256_extractf128_ps(sum, 1);
+    let sum_low = _mm256_castps256_ps128(sum);
+    let sum128 = _mm_add_ps(sum_high, sum_low);
+    let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+    let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 0x1));
+    let mut result = _mm_cvtss_f32(sum32);
+
+    // Handle remainder
+    for i in (chunks * 8)..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        result += a_val * b_val;
+    }
+
+    -result
+}
+
+// ============================================================================
+// Scalar Fallback Implementations
+// ============================================================================
+
+#[inline]
+unsafe fn halfvec_euclidean_scalar(a: &HalfVec, b: &HalfVec) -> f32 {
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let mut sum = 0.0f32;
+    for i in 0..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        let diff = a_val - b_val;
+        sum += diff * diff;
+    }
+
+    sum.sqrt()
+}
+
+#[inline]
+unsafe fn halfvec_cosine_scalar(a: &HalfVec, b: &HalfVec) -> f32 {
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let mut dot = 0.0f32;
+    let mut norm_a = 0.0f32;
+    let mut norm_b = 0.0f32;
+
+    for i in 0..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+
+        dot += a_val * b_val;
+        norm_a += a_val * a_val;
+        norm_b += b_val * b_val;
+    }
+
+    let denominator = (norm_a * norm_b).sqrt();
+    if denominator == 0.0 {
+        return 1.0;
+    }
+
+    1.0 - (dot / denominator)
+}
+
+#[inline]
+unsafe fn halfvec_inner_product_scalar(a: &HalfVec, b: &HalfVec) -> f32 {
+    let dims = a.dimensions();
+    let a_ptr = a.data_ptr();
+    let b_ptr = b.data_ptr();
+
+    let mut sum = 0.0f32;
+    for i in 0..dims {
+        let a_bits = u16::from_le(*a_ptr.add(i));
+        let b_bits = u16::from_le(*b_ptr.add(i));
+        let a_val = f16::from_bits(a_bits).to_f32();
+        let b_val = f16::from_bits(b_bits).to_f32();
+        sum += a_val * b_val;
+    }
+
+    -sum
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Parse halfvec string format: [1.0, 2.0, 3.0]
+fn parse_halfvec_string(s: &str) -> Result<Vec<f32>, String> {
+    let s = s.trim();
+    if !s.starts_with('[') || !s.ends_with(']') {
+        return Err(format!("Invalid halfvec format: must start with '[' and end with ']'"));
+    }
+
+    let inner = &s[1..s.len() - 1];
+    if inner.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let values: Result<Vec<f32>, _> = inner
+        .split(',')
+        .map(|v| v.trim().parse::<f32>())
+        .collect();
+
+    match values {
+        Ok(data) => {
+            if data.len() > MAX_DIMENSIONS {
+                Err(format!(
+                    "Vector dimension {} exceeds maximum {}",
+                    data.len(),
+                    MAX_DIMENSIONS
+                ))
+            } else {
+                Ok(data)
+            }
+        }
+        Err(e) => Err(format!("Invalid halfvec element: {}", e)),
     }
 }
-
-impl Eq for HalfVec {}
 
 // ============================================================================
 // PostgreSQL Type Integration
@@ -222,17 +763,7 @@ unsafe impl SqlTranslatable for HalfVec {
 
 impl pgrx::IntoDatum for HalfVec {
     fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
-        let bytes = self.to_bytes();
-        let len = bytes.len();
-        let total_size = pgrx::pg_sys::VARHDRSZ + len;
-
-        unsafe {
-            let ptr = pgrx::pg_sys::palloc(total_size) as *mut u8;
-            let varlena = ptr as *mut pgrx::pg_sys::varlena;
-            pgrx::varlena::set_varsize_4b(varlena, total_size as i32);
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.add(pgrx::pg_sys::VARHDRSZ), len);
-            Some(pgrx::pg_sys::Datum::from(ptr))
-        }
+        Some(pgrx::pg_sys::Datum::from(self.ptr))
     }
 
     fn type_oid() -> pgrx::pg_sys::Oid {
@@ -251,40 +782,7 @@ impl pgrx::FromDatum for HalfVec {
         }
 
         let ptr = datum.cast_mut_ptr::<pgrx::pg_sys::varlena>();
-        let len = pgrx::varlena::varsize_any_exhdr(ptr);
-        let data_ptr = pgrx::varlena::vardata_any(ptr) as *const u8;
-        let bytes = std::slice::from_raw_parts(data_ptr, len);
-
-        Some(HalfVec::from_bytes(bytes))
-    }
-}
-
-// ============================================================================
-// SQL Helper Functions
-// ============================================================================
-
-/// Create a halfvec from a float array
-#[pg_extern(immutable, parallel_safe)]
-pub fn halfvec_from_array(arr: Vec<f32>) -> pgrx::JsonB {
-    if arr.len() > MAX_DIMENSIONS {
-        pgrx::error!("Vector exceeds maximum dimensions ({})", MAX_DIMENSIONS);
-    }
-    let v = HalfVec::from_f32(&arr);
-    pgrx::JsonB(serde_json::json!({
-        "dimensions": v.dimensions(),
-        "data": v.to_f32(),
-    }))
-}
-
-/// Parse a halfvec from string format [1.0, 2.0, 3.0]
-#[pg_extern(immutable, parallel_safe)]
-pub fn halfvec_parse(input: &str) -> pgrx::JsonB {
-    match HalfVec::from_str(input) {
-        Ok(v) => pgrx::JsonB(serde_json::json!({
-            "dimensions": v.dimensions(),
-            "data": v.to_f32(),
-        })),
-        Err(e) => pgrx::error!("Invalid halfvec format: {}", e),
+        Some(HalfVec { ptr })
     }
 }
 
@@ -297,46 +795,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_f32() {
-        let v = HalfVec::from_f32(&[1.0, 2.0, 3.0]);
-        assert_eq!(v.dimensions(), 3);
+    fn test_parse_halfvec_string() {
+        let result = parse_halfvec_string("[1.0, 2.0, 3.0]").unwrap();
+        assert_eq!(result, vec![1.0, 2.0, 3.0]);
 
-        let f32_data = v.to_f32();
+        let result2 = parse_halfvec_string("[1,2,3]").unwrap();
+        assert_eq!(result2, vec![1.0, 2.0, 3.0]);
+
+        let result3 = parse_halfvec_string("[]").unwrap();
+        assert_eq!(result3.len(), 0);
+    }
+
+    #[test]
+    fn test_halfvec_memory_layout() {
+        let data = vec![1.0f32, 2.0, 3.0];
+        let hvec = HalfVec::from_f32(&data);
+
+        // Check dimensions
+        assert_eq!(hvec.dimensions(), 3);
+
+        // Check data
+        let f32_data = hvec.to_f32();
         assert!((f32_data[0] - 1.0).abs() < 0.01);
         assert!((f32_data[1] - 2.0).abs() < 0.01);
         assert!((f32_data[2] - 3.0).abs() < 0.01);
+
+        // Check memory size: VARHDRSZ(4) + dims(2) + pad(2) + data(3*2) = 14
+        assert_eq!(hvec.memory_size(), 14);
     }
 
     #[test]
-    fn test_memory_savings() {
-        let f32_vec = vec![1.0f32; 1536];
-        let half_vec = HalfVec::from_f32(&f32_vec);
-
-        // HalfVec should be ~50% of f32 size
-        let f32_size = f32_vec.len() * 4; // 6144 bytes
-        let half_size = half_vec.data.len() * 2; // 3072 bytes
-
-        assert_eq!(half_size, f32_size / 2);
-    }
-
-    #[test]
-    fn test_precision() {
-        // Test that precision is acceptable for typical embedding values
+    fn test_halfvec_precision() {
         let original = vec![0.123456, -0.654321, 0.999999, -0.000001];
-        let half = HalfVec::from_f32(&original);
-        let restored = half.to_f32();
+        let hvec = HalfVec::from_f32(&original);
+        let restored = hvec.to_f32();
 
         for (orig, rest) in original.iter().zip(restored.iter()) {
             // f16 has ~3 decimal digits of precision
             assert!((orig - rest).abs() < 0.001, "orig={}, restored={}", orig, rest);
         }
-    }
-
-    #[test]
-    fn test_serialization() {
-        let v = HalfVec::from_f32(&[1.0, 2.0, 3.0]);
-        let bytes = v.to_bytes();
-        let v2 = HalfVec::from_bytes(&bytes);
-        assert_eq!(v, v2);
     }
 }

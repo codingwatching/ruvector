@@ -72,9 +72,12 @@ pub extern "C" fn _PG_init() {
         GucFlags::default(),
     );
 
+    // Register background worker for index maintenance
+    index::bgworker::register_background_worker();
+
     // Log initialization
     pgrx::log!(
-        "RuVector {} initialized with {} SIMD support",
+        "RuVector {} initialized with {} SIMD support and parallel query enabled",
         VERSION,
         distance::simd_info()
     );

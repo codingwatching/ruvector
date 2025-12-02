@@ -20,17 +20,24 @@ pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
 pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
 pg_test = []
 
-# SIMD features
+# SIMD features for compile-time selection
+simd-native = []  # Use native CPU features (detected at build time)
 simd-avx2 = []
 simd-avx512 = []
 simd-neon = []
 simd-auto = []  # Auto-detect at runtime (default behavior)
+
+# Index features
+index-hnsw = []
+index-ivfflat = []
+index-all = ["index-hnsw", "index-ivfflat"]
 
 # Quantization features
 quantization-scalar = []
 quantization-product = []
 quantization-binary = []
 quantization-all = ["quantization-scalar", "quantization-product", "quantization-binary"]
+quant-all = ["quantization-all"]  # Alias for convenience
 
 # Optional features
 hybrid-search = []
@@ -97,6 +104,18 @@ tempfile = "3.10"
 
 [[bench]]
 name = "distance_bench"
+harness = false
+
+[[bench]]
+name = "quantized_distance_bench"
+harness = false
+
+[[bench]]
+name = "index_bench"
+harness = false
+
+[[bench]]
+name = "quantization_bench"
 harness = false
 
 [[bin]]

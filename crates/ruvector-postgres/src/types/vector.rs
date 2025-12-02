@@ -1,23 +1,53 @@
 //! Primary vector type implementation (RuVector)
 //!
 //! This is the main vector type, compatible with pgvector's `vector` type.
-//! Stores f32 elements with efficient SIMD operations.
+//! Stores f32 elements with efficient SIMD operations and zero-copy access.
+//!
+//! Memory layout (varlena-based for zero-copy):
+//! - VARHDRSZ (4 bytes) - PostgreSQL varlena header
+//! - dimensions (2 bytes u16)
+//! - unused (2 bytes for alignment)
+//! - data (4 bytes per dimension as f32)
 
 use pgrx::prelude::*;
 use pgrx::pgrx_sql_entity_graph::metadata::{
     ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
 use serde::{Deserialize, Serialize};
+use std::ffi::{CStr, CString};
 use std::fmt;
+use std::ptr;
 use std::str::FromStr;
 
 use crate::MAX_DIMENSIONS;
+use super::VectorData;
+
+// ============================================================================
+// Zero-Copy Varlena Structure
+// ============================================================================
+
+/// Local varlena header structure for RuVector (pgvector-compatible layout)
+/// This is different from the mod.rs VectorHeader which uses u32 dimensions
+#[repr(C, align(8))]
+struct RuVectorHeader {
+    /// Number of dimensions (u16 for pgvector compatibility)
+    dimensions: u16,
+    /// Padding for alignment (ensures f32 data is 8-byte aligned)
+    _unused: u16,
+}
+
+impl RuVectorHeader {
+    const SIZE: usize = 4; // 2 (dimensions) + 2 (padding)
+}
+
+// ============================================================================
+// RuVector: High-Level API with Zero-Copy Support
+// ============================================================================
 
 /// RuVector: Primary vector type for PostgreSQL
 ///
-/// Memory layout:
-/// - Header: 8 bytes (varlena header + dimensions)
-/// - Data: 4 bytes per dimension (f32)
+/// This structure provides a high-level API over the varlena-based storage.
+/// For zero-copy operations, it can work directly with PostgreSQL memory.
 ///
 /// Maximum dimensions: 16,000
 #[derive(Clone, Serialize, Deserialize)]
@@ -152,51 +182,91 @@ impl RuVector {
         self.data.iter().zip(&other.data).map(|(a, b)| a * b).sum()
     }
 
-    /// Memory size in bytes
-    pub fn memory_size(&self) -> usize {
-        std::mem::size_of::<Self>() + self.data.len() * std::mem::size_of::<f32>()
+    /// Memory size in bytes (data only, not including varlena header)
+    pub fn data_memory_size(&self) -> usize {
+        RuVectorHeader::SIZE + self.data.len() * std::mem::size_of::<f32>()
     }
 
-    /// Serialize to bytes (dimensions + f32 data)
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(4 + self.data.len() * 4);
-        bytes.extend_from_slice(&self.dimensions.to_le_bytes());
-        for val in &self.data {
-            bytes.extend_from_slice(&val.to_le_bytes());
-        }
-        bytes
-    }
-
-    /// Deserialize from bytes
-    fn from_bytes(bytes: &[u8]) -> Self {
-        if bytes.len() < 4 {
-            pgrx::error!("Invalid vector data: too short");
+    /// Create from varlena pointer (zero-copy read)
+    ///
+    /// # Safety
+    /// The pointer must be a valid varlena structure with proper layout
+    unsafe fn from_varlena(varlena_ptr: *const pgrx::pg_sys::varlena) -> Self {
+        // Get the total size and validate
+        let total_size = pgrx::varlena::varsize_any(varlena_ptr);
+        if total_size < RuVectorHeader::SIZE + pgrx::pg_sys::VARHDRSZ {
+            pgrx::error!("Invalid vector: size too small");
         }
 
-        let dimensions = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let expected_len = 4 + (dimensions as usize) * 4;
+        // Get pointer to our header (skip varlena header)
+        let data_ptr = pgrx::varlena::vardata_any(varlena_ptr) as *const u8;
 
-        if bytes.len() != expected_len {
+        // Read dimensions (at offset 0 from data_ptr)
+        let dimensions = ptr::read_unaligned(data_ptr as *const u16);
+
+        if dimensions as usize > MAX_DIMENSIONS {
             pgrx::error!(
-                "Invalid vector data: expected {} bytes, got {}",
-                expected_len,
-                bytes.len()
+                "Vector dimension {} exceeds maximum {}",
+                dimensions,
+                MAX_DIMENSIONS
             );
         }
 
-        let mut data = Vec::with_capacity(dimensions as usize);
-        for i in 0..dimensions as usize {
-            let offset = 4 + i * 4;
-            let val = f32::from_le_bytes([
-                bytes[offset],
-                bytes[offset + 1],
-                bytes[offset + 2],
-                bytes[offset + 3],
-            ]);
-            data.push(val);
+        // Validate total size
+        let expected_size = RuVectorHeader::SIZE + (dimensions as usize * 4);
+        let actual_size = total_size - pgrx::pg_sys::VARHDRSZ;
+
+        if actual_size != expected_size {
+            pgrx::error!(
+                "Invalid vector: expected {} bytes, got {}",
+                expected_size,
+                actual_size
+            );
         }
 
-        Self { dimensions, data }
+        // Get pointer to f32 data (skip dimensions u16 + padding u16 = 4 bytes)
+        let f32_ptr = data_ptr.add(4) as *const f32;
+
+        // Copy data into Vec (this is the only copy we need)
+        let data = std::slice::from_raw_parts(f32_ptr, dimensions as usize).to_vec();
+
+        Self {
+            dimensions: dimensions as u32,
+            data,
+        }
+    }
+
+    /// Convert to varlena (allocate in PostgreSQL memory)
+    ///
+    /// # Safety
+    /// This allocates memory using PostgreSQL's allocator
+    unsafe fn to_varlena(&self) -> *mut pgrx::pg_sys::varlena {
+        let dimensions = self.dimensions as u16;
+
+        // Calculate sizes
+        let data_size = 4 + (dimensions as usize * 4); // 2 (dims) + 2 (padding) + n*4 (data)
+        let total_size = pgrx::pg_sys::VARHDRSZ + data_size;
+
+        // Allocate PostgreSQL memory
+        let varlena_ptr = pgrx::pg_sys::palloc(total_size) as *mut pgrx::pg_sys::varlena;
+
+        // Set varlena size
+        pgrx::varlena::set_varsize_4b(varlena_ptr, total_size as i32);
+
+        // Get data pointer
+        let data_ptr = pgrx::varlena::vardata_any(varlena_ptr) as *mut u8;
+
+        // Write dimensions (2 bytes)
+        ptr::write_unaligned(data_ptr as *mut u16, dimensions);
+
+        // Write padding (2 bytes of zeros)
+        ptr::write_unaligned(data_ptr.add(2) as *mut u16, 0);
+
+        // Write f32 data
+        let f32_ptr = data_ptr.add(4) as *mut f32;
+        ptr::copy_nonoverlapping(self.data.as_ptr(), f32_ptr, dimensions as usize);
+
+        varlena_ptr
     }
 }
 
@@ -226,7 +296,7 @@ impl FromStr for RuVector {
         // Parse format: [1.0, 2.0, 3.0] or [1,2,3]
         let s = s.trim();
         if !s.starts_with('[') || !s.ends_with(']') {
-            return Err(format!("Invalid vector format: {}", s));
+            return Err(format!("Invalid vector format: must be enclosed in brackets"));
         }
 
         let inner = &s[1..s.len() - 1];
@@ -236,12 +306,26 @@ impl FromStr for RuVector {
 
         let values: Result<Vec<f32>, _> = inner
             .split(',')
-            .map(|v| v.trim().parse::<f32>())
+            .map(|v| {
+                let trimmed = v.trim();
+                trimmed.parse::<f32>().map_err(|e| format!("Invalid number '{}': {}", trimmed, e))
+            })
             .collect();
 
         match values {
-            Ok(data) => Ok(Self::from_slice(&data)),
-            Err(e) => Err(format!("Invalid vector element: {}", e)),
+            Ok(data) => {
+                // Check for NaN and Infinity
+                for (i, val) in data.iter().enumerate() {
+                    if val.is_nan() {
+                        return Err(format!("NaN not allowed at position {}", i));
+                    }
+                    if val.is_infinite() {
+                        return Err(format!("Infinity not allowed at position {}", i));
+                    }
+                }
+                Ok(Self::from_slice(&data))
+            }
+            Err(e) => Err(e),
         }
     }
 }
@@ -253,6 +337,191 @@ impl PartialEq for RuVector {
 }
 
 impl Eq for RuVector {}
+
+// ============================================================================
+// VectorData Trait Implementation (Zero-Copy Interface)
+// ============================================================================
+
+impl VectorData for RuVector {
+    unsafe fn data_ptr(&self) -> *const f32 {
+        self.data.as_ptr()
+    }
+
+    unsafe fn data_ptr_mut(&mut self) -> *mut f32 {
+        self.data.as_mut_ptr()
+    }
+
+    fn dimensions(&self) -> usize {
+        self.dimensions as usize
+    }
+
+    fn as_slice(&self) -> &[f32] {
+        &self.data
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [f32] {
+        &mut self.data
+    }
+
+    fn memory_size(&self) -> usize {
+        RuVectorHeader::SIZE + self.data.len() * std::mem::size_of::<f32>()
+    }
+}
+
+// ============================================================================
+// PostgreSQL Type I/O Functions (Native Interface)
+// ============================================================================
+// Note: These functions are exported for SQL registration but use manual SQL
+// declarations rather than #[pg_extern] to properly integrate with PostgreSQL's
+// type system as IN/OUT/RECV/SEND functions.
+
+/// Text input function: Parse '[1.0, 2.0, 3.0]' to RuVector varlena
+///
+/// This is the PostgreSQL IN function for the ruvector type.
+/// Called when converting text to ruvector.
+#[no_mangle]
+pub extern "C" fn ruvector_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+    unsafe {
+        // Access first argument (cstring input)
+        let datum = (*fcinfo).args.as_ptr().add(0).read().value;
+        let input_cstr = datum.cast_mut_ptr::<std::os::raw::c_char>();
+        let input = CStr::from_ptr(input_cstr);
+
+        let input_str = match input.to_str() {
+            Ok(s) => s,
+            Err(_) => pgrx::error!("Invalid UTF-8 in vector input"),
+        };
+
+        let vector = match RuVector::from_str(input_str) {
+            Ok(vec) => vec,
+            Err(e) => pgrx::error!("Invalid vector format: {}", e),
+        };
+
+        pg_sys::Datum::from(vector.to_varlena())
+    }
+}
+
+/// Text output function: Convert RuVector to '[1.0, 2.0, 3.0]'
+///
+/// This is the PostgreSQL OUT function for the ruvector type.
+/// Called when converting ruvector to text.
+#[no_mangle]
+pub extern "C" fn ruvector_out(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+    unsafe {
+        // Access first argument (varlena vector)
+        let datum = (*fcinfo).args.as_ptr().add(0).read().value;
+        let varlena_ptr = datum.cast_mut_ptr::<pg_sys::varlena>();
+        let vector = RuVector::from_varlena(varlena_ptr);
+
+        let output = vector.to_string();
+        let cstring = match CString::new(output) {
+            Ok(s) => s,
+            Err(_) => pgrx::error!("Failed to create output string"),
+        };
+
+        // Allocate in PostgreSQL memory and copy
+        let len = cstring.as_bytes_with_nul().len();
+        let pg_str = pg_sys::palloc(len) as *mut std::os::raw::c_char;
+        ptr::copy_nonoverlapping(cstring.as_ptr(), pg_str, len);
+
+        pg_sys::Datum::from(pg_str)
+    }
+}
+
+/// Binary input function: Receive vector from network in binary format
+///
+/// This is the PostgreSQL RECEIVE function for the ruvector type.
+/// Binary format:
+/// - dimensions (2 bytes, network byte order / big-endian)
+/// - f32 values (4 bytes each, IEEE 754 format)
+#[no_mangle]
+pub extern "C" fn ruvector_recv(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+    unsafe {
+        // Access first argument (StringInfo buffer)
+        let datum = (*fcinfo).args.as_ptr().add(0).read().value;
+        let buf = datum.cast_mut_ptr::<pg_sys::StringInfoData>();
+        let buf_ptr = buf;
+
+        // Read dimensions (2 bytes, big-endian)
+        let dimensions = pg_sys::pq_getmsgint(buf_ptr, 2) as u16;
+
+        if dimensions as usize > MAX_DIMENSIONS {
+            pgrx::error!(
+                "Vector dimension {} exceeds maximum {}",
+                dimensions,
+                MAX_DIMENSIONS
+            );
+        }
+
+        // Read f32 data
+        let mut data = Vec::with_capacity(dimensions as usize);
+        for _ in 0..dimensions {
+            // Read as i32 then reinterpret as f32 (network byte order)
+            let int_bits = pg_sys::pq_getmsgint(buf_ptr, 4) as u32;
+            let float_val = f32::from_bits(int_bits);
+
+            // Validate
+            if float_val.is_nan() {
+                pgrx::error!("NaN not allowed in vector");
+            }
+            if float_val.is_infinite() {
+                pgrx::error!("Infinity not allowed in vector");
+            }
+
+            data.push(float_val);
+        }
+
+        let vector = RuVector::from_slice(&data);
+        pg_sys::Datum::from(vector.to_varlena())
+    }
+}
+
+/// Binary output function: Send vector in binary format over network
+///
+/// This is the PostgreSQL SEND function for the ruvector type.
+/// Binary format matches ruvector_recv.
+#[no_mangle]
+pub extern "C" fn ruvector_send(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+    unsafe {
+        // Access first argument (varlena vector)
+        let datum = (*fcinfo).args.as_ptr().add(0).read().value;
+        let varlena_ptr = datum.cast_mut_ptr::<pg_sys::varlena>();
+        let vector = RuVector::from_varlena(varlena_ptr);
+
+        // Create StringInfo for output
+        let buf = pg_sys::makeStringInfo();
+
+        // Write dimensions (2 bytes, big-endian) - pq_sendint expects u32 in pgrx 0.12
+        pg_sys::pq_sendint(buf, vector.dimensions, 2);
+
+        // Write f32 data
+        for &val in vector.as_slice() {
+            // Convert f32 to bits and send (network byte order)
+            let int_bits = val.to_bits();
+            pg_sys::pq_sendint(buf, int_bits, 4);
+        }
+
+        // Convert StringInfo to bytea
+        let data_ptr = (*buf).data;
+        let data_len = (*buf).len as usize;
+
+        // Allocate bytea
+        let bytea_size = pg_sys::VARHDRSZ + data_len;
+        let bytea_ptr = pg_sys::palloc(bytea_size) as *mut pg_sys::bytea;
+
+        // Set size
+        pgrx::varlena::set_varsize_4b(bytea_ptr as *mut pg_sys::varlena, bytea_size as i32);
+
+        // Copy data
+        let bytea_data = pgrx::varlena::vardata_any(bytea_ptr as *const pg_sys::varlena) as *mut u8;
+        ptr::copy_nonoverlapping(data_ptr as *const u8, bytea_data, data_len);
+
+        // Free StringInfo
+        pg_sys::pfree(buf as *mut std::ffi::c_void);
+
+        pg_sys::Datum::from(bytea_ptr)
+    }
+}
 
 // ============================================================================
 // PostgreSQL Type Integration
@@ -270,16 +539,9 @@ unsafe impl SqlTranslatable for RuVector {
 
 impl pgrx::IntoDatum for RuVector {
     fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
-        let bytes = self.to_bytes();
-        let len = bytes.len();
-        let total_size = pgrx::pg_sys::VARHDRSZ + len;
-
         unsafe {
-            let ptr = pgrx::pg_sys::palloc(total_size) as *mut u8;
-            let varlena = ptr as *mut pgrx::pg_sys::varlena;
-            pgrx::varlena::set_varsize_4b(varlena, total_size as i32);
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.add(pgrx::pg_sys::VARHDRSZ), len);
-            Some(pgrx::pg_sys::Datum::from(ptr))
+            let varlena_ptr = self.to_varlena();
+            Some(pgrx::pg_sys::Datum::from(varlena_ptr))
         }
     }
 
@@ -298,12 +560,8 @@ impl pgrx::FromDatum for RuVector {
             return None;
         }
 
-        let ptr = datum.cast_mut_ptr::<pgrx::pg_sys::varlena>();
-        let len = pgrx::varlena::varsize_any_exhdr(ptr);
-        let data_ptr = pgrx::varlena::vardata_any(ptr) as *const u8;
-        let bytes = std::slice::from_raw_parts(data_ptr, len);
-
-        Some(RuVector::from_bytes(bytes))
+        let varlena_ptr = datum.cast_mut_ptr::<pgrx::pg_sys::varlena>();
+        Some(RuVector::from_varlena(varlena_ptr))
     }
 }
 
@@ -313,39 +571,35 @@ impl pgrx::FromDatum for RuVector {
 
 /// Create a vector from a float array
 #[pg_extern(immutable, parallel_safe)]
-pub fn ruvector_from_array(arr: Vec<f32>) -> pgrx::JsonB {
+pub fn ruvector_from_array(arr: Vec<f32>) -> RuVector {
     if arr.len() > MAX_DIMENSIONS {
         pgrx::error!("Vector exceeds maximum dimensions ({})", MAX_DIMENSIONS);
     }
-    let v = RuVector::from_slice(&arr);
-    pgrx::JsonB(serde_json::json!({
-        "dimensions": v.dimensions(),
-        "data": v.as_slice(),
-    }))
+    RuVector::from_slice(&arr)
 }
 
-/// Parse a vector from string format [1.0, 2.0, 3.0]
+/// Get vector as float array
 #[pg_extern(immutable, parallel_safe)]
-pub fn ruvector_parse(input: &str) -> pgrx::JsonB {
-    match RuVector::from_str(input) {
-        Ok(v) => pgrx::JsonB(serde_json::json!({
-            "dimensions": v.dimensions(),
-            "data": v.as_slice(),
-        })),
-        Err(e) => pgrx::error!("Invalid vector format: {}", e),
-    }
+pub fn ruvector_to_array(v: RuVector) -> Vec<f32> {
+    v.into_vec()
 }
 
-/// Get vector as float array from JSON representation
+/// Get vector dimensions
 #[pg_extern(immutable, parallel_safe)]
-pub fn ruvector_to_array(v: pgrx::JsonB) -> Vec<f32> {
-    let obj = v.0.as_object().expect("Invalid vector JSON");
-    let data = obj.get("data").expect("Missing data field");
-    data.as_array()
-        .expect("Data must be array")
-        .iter()
-        .map(|x| x.as_f64().expect("Invalid float") as f32)
-        .collect()
+pub fn ruvector_dims(v: RuVector) -> i32 {
+    v.dimensions() as i32
+}
+
+/// Get vector L2 norm
+#[pg_extern(immutable, parallel_safe)]
+pub fn ruvector_norm(v: RuVector) -> f32 {
+    v.norm()
+}
+
+/// Normalize vector to unit length
+#[pg_extern(immutable, parallel_safe)]
+pub fn ruvector_normalize(v: RuVector) -> RuVector {
+    v.normalize()
 }
 
 // ============================================================================
@@ -408,16 +662,68 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_invalid() {
+        assert!("not a vector".parse::<RuVector>().is_err());
+        assert!("[1.0, nan, 3.0]".parse::<RuVector>().is_err());
+        assert!("[1.0, inf, 3.0]".parse::<RuVector>().is_err());
+    }
+
+    #[test]
     fn test_display() {
         let v = RuVector::from_slice(&[1.0, 2.5, 3.0]);
         assert_eq!(v.to_string(), "[1,2.5,3]");
     }
 
     #[test]
-    fn test_serialization() {
-        let v = RuVector::from_slice(&[1.0, 2.0, 3.0]);
-        let bytes = v.to_bytes();
-        let v2 = RuVector::from_bytes(&bytes);
-        assert_eq!(v, v2);
+    fn test_varlena_roundtrip() {
+        unsafe {
+            let v1 = RuVector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+            let varlena = v1.to_varlena();
+            let v2 = RuVector::from_varlena(varlena);
+            assert_eq!(v1, v2);
+            pgrx::pg_sys::pfree(varlena as *mut std::ffi::c_void);
+        }
     }
+
+    #[test]
+    fn test_memory_size() {
+        let v = RuVector::from_slice(&[1.0, 2.0, 3.0]);
+        let size = v.data_memory_size();
+        // Header (4 bytes: 2 dims + 2 padding) + 3 * 4 bytes = 16 bytes
+        assert_eq!(size, 16);
+    }
+}
+
+#[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
+mod pg_tests {
+    use super::*;
+
+    #[pg_test]
+    fn test_ruvector_from_to_array() {
+        let arr = vec![1.0, 2.0, 3.0, 4.0];
+        let vec = ruvector_from_array(arr.clone());
+        assert_eq!(vec.dimensions(), 4);
+
+        let result = ruvector_to_array(vec);
+        assert_eq!(result, arr);
+    }
+
+    #[pg_test]
+    fn test_ruvector_dims() {
+        let vec = RuVector::from_slice(&[1.0, 2.0, 3.0]);
+        assert_eq!(ruvector_dims(vec), 3);
+    }
+
+    #[pg_test]
+    fn test_ruvector_norm_normalize() {
+        let vec = RuVector::from_slice(&[3.0, 4.0]);
+        assert!((ruvector_norm(vec.clone()) - 5.0).abs() < 1e-6);
+
+        let normalized = ruvector_normalize(vec);
+        assert!((ruvector_norm(normalized) - 1.0).abs() < 1e-6);
+    }
+
+    // Note: I/O functions (ruvector_in, ruvector_out, ruvector_recv, ruvector_send)
+    // are tested via integration tests since they use raw C calling convention
 }

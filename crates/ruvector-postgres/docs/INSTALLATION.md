@@ -15,16 +15,48 @@ This guide covers installation of RuVector-Postgres on various platforms includi
 | CPU | x86_64 or ARM64 | x86_64 with AVX2+ |
 | Disk | 10 GB | SSD recommended |
 
+### PostgreSQL Version Requirements
+
+RuVector-Postgres supports PostgreSQL 14-18:
+
+| PostgreSQL Version | Status | Notes |
+|-------------------|--------|-------|
+| 18 | ✓ Full support | Latest features |
+| 17 | ✓ Full support | Recommended |
+| 16 | ✓ Full support | Stable |
+| 15 | ✓ Full support | Stable |
+| 14 | ✓ Full support | Minimum version |
+| 13 and below | ✗ Not supported | Use pgvector |
+
 ### Build Requirements
 
-| Tool | Version |
-|------|---------|
-| Rust | 1.75+ |
-| Cargo | 1.75+ |
-| pgrx | 0.12+ |
-| PostgreSQL Dev | 14-18 |
-| clang | 14+ |
-| pkg-config | any |
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Rust | 1.75+ | Compilation |
+| Cargo | 1.75+ | Build system |
+| pgrx | 0.12.9+ | PostgreSQL extension framework |
+| PostgreSQL Dev | 14-18 | Headers and libraries |
+| clang | 14+ | LLVM backend for pgrx |
+| pkg-config | any | Dependency management |
+| git | 2.0+ | Source checkout |
+
+#### pgrx Version Requirements
+
+**Critical:** RuVector-Postgres requires pgrx **0.12.9 or higher**.
+
+```bash
+# Install specific pgrx version
+cargo install --locked cargo-pgrx@0.12.9
+
+# Verify version
+cargo pgrx --version
+# Should output: cargo-pgrx 0.12.9 or higher
+```
+
+**Known Issues with Earlier Versions:**
+
+- pgrx 0.11.x: Missing varlena APIs, incompatible type system
+- pgrx 0.12.0-0.12.8: Potential memory alignment issues
 
 ## Installation Methods
 
@@ -38,14 +70,69 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 
 # Verify installation
-rustc --version
+rustc --version  # Should be 1.75.0 or higher
 cargo --version
 ```
 
-#### Step 2: Install pgrx
+#### Step 2: Install System Dependencies
+
+**Ubuntu/Debian:**
 
 ```bash
-# Install pgrx CLI
+# PostgreSQL and development headers
+sudo apt-get update
+sudo apt-get install -y \
+    postgresql-16 \
+    postgresql-server-dev-16 \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    clang \
+    git
+
+# Verify pg_config
+pg_config --version
+```
+
+**RHEL/CentOS/Fedora:**
+
+```bash
+# PostgreSQL and development headers
+sudo dnf install -y \
+    postgresql16-server \
+    postgresql16-devel \
+    gcc \
+    gcc-c++ \
+    pkg-config \
+    openssl-devel \
+    clang-devel \
+    git
+
+# Verify pg_config
+/usr/pgsql-16/bin/pg_config --version
+```
+
+**macOS:**
+
+```bash
+# Install PostgreSQL via Homebrew
+brew install postgresql@16
+
+# Install build dependencies
+brew install llvm pkg-config
+
+# Add pg_config to PATH
+export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+
+# Verify
+pg_config --version
+```
+
+#### Step 3: Install pgrx
+
+```bash
+# Install pgrx CLI (locked version)
 cargo install --locked cargo-pgrx@0.12.9
 
 # Initialize pgrx for your PostgreSQL version
@@ -56,9 +143,13 @@ cargo pgrx init \
     --pg14 /usr/lib/postgresql/14/bin/pg_config \
     --pg15 /usr/lib/postgresql/15/bin/pg_config \
     --pg16 /usr/lib/postgresql/16/bin/pg_config
+
+# Verify initialization
+ls ~/.pgrx/
+# Should show: 16.x, data-16, etc.
 ```
 
-#### Step 3: Build the Extension
+#### Step 4: Build the Extension
 
 ```bash
 # Clone the repository
@@ -69,10 +160,24 @@ cd ruvector/crates/ruvector-postgres
 cargo pgrx package --pg-config $(which pg_config)
 
 # The built extension will be in:
-# target/release/ruvector-pg16/
+# target/release/ruvector-pg16/usr/share/postgresql/16/extension/
+# target/release/ruvector-pg16/usr/lib/postgresql/16/lib/
 ```
 
-#### Step 4: Install the Extension
+**Build Options:**
+
+```bash
+# Debug build (for development)
+cargo pgrx package --pg-config $(which pg_config) --debug
+
+# Release build with optimizations (default)
+cargo pgrx package --pg-config $(which pg_config) --release
+
+# Test before installing
+cargo pgrx test pg16
+```
+
+#### Step 5: Install the Extension
 
 ```bash
 # Copy files to PostgreSQL directories
@@ -82,11 +187,18 @@ sudo cp target/release/ruvector-pg16/usr/share/postgresql/16/extension/* \
 sudo cp target/release/ruvector-pg16/usr/lib/postgresql/16/lib/* \
     /usr/lib/postgresql/16/lib/
 
+# Set proper permissions
+sudo chmod 644 /usr/share/postgresql/16/extension/ruvector*
+sudo chmod 755 /usr/lib/postgresql/16/lib/ruvector.so
+
 # Restart PostgreSQL
 sudo systemctl restart postgresql
+
+# Or on macOS:
+brew services restart postgresql@16
 ```
 
-#### Step 5: Enable in Database
+#### Step 6: Enable in Database
 
 ```sql
 -- Connect to your database
@@ -97,75 +209,40 @@ CREATE EXTENSION ruvector;
 
 -- Verify installation
 SELECT ruvector_version();
+-- Expected output: 0.1.19 (or current version)
+
+-- Check SIMD capabilities
+SELECT ruvector_simd_info();
+-- Expected: AVX512, AVX2, NEON, or Scalar
 ```
 
-### Method 2: Pre-built Packages
+### Method 2: Docker Deployment
 
-#### Debian/Ubuntu
-
-```bash
-# Add repository (when available)
-curl -fsSL https://packages.ruvector.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/ruvector.gpg
-echo "deb [signed-by=/usr/share/keyrings/ruvector.gpg] https://packages.ruvector.io/apt stable main" | \
-    sudo tee /etc/apt/sources.list.d/ruvector.list
-
-# Install
-sudo apt update
-sudo apt install postgresql-16-ruvector
-
-# Enable
-sudo -u postgres psql -c "CREATE EXTENSION ruvector;"
-```
-
-#### RHEL/CentOS/Fedora
+#### Quick Start with Docker
 
 ```bash
-# Add repository (when available)
-sudo dnf config-manager --add-repo https://packages.ruvector.io/rpm/ruvector.repo
-
-# Install
-sudo dnf install postgresql16-ruvector
-
-# Enable
-sudo -u postgres psql -c "CREATE EXTENSION ruvector;"
-```
-
-#### macOS (Homebrew)
-
-```bash
-# Install PostgreSQL if needed
-brew install postgresql@16
-
-# Install ruvector (when available)
-brew install ruvector-postgres
-
-# Enable
-psql -c "CREATE EXTENSION ruvector;"
-```
-
-### Method 3: Docker
-
-#### Using Pre-built Image
-
-```bash
-# Pull the image
+# Pull the pre-built image (when available)
 docker pull ruvector/postgres:16
 
 # Run container
 docker run -d \
     --name ruvector-postgres \
     -e POSTGRES_PASSWORD=mysecretpassword \
+    -e POSTGRES_DB=vectordb \
     -p 5432:5432 \
+    -v ruvector-data:/var/lib/postgresql/data \
     ruvector/postgres:16
 
-# Connect and enable
-docker exec -it ruvector-postgres psql -U postgres -c "CREATE EXTENSION ruvector;"
+# Connect and enable extension
+docker exec -it ruvector-postgres psql -U postgres -d vectordb
 ```
 
-#### Building Custom Image
+#### Building Custom Docker Image
+
+Create a `Dockerfile`:
 
 ```dockerfile
-# Dockerfile
+# Dockerfile for RuVector-Postgres
 FROM postgres:16
 
 # Install build dependencies
@@ -174,72 +251,166 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libclang-dev \
+    clang \
     curl \
+    git \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain 1.75.0
 
 # Install pgrx
 RUN cargo install --locked cargo-pgrx@0.12.9
 RUN cargo pgrx init --pg16 /usr/lib/postgresql/16/bin/pg_config
 
 # Copy and build extension
-COPY crates/ruvector-postgres /app/ruvector-postgres
-WORKDIR /app/ruvector-postgres
+COPY . /app/ruvector
+WORKDIR /app/ruvector/crates/ruvector-postgres
 RUN cargo pgrx install --release --pg-config /usr/lib/postgresql/16/bin/pg_config
 
-# Clean up build dependencies
-RUN apt-get remove -y build-essential && apt-get autoremove -y
+# Clean up build dependencies to reduce image size
+RUN apt-get remove -y build-essential git curl && \
+    apt-get autoremove -y && \
+    rm -rf /usr/local/cargo/registry /app/ruvector
+
+# Auto-enable extension on database creation
+RUN echo "CREATE EXTENSION IF NOT EXISTS ruvector;" > /docker-entrypoint-initdb.d/init-ruvector.sql
+
+EXPOSE 5432
 ```
+
+Build and run:
 
 ```bash
-# Build and run
+# Build image
 docker build -t ruvector-postgres:custom .
-docker run -d -e POSTGRES_PASSWORD=secret -p 5432:5432 ruvector-postgres:custom
+
+# Run container
+docker run -d \
+    --name ruvector-db \
+    -e POSTGRES_PASSWORD=secret \
+    -e POSTGRES_DB=vectordb \
+    -p 5432:5432 \
+    -v $(pwd)/data:/var/lib/postgresql/data \
+    ruvector-postgres:custom
+
+# Verify installation
+docker exec -it ruvector-db psql -U postgres -d vectordb -c "SELECT ruvector_version();"
 ```
 
-### Method 4: Cloud Platforms
+#### Docker Compose
 
-#### Neon
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ruvector-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: vectordb
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+    driver: local
+```
+
+Deploy:
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+```
+
+### Method 3: Cloud Platforms
+
+#### Neon (Serverless PostgreSQL)
 
 See [NEON_COMPATIBILITY.md](./NEON_COMPATIBILITY.md) for detailed instructions.
 
-1. Contact Neon support (Scale plan required)
-2. Request custom extension upload
-3. Provide pre-built artifacts
-4. Enable via `CREATE EXTENSION ruvector;`
+**Requirements:**
+- Neon Scale plan or higher
+- Support ticket for custom extension
+
+**Process:**
+
+1. **Request Installation** (Scale Plan customers):
+   ```
+   Navigate to: console.neon.tech → Support
+   Subject: Custom Extension Request - RuVector-Postgres
+   Details:
+   - PostgreSQL version: 16 (or your version)
+   - Extension: ruvector-postgres v0.1.19
+   - Use case: Vector similarity search
+   ```
+
+2. **Provide Artifacts**:
+   - Pre-built `.so` files
+   - Control file (`ruvector.control`)
+   - SQL scripts (`ruvector--0.1.0.sql`)
+
+3. **Enable After Approval**:
+   ```sql
+   CREATE EXTENSION ruvector;
+   SELECT ruvector_version();
+   ```
 
 #### Supabase
 
 ```sql
--- Supabase supports custom extensions via SQL
 -- Contact Supabase support for custom extension installation
+-- support@supabase.io or via dashboard
 
 -- Once installed:
 CREATE EXTENSION ruvector;
+
+-- Verify
+SELECT ruvector_version();
 ```
 
 #### AWS RDS
 
-```bash
-# RDS doesn't support custom extensions directly
-# Use RDS for PostgreSQL with pgvector, or
-# Deploy on EC2 with self-managed PostgreSQL
+**Note:** RDS does not support custom extensions. Use EC2 with self-managed PostgreSQL.
 
-# For EC2 deployment:
-# Follow Method 1 (Build from Source)
-```
+**Alternative: RDS with pgvector, migrate later:**
 
-#### Google Cloud SQL
+```sql
+-- On RDS: Use pgvector
+CREATE EXTENSION vector;
 
-```bash
-# Cloud SQL supports limited extensions
-# For custom extensions, use Compute Engine with self-managed PostgreSQL
-
-# Deploy on GCE:
-# Follow Method 1 (Build from Source)
+-- Migrate to EC2 with RuVector when needed
+-- Follow Method 1 (Build from Source)
 ```
 
 ## Configuration
@@ -250,46 +421,60 @@ Add to `postgresql.conf`:
 
 ```ini
 # RuVector settings
-shared_preload_libraries = 'ruvector'  # Optional, for background features
+shared_preload_libraries = 'ruvector'  # Optional, for background workers
 
 # Memory settings for vector operations
 maintenance_work_mem = '2GB'           # For index builds
 work_mem = '256MB'                     # For queries
+shared_buffers = '4GB'                 # For caching
 
 # Parallel query settings
 max_parallel_workers_per_gather = 4
 max_parallel_maintenance_workers = 8
+max_worker_processes = 16
+
+# Logging (optional)
+log_min_messages = INFO
+log_min_duration_statement = 1000      # Log slow queries (1s+)
+```
+
+Restart PostgreSQL:
+
+```bash
+sudo systemctl restart postgresql
 ```
 
 ### Extension Settings (GUCs)
 
 ```sql
 -- Search quality (higher = better recall, slower)
-SET ruvector.ef_search = 100;          -- Default: 40
+SET ruvector.ef_search = 100;          -- Default: 40, Range: 1-1000
 
 -- IVFFlat probes (higher = better recall, slower)
-SET ruvector.probes = 10;              -- Default: 1
+SET ruvector.probes = 10;              -- Default: 1, Range: 1-10000
 
--- Maximum index memory
-SET ruvector.max_index_memory = '1GB'; -- Default: unlimited
-
--- Enable/disable quantization
-SET ruvector.enable_quantization = on; -- Default: on
-
--- Query plan caching
-SET ruvector.plan_cache = on;          -- Default: on
+-- Set globally in postgresql.conf:
+ALTER SYSTEM SET ruvector.ef_search = 100;
+ALTER SYSTEM SET ruvector.probes = 10;
+SELECT pg_reload_conf();
 ```
 
 ### Per-Session Settings
 
 ```sql
 -- For high-recall queries
-SET ruvector.ef_search = 200;
-SET ruvector.probes = 20;
+BEGIN;
+SET LOCAL ruvector.ef_search = 200;
+SET LOCAL ruvector.probes = 20;
+SELECT * FROM items ORDER BY embedding <-> query LIMIT 10;
+COMMIT;
 
 -- For low-latency queries
-SET ruvector.ef_search = 20;
-SET ruvector.probes = 1;
+BEGIN;
+SET LOCAL ruvector.ef_search = 20;
+SET LOCAL ruvector.probes = 1;
+SELECT * FROM items ORDER BY embedding <-> query LIMIT 10;
+COMMIT;
 ```
 
 ## Verification
@@ -299,14 +484,15 @@ SET ruvector.probes = 1;
 ```sql
 -- Verify extension is installed
 SELECT * FROM pg_extension WHERE extname = 'ruvector';
+-- Expected: extname=ruvector, extversion=0.1.19
 
 -- Check version
 SELECT ruvector_version();
--- Expected: 0.1.0
+-- Expected: 0.1.19
 
 -- Check SIMD capabilities
 SELECT ruvector_simd_info();
--- Expected: avx2 or avx512 on modern x86_64
+-- Expected: AVX512, AVX2, NEON, or Scalar
 ```
 
 ### Basic Functionality Test
@@ -330,6 +516,13 @@ FROM test_vectors
 ORDER BY distance
 LIMIT 3;
 
+-- Expected output:
+-- id | distance
+-- ---+-----------
+--  1 | 2.449...
+--  2 | 6.782...
+--  3 | 11.224...
+
 -- Clean up
 DROP TABLE test_vectors;
 ```
@@ -340,13 +533,13 @@ DROP TABLE test_vectors;
 -- Create table with embeddings
 CREATE TABLE items (
     id SERIAL PRIMARY KEY,
-    embedding ruvector(1536)
+    embedding ruvector(128)
 );
 
--- Insert sample data
+-- Insert sample data (10,000 vectors)
 INSERT INTO items (embedding)
 SELECT ('[' || array_to_string(array_agg(random()), ',') || ']')::ruvector
-FROM generate_series(1, 1536) d
+FROM generate_series(1, 128) d
 CROSS JOIN generate_series(1, 10000) i
 GROUP BY i;
 
@@ -355,32 +548,165 @@ CREATE INDEX items_embedding_idx ON items
 USING ruhnsw (embedding ruvector_l2_ops)
 WITH (m = 16, ef_construction = 100);
 
--- Test search
+-- Test search with index
 EXPLAIN ANALYZE
 SELECT * FROM items
 ORDER BY embedding <-> (SELECT embedding FROM items LIMIT 1)
 LIMIT 10;
 
--- Verify index usage
--- Should show "Index Scan using items_embedding_idx"
+-- Verify index usage in plan
+-- Should show: "Index Scan using items_embedding_idx"
+
+-- Clean up
+DROP TABLE items;
+```
+
+## Troubleshooting
+
+### Common Installation Issues
+
+#### 1. Extension Won't Load
+
+```bash
+# Check library path
+pg_config --pkglibdir
+ls -la $(pg_config --pkglibdir)/ruvector*
+
+# Expected output:
+# -rwxr-xr-x ... ruvector.so
+
+# Check extension path
+pg_config --sharedir
+ls -la $(pg_config --sharedir)/extension/ruvector*
+
+# Expected output:
+# -rw-r--r-- ... ruvector.control
+# -rw-r--r-- ... ruvector--0.1.0.sql
+
+# Check PostgreSQL logs
+sudo tail -100 /var/log/postgresql/postgresql-16-main.log
+```
+
+**Fix:** Reinstall with correct permissions:
+
+```bash
+sudo chmod 755 $(pg_config --pkglibdir)/ruvector.so
+sudo chmod 644 $(pg_config --sharedir)/extension/ruvector*
+sudo systemctl restart postgresql
+```
+
+#### 2. pgrx Version Mismatch
+
+**Error:** `error: failed to load manifest at .../Cargo.toml`
+
+**Cause:** pgrx version < 0.12.9
+
+**Fix:**
+
+```bash
+# Uninstall old version
+cargo uninstall cargo-pgrx
+
+# Install correct version
+cargo install --locked cargo-pgrx@0.12.9
+
+# Re-initialize
+cargo pgrx init --pg16 $(which pg_config)
+
+# Rebuild
+cargo pgrx package --pg-config $(which pg_config)
+```
+
+#### 3. SIMD Not Detected
+
+```sql
+-- Check detected SIMD
+SELECT ruvector_simd_info();
+-- Output: Scalar (unexpected on modern CPUs)
+```
+
+**Diagnose:**
+
+```bash
+# Linux: Check CPU capabilities
+cat /proc/cpuinfo | grep -E 'avx2|avx512'
+
+# macOS: Check CPU features
+sysctl -a | grep machdep.cpu.features
+```
+
+**Possible Causes:**
+
+- Running in VM without AVX passthrough
+- Old CPU without AVX2 support
+- Scalar build (missing `target-cpu=native`)
+
+**Fix:** Rebuild with native optimizations:
+
+```bash
+# Set Rust flags
+export RUSTFLAGS="-C target-cpu=native"
+
+# Rebuild
+cargo pgrx package --pg-config $(which pg_config)
+sudo systemctl restart postgresql
+```
+
+#### 4. Index Build Slow or OOM
+
+**Symptoms:** Index creation times out or crashes
+
+**Solutions:**
+
+```sql
+-- Increase maintenance memory
+SET maintenance_work_mem = '8GB';
+
+-- Increase parallelism
+SET max_parallel_maintenance_workers = 16;
+
+-- Use CONCURRENTLY for non-blocking builds
+CREATE INDEX CONCURRENTLY items_embedding_idx ON items
+USING ruhnsw (embedding ruvector_l2_ops);
+
+-- Monitor progress
+SELECT * FROM pg_stat_progress_create_index;
+```
+
+#### 5. Connection Issues
+
+```bash
+# Check PostgreSQL is running
+sudo systemctl status postgresql
+
+# Check listen addresses
+grep listen_addresses /etc/postgresql/16/main/postgresql.conf
+# Should be: listen_addresses = '*' or '0.0.0.0'
+
+# Check pg_hba.conf for authentication
+sudo cat /etc/postgresql/16/main/pg_hba.conf
+# Add: host all all 0.0.0.0/0 md5
+
+# Restart
+sudo systemctl restart postgresql
 ```
 
 ## Upgrading
 
-### Minor Version Upgrade (0.1.0 → 0.1.1)
+### Minor Version Upgrade (0.1.19 → 0.1.20)
 
 ```sql
 -- Check current version
 SELECT ruvector_version();
 
 -- Upgrade extension
-ALTER EXTENSION ruvector UPDATE TO '0.1.1';
+ALTER EXTENSION ruvector UPDATE TO '0.1.20';
 
 -- Verify
 SELECT ruvector_version();
 ```
 
-### Major Version Upgrade (0.1.x → 0.2.x)
+### Major Version Upgrade
 
 ```bash
 # Stop PostgreSQL
@@ -391,44 +717,13 @@ cd ruvector/crates/ruvector-postgres
 git pull
 cargo pgrx package --pg-config $(which pg_config)
 sudo cp target/release/ruvector-pg16/usr/lib/postgresql/16/lib/* \
-    /usr/lib/postgresql/16/lib/
+    $(pg_config --pkglibdir)/
 
 # Start PostgreSQL
 sudo systemctl start postgresql
 
 # Upgrade in database
 psql -U postgres -d your_database -c "ALTER EXTENSION ruvector UPDATE;"
-```
-
-### Migration from pgvector
-
-```sql
--- Keep existing pgvector data
--- CREATE EXTENSION IF NOT EXISTS vector;
-
--- Install ruvector
-CREATE EXTENSION ruvector;
-
--- Migrate data (type cast works automatically)
-CREATE TABLE items_new AS
-SELECT id, embedding::ruvector AS embedding, metadata
-FROM items;
-
--- Create new index
-CREATE INDEX ON items_new USING ruhnsw (embedding ruvector_l2_ops);
-
--- Swap tables
-BEGIN;
-ALTER TABLE items RENAME TO items_old;
-ALTER TABLE items_new RENAME TO items;
-COMMIT;
-
--- Validate
-SELECT COUNT(*) FROM items;
-SELECT COUNT(*) FROM items_old;
-
--- Drop old table when ready
--- DROP TABLE items_old;
 ```
 
 ## Uninstallation
@@ -443,76 +738,11 @@ DROP EXTENSION ruvector CASCADE;
 
 ```bash
 # Remove library files
-sudo rm /usr/lib/postgresql/16/lib/ruvector.so
-sudo rm /usr/share/postgresql/16/extension/ruvector*
-```
+sudo rm $(pg_config --pkglibdir)/ruvector.so
+sudo rm $(pg_config --sharedir)/extension/ruvector*
 
-## Troubleshooting
-
-### Extension Won't Load
-
-```bash
-# Check library path
-pg_config --pkglibdir
-ls -la /usr/lib/postgresql/16/lib/ruvector*
-
-# Check shared_preload_libraries
-psql -c "SHOW shared_preload_libraries;"
-
-# Check PostgreSQL logs
-sudo tail -100 /var/log/postgresql/postgresql-16-main.log
-```
-
-### SIMD Not Detected
-
-```sql
--- Check detected SIMD
-SELECT ruvector_simd_info();
-
--- If showing 'scalar', check CPU capabilities:
--- Linux:
--- cat /proc/cpuinfo | grep -E 'avx2|avx512'
-
--- macOS:
--- sysctl -a | grep machdep.cpu.features
-```
-
-### Index Build Slow
-
-```sql
--- Increase maintenance memory
-SET maintenance_work_mem = '8GB';
-
--- Increase parallelism
-SET max_parallel_maintenance_workers = 16;
-
--- Use CONCURRENTLY for non-blocking builds
-CREATE INDEX CONCURRENTLY ON items
-USING ruhnsw (embedding ruvector_l2_ops);
-```
-
-### Out of Memory
-
-```sql
--- Reduce index memory limit
-SET ruvector.max_index_memory = '512MB';
-
--- Use more aggressive quantization
-CREATE INDEX ON items USING ruhnsw (embedding ruvector_l2_ops)
-WITH (quantization = 'pq32');  -- 32 subspaces, maximum compression
-```
-
-### Connection Issues
-
-```bash
-# Check PostgreSQL is running
-sudo systemctl status postgresql
-
-# Check listen addresses
-grep listen_addresses /etc/postgresql/16/main/postgresql.conf
-
-# Check pg_hba.conf for authentication
-sudo cat /etc/postgresql/16/main/pg_hba.conf
+# Restart PostgreSQL
+sudo systemctl restart postgresql
 ```
 
 ## Support
