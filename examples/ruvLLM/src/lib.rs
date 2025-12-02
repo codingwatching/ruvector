@@ -66,6 +66,7 @@ pub mod memory;
 pub mod orchestrator;
 pub mod router;
 pub mod simd_inference;
+pub mod training;
 pub mod types;
 
 #[cfg(feature = "real-inference")]

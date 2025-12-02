@@ -131,6 +131,10 @@ path = "src/bin/benchmark_suite.rs"
 name = "ruvllm-simd-demo"
 path = "src/bin/simd_demo.rs"
 
+[[bin]]
+name = "ruvllm-pretrain"
+path = "src/bin/pretrain.rs"
+
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
