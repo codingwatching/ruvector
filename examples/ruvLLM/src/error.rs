@@ -116,6 +116,14 @@ pub enum InferenceError {
     #[error("Generation failed: {0}")]
     GenerationError(String),
 
+    /// Generation failed (alias)
+    #[error("Generation failed: {0}")]
+    GenerationFailed(String),
+
+    /// Initialization error
+    #[error("Initialization failed: {0}")]
+    InitFailed(String),
+
     /// Out of memory
     #[error("Out of memory for model {0:?}")]
     OutOfMemory(crate::types::ModelSize),

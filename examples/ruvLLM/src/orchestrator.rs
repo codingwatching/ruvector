@@ -157,6 +157,8 @@ impl RuvLLM {
                 max_tokens: request.constraints.max_tokens.unwrap_or(512) as usize,
                 temperature: routing_decision.temperature,
                 top_p: routing_decision.top_p,
+                top_k: 40,
+                repeat_penalty: 1.1,
             },
             session.kv_cache_key.as_deref(),
         ).await?;

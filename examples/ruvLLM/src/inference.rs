@@ -1,8 +1,12 @@
 //! LFM2 inference pool for model management
+//!
+//! Supports both mock inference (for testing/benchmarking orchestration) and
+//! real SIMD-optimized CPU inference.
 
 use crate::config::InferenceConfig;
 use crate::error::{Error, InferenceError, Result};
 use crate::types::ModelSize;
+use crate::simd_inference::{SimdInferenceEngine, SimdGenerationConfig};
 
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -18,14 +22,32 @@ pub struct GenerationConfig {
     pub temperature: f32,
     /// Top-p (nucleus sampling)
     pub top_p: f32,
+    /// Top-k sampling
+    pub top_k: usize,
+    /// Repeat penalty
+    pub repeat_penalty: f32,
 }
 
 impl Default for GenerationConfig {
     fn default() -> Self {
         Self {
-            max_tokens: 512,
+            max_tokens: 256,
             temperature: 0.7,
             top_p: 0.9,
+            top_k: 40,
+            repeat_penalty: 1.1,
+        }
+    }
+}
+
+impl From<&GenerationConfig> for SimdGenerationConfig {
+    fn from(config: &GenerationConfig) -> Self {
+        SimdGenerationConfig {
+            max_tokens: config.max_tokens,
+            temperature: config.temperature,
+            top_p: config.top_p,
+            top_k: config.top_k,
+            repeat_penalty: config.repeat_penalty,
         }
     }
 }
@@ -41,31 +63,75 @@ pub struct GenerationResult {
     pub model_used: ModelSize,
     /// Whether KV cache was hit
     pub cache_hit: bool,
+    /// Inference time in milliseconds
+    pub inference_time_ms: f64,
+    /// Tokens per second
+    pub tokens_per_second: f64,
+}
+
+/// Inference mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InferenceMode {
+    /// Mock inference (fast, for orchestration benchmarks)
+    Mock,
+    /// Real SIMD-optimized CPU inference
+    RealSimd,
 }
 
 /// Pool of LFM2 models with lazy loading
 pub struct InferencePool {
-    /// Loaded models
+    /// Loaded mock models (for orchestration benchmarks)
     models: DashMap<ModelSize, Arc<MockModel>>,
     /// LRU tracking
     lru: RwLock<Vec<(ModelSize, Instant)>>,
     /// Configuration
     config: InferenceConfig,
+    /// Real SIMD inference engine
+    simd_engine: Option<Arc<SimdInferenceEngine>>,
+    /// Current inference mode
+    mode: InferenceMode,
 }
 
-/// Mock model for testing (in production, use llama.cpp or vLLM)
+/// Mock model for testing (measures orchestration overhead only)
 struct MockModel {
     size: ModelSize,
 }
 
 impl InferencePool {
-    /// Create a new inference pool
+    /// Create a new inference pool with mock inference (fast orchestration benchmarks)
     pub async fn new(config: &InferenceConfig) -> Result<Self> {
         Ok(Self {
             models: DashMap::new(),
             lru: RwLock::new(Vec::new()),
             config: config.clone(),
+            simd_engine: None,
+            mode: InferenceMode::Mock,
         })
+    }
+
+    /// Create a new inference pool with real SIMD-optimized inference
+    pub async fn new_with_real_inference(config: &InferenceConfig) -> Result<Self> {
+        let engine = SimdInferenceEngine::new_demo();
+        Ok(Self {
+            models: DashMap::new(),
+            lru: RwLock::new(Vec::new()),
+            config: config.clone(),
+            simd_engine: Some(Arc::new(engine)),
+            mode: InferenceMode::RealSimd,
+        })
+    }
+
+    /// Set inference mode
+    pub fn set_mode(&mut self, mode: InferenceMode) {
+        if mode == InferenceMode::RealSimd && self.simd_engine.is_none() {
+            self.simd_engine = Some(Arc::new(SimdInferenceEngine::new_demo()));
+        }
+        self.mode = mode;
+    }
+
+    /// Get current inference mode
+    pub fn mode(&self) -> InferenceMode {
+        self.mode
     }
 
     /// Generate response from a model
@@ -74,28 +140,73 @@ impl InferencePool {
         model_size: ModelSize,
         prompt: &str,
         config: GenerationConfig,
-        _session_key: Option<&str>,
+        session_key: Option<&str>,
     ) -> Result<GenerationResult> {
-        // Get or load model
-        let _model = self.get_or_load(model_size).await?;
+        let start = Instant::now();
 
-        // Mock generation (in production, call actual LLM)
-        let response = self.mock_generate(prompt, &config, model_size);
+        match self.mode {
+            InferenceMode::Mock => {
+                // Get or load mock model
+                let _model = self.get_or_load(model_size).await?;
 
-        Ok(GenerationResult {
-            text: response,
-            tokens_generated: config.max_tokens / 2, // Mock
-            model_used: model_size,
-            cache_hit: false,
-        })
+                // Mock generation (measures orchestration overhead only)
+                let response = self.mock_generate(prompt, &config, model_size);
+                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+
+                Ok(GenerationResult {
+                    text: response,
+                    tokens_generated: config.max_tokens / 2,
+                    model_used: model_size,
+                    cache_hit: false,
+                    inference_time_ms: elapsed,
+                    tokens_per_second: (config.max_tokens as f64 / 2.0) / (elapsed / 1000.0),
+                })
+            }
+            InferenceMode::RealSimd => {
+                // Use real SIMD-optimized inference
+                let engine = self.simd_engine.as_ref().ok_or_else(|| {
+                    Error::Inference(InferenceError::InitFailed(
+                        "SIMD engine not initialized".to_string(),
+                    ))
+                })?;
+
+                let simd_config: SimdGenerationConfig = (&config).into();
+                let (text, tokens_generated, inference_time_ms) =
+                    engine.generate(prompt, &simd_config, session_key);
+
+                let tokens_per_second = if inference_time_ms > 0.0 {
+                    (tokens_generated as f64 / inference_time_ms) * 1000.0
+                } else {
+                    0.0
+                };
+
+                Ok(GenerationResult {
+                    text,
+                    tokens_generated,
+                    model_used: model_size,
+                    cache_hit: session_key.is_some(),
+                    inference_time_ms,
+                    tokens_per_second,
+                })
+            }
+        }
     }
 
     /// Health check
     pub async fn health_check(&self) -> Result<HealthInfo> {
+        let (simd_vocab, simd_layers) = if let Some(engine) = &self.simd_engine {
+            engine.model_info()
+        } else {
+            (0, 0)
+        };
+
         Ok(HealthInfo {
             latency: 0.0,
             loaded_models: self.models.len(),
             available_memory: 0,
+            inference_mode: format!("{:?}", self.mode),
+            simd_vocab_size: simd_vocab,
+            simd_num_layers: simd_layers,
         })
     }
 
@@ -170,6 +281,12 @@ pub struct HealthInfo {
     pub loaded_models: usize,
     /// Available memory in bytes
     pub available_memory: usize,
+    /// Current inference mode
+    pub inference_mode: String,
+    /// SIMD engine vocabulary size
+    pub simd_vocab_size: usize,
+    /// SIMD engine number of layers
+    pub simd_num_layers: usize,
 }
 
 #[cfg(test)]
