@@ -797,27 +797,30 @@ COMMENT ON FUNCTION graph_centroid_update(real[], real[], real) IS 'Update centr
 COMMENT ON FUNCTION graph_bipartite_score(real[], real[], real) IS 'Compute bipartite matching score for RAG';
 
 -- ============================================================================
--- HNSW Index Access Method (DISABLED - requires pgrx API stabilization)
+-- HNSW Index Access Method
 -- ============================================================================
 -- Provides fast approximate nearest neighbor search using HNSW algorithm
--- NOTE: Access method integration pending. Use manual vector search functions.
+
+-- Handler function for HNSW access method (pgrx generates the SQL from attribute)
+CREATE OR REPLACE FUNCTION hnsw_handler(internal) RETURNS index_am_handler
+AS 'MODULE_PATHNAME', 'hnsw_handler_wrapper' LANGUAGE C STRICT;
 
 -- Register HNSW as a PostgreSQL index access method
--- CREATE ACCESS METHOD hnsw TYPE INDEX HANDLER hnsw_handler;
--- COMMENT ON ACCESS METHOD hnsw IS 'HNSW (Hierarchical Navigable Small World) index for approximate nearest neighbor search';
+CREATE ACCESS METHOD hnsw TYPE INDEX HANDLER hnsw_handler;
+COMMENT ON ACCESS METHOD hnsw IS 'HNSW (Hierarchical Navigable Small World) index for approximate nearest neighbor search';
 
 -- ============================================================================
--- HNSW Operator Families (DISABLED)
+-- HNSW Operator Families
 -- ============================================================================
 
 -- L2 (Euclidean) distance operator family
--- CREATE OPERATOR FAMILY hnsw_l2_ops USING hnsw;
+CREATE OPERATOR FAMILY hnsw_l2_ops USING hnsw;
 
 -- Cosine distance operator family
--- CREATE OPERATOR FAMILY hnsw_cosine_ops USING hnsw;
+CREATE OPERATOR FAMILY hnsw_cosine_ops USING hnsw;
 
 -- Inner product operator family
--- CREATE OPERATOR FAMILY hnsw_ip_ops USING hnsw;
+CREATE OPERATOR FAMILY hnsw_ip_ops USING hnsw;
 
 -- ============================================================================
 -- Distance Operators for real[] arrays
@@ -854,35 +857,35 @@ CREATE OPERATOR <#> (
 COMMENT ON OPERATOR <#>(real[], real[]) IS 'Negative inner product (for ORDER BY)';
 
 -- ============================================================================
--- HNSW Operator Classes (DISABLED - requires access method)
+-- HNSW Operator Classes
 -- ============================================================================
 
 -- L2 Distance operator class
--- CREATE OPERATOR CLASS hnsw_l2_ops
---     FOR TYPE real[] USING hnsw
---     FAMILY hnsw_l2_ops AS
---     OPERATOR 1 <-> (real[], real[]) FOR ORDER BY float_ops,
---     FUNCTION 1 l2_distance_arr(real[], real[]);
---
--- COMMENT ON OPERATOR CLASS hnsw_l2_ops USING hnsw IS
---     'HNSW index operator class for L2 (Euclidean) distance on real[] vectors';
+CREATE OPERATOR CLASS hnsw_l2_ops
+    DEFAULT FOR TYPE real[] USING hnsw
+    FAMILY hnsw_l2_ops AS
+    OPERATOR 1 <-> (real[], real[]) FOR ORDER BY float_ops,
+    FUNCTION 1 l2_distance_arr(real[], real[]);
+
+COMMENT ON OPERATOR CLASS hnsw_l2_ops USING hnsw IS
+    'HNSW index operator class for L2 (Euclidean) distance on real[] vectors';
 
 -- Cosine Distance operator class
--- CREATE OPERATOR CLASS hnsw_cosine_ops
---     FOR TYPE real[] USING hnsw
---     FAMILY hnsw_cosine_ops AS
---     OPERATOR 1 <=> (real[], real[]) FOR ORDER BY float_ops,
---     FUNCTION 1 cosine_distance_arr(real[], real[]);
---
--- COMMENT ON OPERATOR CLASS hnsw_cosine_ops USING hnsw IS
---     'HNSW index operator class for cosine distance on real[] vectors';
+CREATE OPERATOR CLASS hnsw_cosine_ops
+    FOR TYPE real[] USING hnsw
+    FAMILY hnsw_cosine_ops AS
+    OPERATOR 1 <=> (real[], real[]) FOR ORDER BY float_ops,
+    FUNCTION 1 cosine_distance_arr(real[], real[]);
+
+COMMENT ON OPERATOR CLASS hnsw_cosine_ops USING hnsw IS
+    'HNSW index operator class for cosine distance on real[] vectors';
 
 -- Inner Product operator class
--- CREATE OPERATOR CLASS hnsw_ip_ops
---     FOR TYPE real[] USING hnsw
---     FAMILY hnsw_ip_ops AS
---     OPERATOR 1 <#> (real[], real[]) FOR ORDER BY float_ops,
---     FUNCTION 1 neg_inner_product_arr(real[], real[]);
---
--- COMMENT ON OPERATOR CLASS hnsw_ip_ops USING hnsw IS
---     'HNSW index operator class for inner product on real[] vectors';
+CREATE OPERATOR CLASS hnsw_ip_ops
+    FOR TYPE real[] USING hnsw
+    FAMILY hnsw_ip_ops AS
+    OPERATOR 1 <#> (real[], real[]) FOR ORDER BY float_ops,
+    FUNCTION 1 neg_inner_product_arr(real[], real[]);
+
+COMMENT ON OPERATOR CLASS hnsw_ip_ops USING hnsw IS
+    'HNSW index operator class for inner product on real[] vectors';
