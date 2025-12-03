@@ -351,6 +351,339 @@ pub fn wasm_init() {
     web_sys::console::log_1(&"SONA WASM module initialized".into());
 }
 
+// ============================================================================
+// Federated Learning WASM Bindings
+// ============================================================================
+
+use crate::training::{
+    EphemeralAgent as RustEphemeralAgent,
+    FederatedCoordinator as RustFederatedCoordinator,
+    FederatedTopology,
+};
+
+/// WASM-compatible Ephemeral Agent for federated learning
+///
+/// Lightweight agent wrapper (~5MB footprint) for distributed training.
+/// Agents process tasks, collect trajectories, and export state for aggregation.
+///
+/// # Example
+/// ```javascript
+/// const agent = new WasmEphemeralAgent("agent-1");
+///
+/// // Process tasks
+/// const embedding = new Float32Array(256).fill(0.1);
+/// agent.process_task(embedding, 0.85);
+///
+/// // Export state for coordinator
+/// const state = agent.export_state();
+/// ```
+#[wasm_bindgen]
+pub struct WasmEphemeralAgent {
+    inner: RustEphemeralAgent,
+}
+
+#[wasm_bindgen]
+impl WasmEphemeralAgent {
+    /// Create a new ephemeral agent with default config
+    ///
+    /// # Arguments
+    /// * `agent_id` - Unique identifier for this agent
+    ///
+    /// # Example
+    /// ```javascript
+    /// const agent = new WasmEphemeralAgent("agent-1");
+    /// ```
+    #[wasm_bindgen(constructor)]
+    pub fn new(agent_id: &str) -> Result<WasmEphemeralAgent, JsValue> {
+        let config = SonaConfig::for_ephemeral();
+        Ok(Self {
+            inner: RustEphemeralAgent::new(agent_id, config),
+        })
+    }
+
+    /// Create agent with custom configuration
+    ///
+    /// # Arguments
+    /// * `agent_id` - Unique identifier
+    /// * `config` - JSON configuration object
+    ///
+    /// # Example
+    /// ```javascript
+    /// const config = {
+    ///   hidden_dim: 256,
+    ///   trajectory_capacity: 500,
+    ///   pattern_clusters: 25
+    /// };
+    /// const agent = WasmEphemeralAgent.with_config("agent-1", config);
+    /// ```
+    #[wasm_bindgen(js_name = withConfig)]
+    pub fn with_config(agent_id: &str, config: JsValue) -> Result<WasmEphemeralAgent, JsValue> {
+        let config: SonaConfig = serde_wasm_bindgen::from_value(config)?;
+        Ok(Self {
+            inner: RustEphemeralAgent::new(agent_id, config),
+        })
+    }
+
+    /// Process a task and record trajectory
+    ///
+    /// # Arguments
+    /// * `embedding` - Query embedding as Float32Array
+    /// * `quality` - Task quality score [0.0, 1.0]
+    ///
+    /// # Example
+    /// ```javascript
+    /// const embedding = new Float32Array(256).fill(0.1);
+    /// agent.process_task(embedding, 0.85);
+    /// ```
+    #[wasm_bindgen(js_name = processTask)]
+    pub fn process_task(&mut self, embedding: Vec<f32>, quality: f32) {
+        self.inner.process_task(embedding, quality);
+    }
+
+    /// Process task with model route information
+    ///
+    /// # Arguments
+    /// * `embedding` - Query embedding
+    /// * `quality` - Quality score
+    /// * `route` - Model route used (e.g., "gpt-4", "claude-3")
+    #[wasm_bindgen(js_name = processTaskWithRoute)]
+    pub fn process_task_with_route(&mut self, embedding: Vec<f32>, quality: f32, route: &str) {
+        self.inner.process_task_with_route(embedding, quality, route);
+    }
+
+    /// Export agent state for coordinator aggregation
+    ///
+    /// # Returns
+    /// JSON object containing agent state, trajectories, and statistics
+    ///
+    /// # Example
+    /// ```javascript
+    /// const state = agent.export_state();
+    /// console.log('Trajectories:', state.trajectories.length);
+    /// coordinator.aggregate(state);
+    /// ```
+    #[wasm_bindgen(js_name = exportState)]
+    pub fn export_state(&self) -> JsValue {
+        let export = self.inner.export_state();
+        serde_wasm_bindgen::to_value(&export).unwrap_or(JsValue::NULL)
+    }
+
+    /// Get agent statistics
+    ///
+    /// # Returns
+    /// JSON object with trajectory count, quality stats, uptime
+    #[wasm_bindgen(js_name = getStats)]
+    pub fn get_stats(&self) -> JsValue {
+        let stats = self.inner.stats();
+        serde_wasm_bindgen::to_value(&stats).unwrap_or(JsValue::NULL)
+    }
+
+    /// Get number of collected trajectories
+    #[wasm_bindgen(js_name = trajectoryCount)]
+    pub fn trajectory_count(&self) -> usize {
+        self.inner.trajectory_count()
+    }
+
+    /// Get average quality of collected trajectories
+    #[wasm_bindgen(js_name = averageQuality)]
+    pub fn average_quality(&self) -> f32 {
+        self.inner.average_quality()
+    }
+
+    /// Get agent uptime in seconds
+    #[wasm_bindgen(js_name = uptimeSeconds)]
+    pub fn uptime_seconds(&self) -> u64 {
+        self.inner.uptime_seconds()
+    }
+
+    /// Clear collected trajectories (after export)
+    #[wasm_bindgen]
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// Force learning cycle on agent's engine
+    #[wasm_bindgen(js_name = forceLearn)]
+    pub fn force_learn(&self) -> String {
+        self.inner.force_learn()
+    }
+
+    /// Get learned patterns from agent
+    #[wasm_bindgen(js_name = getPatterns)]
+    pub fn get_patterns(&self) -> JsValue {
+        let patterns = self.inner.get_patterns();
+        serde_wasm_bindgen::to_value(&patterns).unwrap_or(JsValue::NULL)
+    }
+}
+
+/// WASM-compatible Federated Coordinator
+///
+/// Central aggregator for federated learning with quality filtering.
+/// Coordinates multiple ephemeral agents using star topology.
+///
+/// # Example
+/// ```javascript
+/// const coordinator = new WasmFederatedCoordinator("central");
+///
+/// // Aggregate agent exports
+/// const agentState = agent.export_state();
+/// const result = coordinator.aggregate(agentState);
+///
+/// // Check stats
+/// const stats = coordinator.get_stats();
+/// console.log('Total agents:', stats.total_agents);
+/// ```
+#[wasm_bindgen]
+pub struct WasmFederatedCoordinator {
+    inner: RustFederatedCoordinator,
+}
+
+#[wasm_bindgen]
+impl WasmFederatedCoordinator {
+    /// Create a new federated coordinator with default config
+    ///
+    /// # Arguments
+    /// * `coordinator_id` - Unique identifier for this coordinator
+    ///
+    /// # Example
+    /// ```javascript
+    /// const coordinator = new WasmFederatedCoordinator("central");
+    /// ```
+    #[wasm_bindgen(constructor)]
+    pub fn new(coordinator_id: &str) -> Result<WasmFederatedCoordinator, JsValue> {
+        let config = SonaConfig::for_coordinator();
+        Ok(Self {
+            inner: RustFederatedCoordinator::new(coordinator_id, config),
+        })
+    }
+
+    /// Create coordinator with custom configuration
+    ///
+    /// # Arguments
+    /// * `coordinator_id` - Unique identifier
+    /// * `config` - JSON configuration object
+    ///
+    /// # Example
+    /// ```javascript
+    /// const config = {
+    ///   hidden_dim: 256,
+    ///   trajectory_capacity: 50000,
+    ///   pattern_clusters: 200,
+    ///   ewc_lambda: 2000.0
+    /// };
+    /// const coordinator = WasmFederatedCoordinator.with_config("central", config);
+    /// ```
+    #[wasm_bindgen(js_name = withConfig)]
+    pub fn with_config(coordinator_id: &str, config: JsValue) -> Result<WasmFederatedCoordinator, JsValue> {
+        let config: SonaConfig = serde_wasm_bindgen::from_value(config)?;
+        Ok(Self {
+            inner: RustFederatedCoordinator::new(coordinator_id, config),
+        })
+    }
+
+    /// Set quality threshold for accepting trajectories
+    ///
+    /// # Arguments
+    /// * `threshold` - Minimum quality [0.0, 1.0], default 0.4
+    #[wasm_bindgen(js_name = setQualityThreshold)]
+    pub fn set_quality_threshold(&mut self, threshold: f32) {
+        self.inner.set_quality_threshold(threshold);
+    }
+
+    /// Aggregate agent export into coordinator
+    ///
+    /// # Arguments
+    /// * `agent_export` - JSON export from agent.export_state()
+    ///
+    /// # Returns
+    /// JSON aggregation result with accepted/rejected counts
+    ///
+    /// # Example
+    /// ```javascript
+    /// const agentState = agent.export_state();
+    /// const result = coordinator.aggregate(agentState);
+    /// console.log('Accepted:', result.accepted);
+    /// ```
+    #[wasm_bindgen]
+    pub fn aggregate(&mut self, agent_export: JsValue) -> JsValue {
+        use crate::training::AgentExport;
+
+        match serde_wasm_bindgen::from_value::<AgentExport>(agent_export) {
+            Ok(export) => {
+                let result = self.inner.aggregate(export);
+                serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+            }
+            Err(e) => {
+                web_sys::console::error_1(&format!("Failed to parse agent export: {:?}", e).into());
+                JsValue::NULL
+            }
+        }
+    }
+
+    /// Consolidate learning from all aggregated trajectories
+    ///
+    /// Should be called periodically after aggregating multiple agents.
+    ///
+    /// # Returns
+    /// Learning result as JSON string
+    #[wasm_bindgen]
+    pub fn consolidate(&self) -> String {
+        self.inner.consolidate()
+    }
+
+    /// Get coordinator statistics
+    ///
+    /// # Returns
+    /// JSON object with agent count, trajectory count, quality stats
+    #[wasm_bindgen(js_name = getStats)]
+    pub fn get_stats(&self) -> JsValue {
+        let stats = self.inner.stats();
+        serde_wasm_bindgen::to_value(&stats).unwrap_or(JsValue::NULL)
+    }
+
+    /// Get total number of contributing agents
+    #[wasm_bindgen(js_name = agentCount)]
+    pub fn agent_count(&self) -> usize {
+        self.inner.agent_count()
+    }
+
+    /// Get total trajectories aggregated
+    #[wasm_bindgen(js_name = totalTrajectories)]
+    pub fn total_trajectories(&self) -> usize {
+        self.inner.total_trajectories()
+    }
+
+    /// Get all learned patterns from coordinator
+    #[wasm_bindgen(js_name = getPatterns)]
+    pub fn get_patterns(&self) -> JsValue {
+        let patterns = self.inner.get_all_patterns();
+        serde_wasm_bindgen::to_value(&patterns).unwrap_or(JsValue::NULL)
+    }
+
+    /// Find similar patterns to query
+    ///
+    /// # Arguments
+    /// * `query_embedding` - Query vector
+    /// * `k` - Number of patterns to return
+    #[wasm_bindgen(js_name = findPatterns)]
+    pub fn find_patterns(&self, query_embedding: Vec<f32>, k: usize) -> JsValue {
+        let patterns = self.inner.find_patterns(&query_embedding, k);
+        serde_wasm_bindgen::to_value(&patterns).unwrap_or(JsValue::NULL)
+    }
+
+    /// Apply coordinator's learned LoRA to input
+    #[wasm_bindgen(js_name = applyLora)]
+    pub fn apply_lora(&self, input: Vec<f32>) -> Vec<f32> {
+        self.inner.apply_lora(&input)
+    }
+
+    /// Clear all agent contributions (reset coordinator)
+    #[wasm_bindgen]
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+}
+
 // Additional helper for serde support
 #[cfg(feature = "wasm")]
 mod serde_wasm_bindgen {

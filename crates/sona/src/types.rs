@@ -462,6 +462,48 @@ impl SonaConfig {
             enable_simd: true,
         }
     }
+
+    /// Create config for ephemeral agents (~5MB footprint)
+    ///
+    /// Optimized for lightweight federated learning nodes that collect
+    /// trajectories locally before aggregation.
+    pub fn for_ephemeral() -> Self {
+        Self {
+            hidden_dim: 256,
+            embedding_dim: 256,
+            micro_lora_rank: 2,
+            base_lora_rank: 4,        // Small base for memory efficiency
+            micro_lora_lr: 0.002,
+            base_lora_lr: 0.0001,
+            ewc_lambda: 1000.0,
+            pattern_clusters: 50,     // Fewer clusters for memory
+            trajectory_capacity: 500, // Local buffer before aggregation
+            background_interval_ms: 60000, // 1 minute for quick local updates
+            quality_threshold: 0.3,
+            enable_simd: true,
+        }
+    }
+
+    /// Create config for federated coordinator (central aggregation)
+    ///
+    /// Optimized for aggregating trajectories from multiple ephemeral agents
+    /// with larger capacity and pattern storage.
+    pub fn for_coordinator() -> Self {
+        Self {
+            hidden_dim: 256,
+            embedding_dim: 256,
+            micro_lora_rank: 2,
+            base_lora_rank: 16,       // Higher rank for aggregated learning
+            micro_lora_lr: 0.001,     // Conservative for stability
+            base_lora_lr: 0.0005,     // Moderate base learning
+            ewc_lambda: 2000.0,       // Strong forgetting prevention
+            pattern_clusters: 200,    // More clusters for diverse patterns
+            trajectory_capacity: 50000, // Large capacity for aggregation
+            background_interval_ms: 300000, // 5 minutes consolidation
+            quality_threshold: 0.4,   // Higher threshold for quality filtering
+            enable_simd: true,
+        }
+    }
 }
 
 #[cfg(test)]

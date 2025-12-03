@@ -186,8 +186,53 @@ impl EphemeralAgent {
     }
 
     /// Force local learning
-    pub fn force_learn(&self) {
-        self.engine.force_learn();
+    pub fn force_learn(&self) -> String {
+        self.engine.force_learn()
+    }
+
+    /// Simple process task method
+    pub fn process_task(&mut self, embedding: Vec<f32>, quality: f32) {
+        self.process_trajectory(embedding.clone(), embedding, quality, None, vec![]);
+    }
+
+    /// Process task with route information
+    pub fn process_task_with_route(&mut self, embedding: Vec<f32>, quality: f32, route: &str) {
+        self.process_trajectory(embedding.clone(), embedding, quality, Some(route.to_string()), vec![]);
+    }
+
+    /// Get average quality (alias for avg_quality)
+    pub fn average_quality(&self) -> f32 {
+        self.avg_quality()
+    }
+
+    /// Get uptime in seconds
+    pub fn uptime_seconds(&self) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        (now - self.start_time) / 1000
+    }
+
+    /// Get agent stats
+    pub fn stats(&self) -> AgentExportStats {
+        let engine_stats = self.engine.stats();
+        AgentExportStats {
+            total_trajectories: self.trajectories.len(),
+            avg_quality: self.avg_quality(),
+            patterns_learned: engine_stats.patterns_stored,
+        }
+    }
+
+    /// Clear trajectories (after export)
+    pub fn clear(&mut self) {
+        self.trajectories.clear();
+        self.quality_samples.clear();
+    }
+
+    /// Get learned patterns from agent
+    pub fn get_patterns(&self) -> Vec<LearnedPattern> {
+        self.engine.find_patterns(&[], 0)
     }
 
     /// Export agent state for federation
@@ -406,6 +451,39 @@ impl FederatedCoordinator {
     /// Get metrics
     pub fn metrics(&self) -> &TrainingMetrics {
         &self.metrics
+    }
+
+    /// Get total number of contributing agents
+    pub fn agent_count(&self) -> usize {
+        self.contributions.len()
+    }
+
+    /// Get total trajectories aggregated
+    pub fn total_trajectories(&self) -> usize {
+        self.total_trajectories
+    }
+
+    /// Find similar patterns
+    pub fn find_patterns(&self, query: &[f32], k: usize) -> Vec<LearnedPattern> {
+        self.master_engine.find_patterns(query, k)
+    }
+
+    /// Apply coordinator's LoRA to input
+    pub fn apply_lora(&self, input: &[f32]) -> Vec<f32> {
+        let mut output = vec![0.0; input.len()];
+        self.master_engine.apply_micro_lora(input, &mut output);
+        output
+    }
+
+    /// Consolidate learning (alias for force_consolidate)
+    pub fn consolidate(&self) -> String {
+        self.force_consolidate()
+    }
+
+    /// Clear all contributions
+    pub fn clear(&mut self) {
+        self.contributions.clear();
+        self.total_trajectories = 0;
     }
 }
 
