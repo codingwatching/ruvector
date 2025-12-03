@@ -379,6 +379,24 @@ All crates are published to [crates.io](https://crates.io) under the `ruvector-*
 | [ruvector-router-ffi](./crates/ruvector-router-ffi) | FFI bindings for other languages | [![crates.io](https://img.shields.io/crates/v/ruvector-router-ffi.svg)](https://crates.io/crates/ruvector-router-ffi) |
 | [ruvector-router-wasm](./crates/ruvector-router-wasm) | WASM bindings for browser routing | [![crates.io](https://img.shields.io/crates/v/ruvector-router-wasm.svg)](https://crates.io/crates/ruvector-router-wasm) |
 
+### Self-Optimizing Neural Architecture (SONA)
+
+| Crate | Description | crates.io |
+|-------|-------------|-----------|
+| [sona](./crates/sona) | Runtime-adaptive learning with LoRA, EWC++, and ReasoningBank | [![crates.io](https://img.shields.io/crates/v/sona.svg)](https://crates.io/crates/sona) |
+
+**SONA** enables AI systems to continuously improve from user feedback without expensive retraining. Features two-tier LoRA (MicroLoRA + BaseLoRA), EWC++ for catastrophic forgetting prevention, and ReasoningBank for pattern storage. Includes WASM and Node.js bindings.
+
+```rust
+use sona::{SonaEngine, SonaConfig};
+
+let engine = SonaEngine::new(SonaConfig::default());
+let traj_id = engine.start_trajectory(query_embedding);
+engine.record_step(traj_id, node_id, 0.85, 150);
+engine.end_trajectory(traj_id, 0.90);
+engine.learn_from_feedback(LearningSignal::positive(50.0, 0.95));
+```
+
 ### PostgreSQL Extension
 
 | Crate | Description | crates.io |
@@ -502,6 +520,7 @@ Production-ready examples demonstrating RuVector integration patterns, from cogn
 | [@ruvector/attention-wasm](https://www.npmjs.com/package/@ruvector/attention-wasm) | WASM fallback for attention mechanisms | [![npm](https://img.shields.io/npm/v/@ruvector/attention-wasm.svg)](https://www.npmjs.com/package/@ruvector/attention-wasm) |
 | [@ruvector/tiny-dancer-wasm](https://www.npmjs.com/package/@ruvector/tiny-dancer-wasm) | WASM fallback for AI routing | [![npm](https://img.shields.io/npm/v/@ruvector/tiny-dancer-wasm.svg)](https://www.npmjs.com/package/@ruvector/tiny-dancer-wasm) |
 | [@ruvector/router-wasm](https://www.npmjs.com/package/@ruvector/router-wasm) | WASM fallback for semantic router | [![npm](https://img.shields.io/npm/v/@ruvector/router-wasm.svg)](https://www.npmjs.com/package/@ruvector/router-wasm) |
+| [@ruvector/sona](https://www.npmjs.com/package/@ruvector/sona) | Self-Optimizing Neural Architecture (SONA) | [![npm](https://img.shields.io/npm/v/@ruvector/sona.svg)](https://www.npmjs.com/package/@ruvector/sona) |
 | [@ruvector/cluster](https://www.npmjs.com/package/@ruvector/cluster) | Distributed clustering & sharding | [![npm](https://img.shields.io/npm/v/@ruvector/cluster.svg)](https://www.npmjs.com/package/@ruvector/cluster) |
 | [@ruvector/server](https://www.npmjs.com/package/@ruvector/server) | HTTP/gRPC server mode | [![npm](https://img.shields.io/npm/v/@ruvector/server.svg)](https://www.npmjs.com/package/@ruvector/server) |
 

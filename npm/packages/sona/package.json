@@ -1,7 +1,7 @@
 {
   "name": "@ruvector/sona",
   "version": "0.1.0",
-  "description": "Self-Optimizing Neural Architecture (SONA) - Node.js bindings for adaptive learning with ReasoningBank",
+  "description": "Self-Optimizing Neural Architecture (SONA) - Runtime-adaptive learning with LoRA, EWC++, and ReasoningBank for LLM routers and AI systems. Sub-millisecond learning overhead, WASM and Node.js support.",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
@@ -32,23 +32,33 @@
   },
   "keywords": [
     "sona",
-    "neural",
-    "adaptive",
-    "learning",
+    "neural-network",
+    "adaptive-learning",
     "lora",
-    "reasoning",
+    "low-rank-adaptation",
+    "ewc",
+    "elastic-weight-consolidation",
     "reasoningbank",
+    "llm",
+    "llm-router",
+    "machine-learning",
+    "ai",
+    "deep-learning",
+    "continual-learning",
     "napi",
     "rust",
-    "ai",
-    "machine-learning"
+    "ruvector"
   ],
-  "author": "rUv Team",
+  "author": "rUv Team <team@ruv.io>",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/ruvnet/ruvector.git",
     "directory": "npm/packages/sona"
+  },
+  "homepage": "https://github.com/ruvnet/ruvector/tree/main/crates/sona",
+  "bugs": {
+    "url": "https://github.com/ruvnet/ruvector/issues"
   },
   "engines": {
     "node": ">= 16"
