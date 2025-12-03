@@ -80,11 +80,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Install dependencies
-        run: |
-          cd npm/packages/core
-          # Install only the direct dev dependency needed for napi build
-          npm install @napi-rs/cli@^2.18.0 --ignore-scripts
+      - name: Install NAPI-RS CLI
+        run: npm install -g @napi-rs/cli@^2.18.0
 
       - name: Build native module
         working-directory: npm/packages/core
