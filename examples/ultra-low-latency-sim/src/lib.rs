@@ -37,6 +37,7 @@ pub mod bit_parallel;
 pub mod closed_form;
 pub mod hierarchical;
 pub mod simd_ops;
+pub mod verify;
 
 /// Meta-simulation configuration
 #[derive(Clone, Debug)]

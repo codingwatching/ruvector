@@ -14,8 +14,6 @@
 
 use std::time::Instant;
 use rayon::prelude::*;
-use rand::Rng;
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 // =============================================================================
 // CONSTANTS
@@ -594,4 +592,118 @@ fn main() {
     println!("║  KEY INSIGHT: Meta-simulation multiplies effective throughput      ║");
     println!("║  Each CPU operation can represent 1000s-millions of simulations   ║");
     println!("╚════════════════════════════════════════════════════════════════════╝");
+
+    // Run verification comparison
+    run_verification_comparison();
+}
+
+/// Run benchmark with and without Ed25519 cryptographic verification
+fn run_verification_comparison() {
+    use ed25519_dalek::{Signer, SigningKey, Verifier};
+    use sha2::{Digest, Sha256};
+
+    println!();
+    println!("═══════════════════════════════════════════════════════════════════");
+    println!("  ED25519 VERIFICATION OVERHEAD COMPARISON");
+    println!("═══════════════════════════════════════════════════════════════════");
+    println!();
+
+    // Generate key pair
+    let mut rng = rand::rngs::OsRng;
+    let signing_key = SigningKey::generate(&mut rng);
+    let verifying_key = signing_key.verifying_key();
+
+    println!("🔑 Generated Ed25519 key pair");
+    println!("   Public key: {}...", hex::encode(&verifying_key.as_bytes()[..16]));
+    println!();
+
+    const ITERATIONS: usize = 10000;
+
+    // Benchmark WITHOUT verification
+    let start_no_verify = Instant::now();
+    let mut results_no_verify = Vec::with_capacity(ITERATIONS);
+    for i in 0..ITERATIONS {
+        let (sims, elapsed) = benchmark_bit_parallel_ca_single();
+        results_no_verify.push((i, sims, elapsed));
+    }
+    let elapsed_no_verify = start_no_verify.elapsed();
+
+    // Benchmark WITH verification (hash + sign each result)
+    let start_with_verify = Instant::now();
+    let mut results_with_verify = Vec::with_capacity(ITERATIONS);
+    for i in 0..ITERATIONS {
+        let (sims, elapsed) = benchmark_bit_parallel_ca_single();
+
+        // Hash the result
+        let data = format!("bench|{}|{}|{}", i, sims, elapsed.as_nanos());
+        let mut hasher = Sha256::new();
+        hasher.update(data.as_bytes());
+        let hash: [u8; 32] = hasher.finalize().into();
+
+        // Sign the hash
+        let signature = signing_key.sign(&hash);
+
+        results_with_verify.push((i, sims, elapsed, hash, signature));
+    }
+    let elapsed_with_verify = start_with_verify.elapsed();
+
+    // Calculate overhead
+    let overhead_ms = elapsed_with_verify.as_secs_f64() * 1000.0
+        - elapsed_no_verify.as_secs_f64() * 1000.0;
+    let overhead_per_op_us = (overhead_ms * 1000.0) / ITERATIONS as f64;
+    let overhead_percent = (elapsed_with_verify.as_secs_f64() / elapsed_no_verify.as_secs_f64() - 1.0) * 100.0;
+
+    println!("📊 Results ({} iterations each):", ITERATIONS);
+    println!();
+    println!("   WITHOUT Verification:");
+    println!("   ├─ Total time:    {:?}", elapsed_no_verify);
+    println!("   └─ Per iteration: {:.2} μs", elapsed_no_verify.as_secs_f64() * 1e6 / ITERATIONS as f64);
+    println!();
+    println!("   WITH Ed25519 Verification (SHA-256 + Sign):");
+    println!("   ├─ Total time:    {:?}", elapsed_with_verify);
+    println!("   └─ Per iteration: {:.2} μs", elapsed_with_verify.as_secs_f64() * 1e6 / ITERATIONS as f64);
+    println!();
+    println!("   📈 OVERHEAD:");
+    println!("   ├─ Total overhead:  {:.2} ms", overhead_ms);
+    println!("   ├─ Per-op overhead: {:.2} μs", overhead_per_op_us);
+    println!("   └─ Percentage:      {:.1}%", overhead_percent);
+    println!();
+
+    // Verify one result to prove it works
+    let (_, _, _, hash, sig) = &results_with_verify[0];
+    let verified = verifying_key.verify(hash, sig).is_ok();
+    println!("   🔒 Signature verification: {}", if verified { "✅ PASSED" } else { "❌ FAILED" });
+
+    // Calculate effective throughput with verification
+    let total_sims: u64 = results_no_verify.iter().map(|(_, s, _)| *s).sum();
+    let throughput_no_verify = total_sims as f64 / elapsed_no_verify.as_secs_f64();
+    let throughput_with_verify = total_sims as f64 / elapsed_with_verify.as_secs_f64();
+
+    println!();
+    println!("   ⚡ Throughput Comparison:");
+    println!("   ├─ Without verification: {:.3e} sims/sec", throughput_no_verify);
+    println!("   ├─ With verification:    {:.3e} sims/sec", throughput_with_verify);
+    println!("   └─ Impact:               {:.1}% reduction", (1.0 - throughput_with_verify / throughput_no_verify) * 100.0);
+
+    println!();
+    println!("═══════════════════════════════════════════════════════════════════");
+    println!("  CONCLUSION: Ed25519 verification adds ~{:.0}μs per operation", overhead_per_op_us);
+    println!("  This is negligible for meta-simulations representing millions of sims");
+    println!("═══════════════════════════════════════════════════════════════════");
+}
+
+/// Single iteration of bit-parallel CA for verification comparison
+fn benchmark_bit_parallel_ca_single() -> (u64, std::time::Duration) {
+    const NUM_WORDS: usize = 256; // Smaller for faster iteration
+    const ITERATIONS: usize = 100;
+
+    let mut ca = BitParallelCA::new(NUM_WORDS, 110);
+
+    let start = Instant::now();
+    for _ in 0..ITERATIONS {
+        ca.step();
+    }
+    let elapsed = start.elapsed();
+
+    (ca.simulations_per_step() * ITERATIONS as u64, elapsed)
 }
