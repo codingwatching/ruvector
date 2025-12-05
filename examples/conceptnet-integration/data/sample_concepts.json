@@ -1,0 +1,115 @@
+{
+  "description": "Sample ConceptNet concepts for testing and demos",
+  "domains": {
+    "animals": [
+      "/c/en/dog",
+      "/c/en/cat",
+      "/c/en/bird",
+      "/c/en/fish",
+      "/c/en/mammal",
+      "/c/en/animal",
+      "/c/en/pet",
+      "/c/en/wildlife"
+    ],
+    "technology": [
+      "/c/en/computer",
+      "/c/en/software",
+      "/c/en/algorithm",
+      "/c/en/artificial_intelligence",
+      "/c/en/machine_learning",
+      "/c/en/neural_network",
+      "/c/en/data",
+      "/c/en/internet"
+    ],
+    "food": [
+      "/c/en/food",
+      "/c/en/fruit",
+      "/c/en/vegetable",
+      "/c/en/meal",
+      "/c/en/breakfast",
+      "/c/en/cooking",
+      "/c/en/restaurant",
+      "/c/en/kitchen"
+    ],
+    "emotions": [
+      "/c/en/happiness",
+      "/c/en/sadness",
+      "/c/en/anger",
+      "/c/en/fear",
+      "/c/en/love",
+      "/c/en/joy",
+      "/c/en/emotion",
+      "/c/en/feeling"
+    ],
+    "science": [
+      "/c/en/science",
+      "/c/en/physics",
+      "/c/en/chemistry",
+      "/c/en/biology",
+      "/c/en/experiment",
+      "/c/en/research",
+      "/c/en/hypothesis",
+      "/c/en/theory"
+    ]
+  },
+  "relations": {
+    "taxonomic": ["/r/IsA", "/r/InstanceOf", "/r/MannerOf"],
+    "part_whole": ["/r/PartOf", "/r/HasA", "/r/MadeOf"],
+    "spatial": ["/r/AtLocation", "/r/LocatedNear"],
+    "causal": ["/r/Causes", "/r/HasPrerequisite", "/r/HasSubevent"],
+    "property": ["/r/HasProperty", "/r/CapableOf", "/r/UsedFor"],
+    "lexical": ["/r/RelatedTo", "/r/SimilarTo", "/r/Synonym", "/r/Antonym"]
+  },
+  "example_queries": [
+    {
+      "type": "definition",
+      "question": "What is a dog?",
+      "concept": "/c/en/dog",
+      "expected_relations": ["/r/IsA"]
+    },
+    {
+      "type": "capability",
+      "question": "What can a bird do?",
+      "concept": "/c/en/bird",
+      "expected_relations": ["/r/CapableOf"]
+    },
+    {
+      "type": "location",
+      "question": "Where is a kitchen found?",
+      "concept": "/c/en/kitchen",
+      "expected_relations": ["/r/AtLocation"]
+    },
+    {
+      "type": "purpose",
+      "question": "What is a computer used for?",
+      "concept": "/c/en/computer",
+      "expected_relations": ["/r/UsedFor"]
+    },
+    {
+      "type": "cause",
+      "question": "What causes happiness?",
+      "concept": "/c/en/happiness",
+      "expected_relations": ["/r/Causes"]
+    }
+  ],
+  "analogy_examples": [
+    {
+      "a": "/c/en/king",
+      "b": "/c/en/queen",
+      "c": "/c/en/man",
+      "expected_d": "/c/en/woman"
+    },
+    {
+      "a": "/c/en/paris",
+      "b": "/c/en/france",
+      "c": "/c/en/tokyo",
+      "expected_d": "/c/en/japan"
+    },
+    {
+      "a": "/c/en/dog",
+      "b": "/c/en/bark",
+      "c": "/c/en/cat",
+      "expected_d": "/c/en/meow"
+    }
+  ]
+}

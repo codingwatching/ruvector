@@ -1,0 +1,75 @@
+[package]
+name = "conceptnet-integration"
+version = "0.1.0"
+edition = "2021"
+description = "ConceptNet Knowledge Graph Integration with RuVector"
+authors = ["RuVector Team"]
+license = "MIT"
+repository = "https://github.com/ruvnet/ruvector"
+keywords = ["conceptnet", "knowledge-graph", "vector-database", "gnn", "commonsense"]
+categories = ["database", "science", "machine-learning"]
+
+[dependencies]
+# RuVector core components
+ruvector-core = { path = "../../crates/ruvector-core" }
+ruvector-graph = { path = "../../crates/ruvector-graph" }
+ruvector-gnn = { path = "../../crates/ruvector-gnn" }
+ruvector-attention = { path = "../../crates/ruvector-attention" }
+sona = { path = "../../crates/sona" }
+
+# Async runtime & HTTP
+tokio = { version = "1.40", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utilities
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4"] }
+rand = "0.8"
+ndarray = "0.16"
+rayon = "1.10"
+dashmap = "6.1"
+parking_lot = "0.12"
+memmap2 = "0.9"
+
+# Rate limiting
+governor = "0.7"
+
+# Hashing for deduplication
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+tempfile = "3.14"
+approx = "0.5"
+
+[[bin]]
+name = "conceptnet-demo"
+path = "src/main.rs"
+
+[[bench]]
+name = "conceptnet_benchmarks"
+harness = false
+path = "benches/conceptnet_benchmarks.rs"
+
+[features]
+default = ["full"]
+full = ["gnn", "attention", "sona", "numberbatch"]
+gnn = []
+attention = []
+sona = []
+numberbatch = []
+distributed = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
