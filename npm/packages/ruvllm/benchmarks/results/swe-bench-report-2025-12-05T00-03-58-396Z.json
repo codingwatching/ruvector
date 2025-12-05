@@ -1,0 +1,258 @@
+{
+  "timestamp": "2025-12-05T00:03:58.395Z",
+  "totalTasks": 27,
+  "totalModels": 7,
+  "kFolds": 3,
+  "rankings": {
+    "byResolveRate": [
+      "Qwen2.5-Coder-1.5B",
+      "DeepSeek-Coder-1.3B",
+      "StarCoder2-3B",
+      "Qwen2.5-Coder-7B",
+      "CodeLlama-7B",
+      "GPT-4.1-nano",
+      "GPT-5-nano"
+    ],
+    "byCostEfficiency": [
+      "Qwen2.5-Coder-1.5B",
+      "DeepSeek-Coder-1.3B",
+      "StarCoder2-3B",
+      "Qwen2.5-Coder-7B",
+      "CodeLlama-7B",
+      "GPT-4.1-nano",
+      "GPT-5-nano"
+    ],
+    "byLatency": [
+      "Qwen2.5-Coder-1.5B",
+      "DeepSeek-Coder-1.3B",
+      "StarCoder2-3B",
+      "Qwen2.5-Coder-7B",
+      "CodeLlama-7B",
+      "GPT-5-nano",
+      "GPT-4.1-nano"
+    ],
+    "byOverfitResistance": [
+      "Qwen2.5-Coder-1.5B",
+      "DeepSeek-Coder-1.3B",
+      "StarCoder2-3B",
+      "Qwen2.5-Coder-7B",
+      "CodeLlama-7B",
+      "GPT-4.1-nano",
+      "GPT-5-nano"
+    ],
+    "overall": [
+      "Qwen2.5-Coder-1.5B",
+      "DeepSeek-Coder-1.3B",
+      "StarCoder2-3B",
+      "Qwen2.5-Coder-7B",
+      "CodeLlama-7B",
+      "GPT-5-nano",
+      "GPT-4.1-nano"
+    ]
+  },
+  "modelMetrics": [
+    {
+      "modelName": "Qwen2.5-Coder-1.5B",
+      "parameterCount": "1.5B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "DeepSeek-Coder-1.3B",
+      "parameterCount": "1.3B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "StarCoder2-3B",
+      "parameterCount": "3B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "Qwen2.5-Coder-7B",
+      "parameterCount": "7B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "CodeLlama-7B",
+      "parameterCount": "7B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "GPT-4.1-nano",
+      "parameterCount": "~8B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": 105.02544193007758,
+      "p95LatencyMs": 139.41849887306205,
+      "throughputTasksPerMin": 571.2901454863288,
+      "totalCost": 0.0016480000000000002,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    },
+    {
+      "modelName": "GPT-5-nano",
+      "parameterCount": "~10B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": 92.6623129060982,
+      "p95LatencyMs": 144.5264900274998,
+      "throughputTasksPerMin": 647.5124364832399,
+      "totalCost": 0.0025919999999999997,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    }
+  ],
+  "bestSmallModel": {
+    "name": "Qwen2.5-Coder-1.5B",
+    "reason": "Highest CV resolve rate (0.0%) with 95% CI [0.0%, 0.0%]",
+    "metrics": {
+      "modelName": "Qwen2.5-Coder-1.5B",
+      "parameterCount": "1.5B",
+      "resolveRate": 0,
+      "partialResolveRate": 0,
+      "testPassRate": 0,
+      "trainResolveRate": 0,
+      "validationResolveRate": null,
+      "testResolveRate": 0,
+      "overfitGap": 0,
+      "cvMean": 0,
+      "cvStd": 0,
+      "cvConfidenceInterval": [
+        0,
+        0
+      ],
+      "avgLatencyMs": null,
+      "p95LatencyMs": 0,
+      "throughputTasksPerMin": null,
+      "totalCost": 0,
+      "costPerResolvedTask": null,
+      "costEfficiencyScore": 0,
+      "statisticallyBetterThan": []
+    }
+  },
+  "antiOverfittingAnalysis": {
+    "averageOverfitGap": 0,
+    "modelsWithSignificantOverfit": [],
+    "recommendations": [
+      "Best sub-10B model: CodeLlama-7B with 0.0% resolve rate."
+    ]
+  }
+}

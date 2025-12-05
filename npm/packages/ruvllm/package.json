@@ -52,11 +52,16 @@
     "universal": "napi universal",
     "version": "napi version",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "benchmark": "node test/benchmark.js",
+    "swe-bench": "npx ts-node benchmarks/run-swe-bench.ts",
+    "swe-bench:quick": "npx ts-node benchmarks/run-swe-bench.ts --quick",
+    "swe-bench:full": "npx ts-node benchmarks/run-swe-bench.ts --tasks 200 --folds 10"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.0",
     "@types/node": "^20.10.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
