@@ -44,6 +44,9 @@ memmap2 = "0.9"
 # Rate limiting
 governor = "0.7"
 
+# CLI arguments
+clap = { version = "4.5", features = ["derive"] }
+
 # Async utilities
 futures = "0.3"
 

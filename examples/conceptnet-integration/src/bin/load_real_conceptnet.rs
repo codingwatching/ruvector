@@ -6,7 +6,18 @@
 //! Data sources:
 //! - Numberbatch: https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-en-19.08.txt.gz
 //! - Assertions: https://s3.amazonaws.com/conceptnet/downloads/2019/edges/conceptnet-assertions-5.7.0.csv.gz
+//!
+//! Usage:
+//!   cargo run --bin load-real-conceptnet --release -- [OPTIONS]
+//!
+//! Options:
+//!   --embeddings <N>     Max embeddings to load (default: 200000)
+//!   --concepts <N>       Concepts for graph building (default: 1000)
+//!   --threshold <F>      Similarity threshold for edges (default: 0.6)
+//!   --production         Production mode: 417K embeddings, 10K concepts
+//!   --quiet              Reduce output verbosity
 
+use clap::Parser;
 use conceptnet_integration::graph::{ConceptNetGraphBuilder, GraphBuildConfig};
 use conceptnet_integration::gnn::{CommonsenseGNN, GNNConfig};
 use conceptnet_integration::numberbatch::Numberbatch;
@@ -18,15 +29,57 @@ use std::path::Path;
 use std::time::Instant;
 use flate2::read::GzDecoder;
 
+/// ConceptNet Real Data Loader & RuVector Optimizer
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Maximum embeddings to load from Numberbatch
+    #[arg(long, default_value_t = 200000)]
+    embeddings: usize,
+
+    /// Number of concepts to use for graph building
+    #[arg(long, default_value_t = 1000)]
+    concepts: usize,
+
+    /// Similarity threshold for creating edges (0.0-1.0)
+    #[arg(long, default_value_t = 0.6)]
+    threshold: f32,
+
+    /// Production mode: load all embeddings and use 10K concepts
+    #[arg(long)]
+    production: bool,
+
+    /// Quiet mode: reduce output verbosity
+    #[arg(short, long)]
+    quiet: bool,
+
+    /// Skip demo sections (just load data)
+    #[arg(long)]
+    skip_demo: bool,
+}
+
 const NUMBERBATCH_URL: &str = "https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-en-19.08.txt.gz";
 const DATA_DIR: &str = "data";
 const NUMBERBATCH_FILE: &str = "data/numberbatch-en-19.08.txt.gz";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
+    // Apply production mode overrides
+    let max_embeddings = if args.production { 500000 } else { args.embeddings };
+    let graph_concepts = if args.production { 10000 } else { args.concepts };
+    let threshold = args.threshold;
+
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!("║   ConceptNet Real Data Loader & RuVector Optimizer           ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
+
+    if args.production {
+        println!("🚀 PRODUCTION MODE: Loading full dataset");
+    }
+    println!("  Config: {} embeddings, {} graph concepts, {:.2} threshold\n",
+             max_embeddings, graph_concepts, threshold);
 
     // Create data directory
     std::fs::create_dir_all(DATA_DIR)?;
@@ -36,15 +89,14 @@ async fn main() -> anyhow::Result<()> {
         println!("📥 Downloading Numberbatch embeddings (~150MB)...");
         download_file(NUMBERBATCH_URL, NUMBERBATCH_FILE).await?;
         println!("✅ Downloaded to {}\n", NUMBERBATCH_FILE);
-    } else {
+    } else if !args.quiet {
         println!("✅ Numberbatch file already exists: {}\n", NUMBERBATCH_FILE);
     }
 
     // Step 2: Load Numberbatch embeddings
-    println!("📊 Loading Numberbatch embeddings...");
+    if !args.quiet { println!("📊 Loading Numberbatch embeddings..."); }
     let start = Instant::now();
-    // Load 200K entries - common words like "dog" appear after line 130K
-    let numberbatch = load_numberbatch(NUMBERBATCH_FILE, 200000)?;
+    let numberbatch = load_numberbatch(NUMBERBATCH_FILE, max_embeddings, args.quiet)?;
     println!(
         "✅ Loaded {} embeddings in {:.2}s\n",
         numberbatch.len(),
@@ -52,9 +104,9 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Step 3: Build knowledge graph from Numberbatch concepts
-    println!("🔗 Building knowledge graph from semantic relationships...");
+    if !args.quiet { println!("🔗 Building knowledge graph from semantic relationships..."); }
     let start = Instant::now();
-    let graph = build_graph_from_embeddings(&numberbatch)?;
+    let graph = build_graph_from_embeddings(&numberbatch, graph_concepts, threshold, args.quiet)?;
     let stats = graph.stats();
     println!(
         "✅ Built graph with {} nodes, {} edges in {:.2}s\n",
@@ -62,6 +114,11 @@ async fn main() -> anyhow::Result<()> {
         stats.total_edges,
         start.elapsed().as_secs_f64()
     );
+
+    if args.skip_demo {
+        println!("✅ Data loaded successfully (demo skipped)");
+        return Ok(());
+    }
 
     // Step 4: Demonstrate RuVector optimization
     println!("═══════════════════════════════════════════════════════════════");
@@ -105,7 +162,7 @@ async fn download_file(url: &str, path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_numberbatch(path: &str, max_entries: usize) -> anyhow::Result<Numberbatch> {
+fn load_numberbatch(path: &str, max_entries: usize, quiet: bool) -> anyhow::Result<Numberbatch> {
     let file = File::open(path)?;
     let reader = BufReader::new(GzDecoder::new(file));
 
@@ -163,12 +220,12 @@ fn load_numberbatch(path: &str, max_entries: usize) -> anyhow::Result<Numberbatc
         if nb.set(concept, normalized).is_ok() {
             count += 1;
 
-            // Collect sample concepts for debugging
-            if count <= 10 || (count <= 1000 && count % 100 == 0) || count % 50000 == 0 {
+            // Collect sample concepts for debugging (only in verbose mode)
+            if !quiet && (count <= 10 || (count <= 1000 && count % 100 == 0) || count % 50000 == 0) {
                 sample_concepts.push(concept.to_string());
             }
 
-            if count % 25000 == 0 {
+            if !quiet && count % 25000 == 0 {
                 print!("\r  Loaded {} embeddings (read {} lines)...", count, lines_read);
                 std::io::stdout().flush()?;
             }
@@ -179,38 +236,47 @@ fn load_numberbatch(path: &str, max_entries: usize) -> anyhow::Result<Numberbatc
         }
     }
 
-    println!("\r  Loaded {} embeddings from {} lines                    ", count, lines_read);
+    if !quiet {
+        println!("\r  Loaded {} embeddings from {} lines                    ", count, lines_read);
 
-    // Show sample concepts
-    println!("  Sample concepts loaded:");
-    for (i, c) in sample_concepts.iter().take(20).enumerate() {
-        print!("    {}", c);
-        if (i + 1) % 5 == 0 {
+        // Show sample concepts
+        if !sample_concepts.is_empty() {
+            println!("  Sample concepts loaded:");
+            for (i, c) in sample_concepts.iter().take(20).enumerate() {
+                print!("    {}", c);
+                if (i + 1) % 5 == 0 {
+                    println!();
+                } else {
+                    print!(", ");
+                }
+            }
             println!();
-        } else {
-            print!(", ");
         }
-    }
-    println!();
 
-    // Check for common test concepts
-    let test_words = ["dog", "cat", "computer", "music", "science", "king", "queen"];
-    print!("  Test words present: ");
-    for word in test_words {
-        if nb.get(word).is_some() {
-            print!("{}✓ ", word);
+        // Check for common test concepts
+        let test_words = ["dog", "cat", "computer", "music", "science", "king", "queen"];
+        print!("  Test words present: ");
+        for word in test_words {
+            if nb.get(word).is_some() {
+                print!("{}✓ ", word);
+            }
         }
+        println!();
     }
-    println!();
 
     Ok(nb)
 }
 
-fn build_graph_from_embeddings(nb: &Numberbatch) -> anyhow::Result<ConceptNetGraphBuilder> {
+fn build_graph_from_embeddings(
+    nb: &Numberbatch,
+    max_concepts: usize,
+    threshold: f32,
+    quiet: bool,
+) -> anyhow::Result<ConceptNetGraphBuilder> {
     let config = GraphBuildConfig {
         max_nodes: 200000,
         max_edges_per_node: 50,
-        min_edge_weight: 0.5,
+        min_edge_weight: threshold as f64 - 0.1, // Slightly lower to allow edge creation
         languages: vec!["en".to_string()],
         deduplicate: true,
         ..Default::default()
@@ -226,14 +292,16 @@ fn build_graph_from_embeddings(nb: &Numberbatch) -> anyhow::Result<ConceptNetGra
             !c.starts_with('#') && !c.starts_with('_') && c.chars().next().map(|ch| ch.is_alphabetic()).unwrap_or(false)
         })
         .cloned()
-        .take(1000) // Reduced for faster demo; use 10000+ for production
+        .take(max_concepts)
         .collect();
 
-    println!("  Building graph from {} filtered concepts...", concepts.len());
+    if !quiet {
+        println!("  Building graph from {} filtered concepts...", concepts.len());
+    }
     let mut edge_count = 0;
 
     for (i, concept) in concepts.iter().enumerate() {
-        if i % 1000 == 0 {
+        if !quiet && i % 1000 == 0 && i > 0 {
             print!("\r  Processing concept {}/{}...", i, concepts.len());
             std::io::stdout().flush()?;
         }
@@ -241,7 +309,7 @@ fn build_graph_from_embeddings(nb: &Numberbatch) -> anyhow::Result<ConceptNetGra
         // Find similar concepts
         let similar = nb.most_similar(concept, 5);
         for (similar_concept, similarity) in similar {
-            if similarity > 0.6 && &similar_concept != concept {
+            if similarity > threshold && &similar_concept != concept {
                 let edge = create_edge(concept, &similar_concept, "RelatedTo", similarity as f64);
                 if graph.add_edge(&edge).is_ok() {
                     edge_count += 1;
@@ -250,24 +318,39 @@ fn build_graph_from_embeddings(nb: &Numberbatch) -> anyhow::Result<ConceptNetGra
         }
     }
 
-    println!("\r  Created {} semantic edges                    ", edge_count);
+    if !quiet {
+        println!("\r  Created {} semantic edges                    ", edge_count);
+    }
     Ok(graph)
 }
 
 fn create_edge(start: &str, end: &str, rel: &str, weight: f64) -> conceptnet_integration::api::Edge {
     use conceptnet_integration::api::{ConceptNode, Edge, Relation};
 
+    // Convert concept names to proper ConceptNet URIs
+    // language_code() expects format /c/en/concept_name
+    let start_uri = if start.starts_with("/c/") {
+        start.to_string()
+    } else {
+        format!("/c/en/{}", start.replace(' ', "_"))
+    };
+    let end_uri = if end.starts_with("/c/") {
+        end.to_string()
+    } else {
+        format!("/c/en/{}", end.replace(' ', "_"))
+    };
+
     Edge {
-        id: format!("/a/[/r/{}/,{},{}]", rel, start, end),
+        id: format!("/a/[/r/{}/,{},{}]", rel, start_uri, end_uri),
         start: ConceptNode {
-            id: start.to_string(),
+            id: start_uri.clone(),
             label: Some(extract_term(start).to_string()),
             language: Some("en".to_string()),
             term: Some(extract_term(start).to_string()),
             sense_label: None,
         },
         end: ConceptNode {
-            id: end.to_string(),
+            id: end_uri.clone(),
             label: Some(extract_term(end).to_string()),
             language: Some("en".to_string()),
             term: Some(extract_term(end).to_string()),
