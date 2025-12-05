@@ -1,0 +1,144 @@
+{
+  "benchmark": "REAL SWE-BENCH WITH SONA",
+  "timestamp": "2025-12-05T01:56:51.522Z",
+  "version": "0.1.0-js",
+  "nativeLoaded": false,
+  "simdCapabilities": [
+    "Scalar (fallback)"
+  ],
+  "config": {
+    "tasks": 14,
+    "epochs": 12,
+    "ewcLambda": 1000,
+    "patternThreshold": 0.65
+  },
+  "improvement": {
+    "resolveRate": {
+      "initial": 0.42857142857142855,
+      "final": 0.7857142857142857,
+      "change": "+83.3%"
+    },
+    "confidence": {
+      "initial": 0.3841945529901706,
+      "final": 0.6927659815615994,
+      "change": "+80.3%"
+    },
+    "patternsLearned": 118,
+    "ewcTasksProtected": 10
+  },
+  "epochResults": [
+    {
+      "epoch": 1,
+      "resolveRate": 0.42857142857142855,
+      "avgConfidence": 0.3841945529901706,
+      "patternsLearned": 6,
+      "ewcTasksProtected": 0,
+      "checksum": "c7351f3ff38c29fd"
+    },
+    {
+      "epoch": 2,
+      "resolveRate": 0.5,
+      "avgConfidence": 0.5113374101330278,
+      "patternsLearned": 13,
+      "ewcTasksProtected": 0,
+      "checksum": "0b0b319b527a0a86"
+    },
+    {
+      "epoch": 3,
+      "resolveRate": 0.6428571428571429,
+      "avgConfidence": 0.5313374101330277,
+      "patternsLearned": 22,
+      "ewcTasksProtected": 1,
+      "checksum": "77562f01cb694c98"
+    },
+    {
+      "epoch": 4,
+      "resolveRate": 0.6428571428571429,
+      "avgConfidence": 0.5870516958473136,
+      "patternsLearned": 31,
+      "ewcTasksProtected": 2,
+      "checksum": "91be7cf8e2d64ad1"
+    },
+    {
+      "epoch": 5,
+      "resolveRate": 0.7142857142857143,
+      "avgConfidence": 0.6070516958473134,
+      "patternsLearned": 41,
+      "ewcTasksProtected": 3,
+      "checksum": "acef31d60e5aa92d"
+    },
+    {
+      "epoch": 6,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6449088387044564,
+      "patternsLearned": 52,
+      "ewcTasksProtected": 4,
+      "checksum": "2362a0dfcd210cf0"
+    },
+    {
+      "epoch": 7,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6827659815615992,
+      "patternsLearned": 63,
+      "ewcTasksProtected": 5,
+      "checksum": "1c64bba2829033d7"
+    },
+    {
+      "epoch": 8,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6927659815615993,
+      "patternsLearned": 74,
+      "ewcTasksProtected": 6,
+      "checksum": "b1a4e8c0d2361d93"
+    },
+    {
+      "epoch": 9,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6927659815615993,
+      "patternsLearned": 85,
+      "ewcTasksProtected": 7,
+      "checksum": "c0d2dd72c19eb563"
+    },
+    {
+      "epoch": 10,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6927659815615991,
+      "patternsLearned": 96,
+      "ewcTasksProtected": 8,
+      "checksum": "f5ade63fc2e143c7"
+    },
+    {
+      "epoch": 11,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6927659815615991,
+      "patternsLearned": 107,
+      "ewcTasksProtected": 9,
+      "checksum": "3d8af9fa5782ab9b"
+    },
+    {
+      "epoch": 12,
+      "resolveRate": 0.7857142857142857,
+      "avgConfidence": 0.6927659815615994,
+      "patternsLearned": 118,
+      "ewcTasksProtected": 10,
+      "checksum": "798ed807d384cba3"
+    }
+  ],
+  "verification": {
+    "allChecksums": [
+      "c7351f3ff38c29fd",
+      "0b0b319b527a0a86",
+      "77562f01cb694c98",
+      "91be7cf8e2d64ad1",
+      "acef31d60e5aa92d",
+      "2362a0dfcd210cf0",
+      "1c64bba2829033d7",
+      "b1a4e8c0d2361d93",
+      "c0d2dd72c19eb563",
+      "f5ade63fc2e143c7",
+      "3d8af9fa5782ab9b",
+      "798ed807d384cba3"
+    ],
+    "masterChecksum": "2a587a93d49f07dd8439a2364b696b28"
+  }
+}
