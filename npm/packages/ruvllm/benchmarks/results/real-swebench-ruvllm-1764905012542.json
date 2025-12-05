@@ -1,0 +1,79 @@
+{
+  "timestamp": "2025-12-05T03:23:32.541Z",
+  "version": "1.0.0-real",
+  "modelSize": "~20KB (LoRA r=8 + ReasoningBank + EWC)",
+  "totalInstances": 300,
+  "evaluated": 210,
+  "results": {
+    "fileLocationAccuracy": 0.18095238095238095,
+    "bugTypeAccuracy": 0.4095238095238095,
+    "helpfulnessRate": 0.21904761904761905,
+    "avgConfidence": 0.49198809523809456
+  },
+  "byRepo": {
+    "django/django": {
+      "count": 30,
+      "accuracy": 0.2
+    },
+    "matplotlib/matplotlib": {
+      "count": 23,
+      "accuracy": 0.21739130434782608
+    },
+    "mwaskom/seaborn": {
+      "count": 4,
+      "accuracy": 0.5
+    },
+    "pallets/flask": {
+      "count": 3,
+      "accuracy": 0
+    },
+    "psf/requests": {
+      "count": 6,
+      "accuracy": 0.16666666666666666
+    },
+    "pydata/xarray": {
+      "count": 5,
+      "accuracy": 0
+    },
+    "pylint-dev/pylint": {
+      "count": 6,
+      "accuracy": 0.3333333333333333
+    },
+    "pytest-dev/pytest": {
+      "count": 17,
+      "accuracy": 0.17647058823529413
+    },
+    "scikit-learn/scikit-learn": {
+      "count": 23,
+      "accuracy": 0.21739130434782608
+    },
+    "sphinx-doc/sphinx": {
+      "count": 16,
+      "accuracy": 0
+    },
+    "sympy/sympy": {
+      "count": 77,
+      "accuracy": 0.18181818181818182
+    }
+  },
+  "byComplexity": {
+    "simple": {
+      "count": 53,
+      "accuracy": 0.2830188679245283
+    },
+    "medium": {
+      "count": 97,
+      "accuracy": 0.13402061855670103
+    },
+    "complex": {
+      "count": 60,
+      "accuracy": 0.16666666666666666
+    }
+  },
+  "honestAssessment": "\nHONEST ASSESSMENT OF RUVLLM ON SWE-BENCH\n========================================\n\nWHAT THIS 20KB MODEL CAN DO:\n✓ File location identification: 18.1%\n✓ Bug type classification: Works for common error types\n✓ Pattern matching: Finds similar issues from training\n✓ Helpful triage: 21.9% would help developers locate issues\n\nWHAT THIS MODEL CANNOT DO:\n✗ Generate correct patches: 0% (requires code generation capability)\n✗ Understand program semantics: No (would need billions of parameters)\n✗ Multi-file reasoning: No (context window too small)\n✗ Test generation: No\n\nCOMPARISON TO STATE-OF-THE-ART:\n┌─────────────────────┬───────────┬─────────────────┐\n│ Model               │ Params    │ SWE-bench Lite  │\n├─────────────────────┼───────────┼─────────────────┤\n│ Claude-3.5-Sonnet   │ ~175B     │ ~49%            │\n│ GPT-4               │ ~1.8T     │ ~33%            │\n│ Devin               │ Unknown   │ ~14%            │\n│ RuvLLM SONA         │ ~20KB     │ ~0% (honest)    │\n└─────────────────────┴───────────┴─────────────────┘\n\nTHE 5+ ORDER OF MAGNITUDE GAP:\n- Claude: ~175,000,000,000 parameters\n- RuvLLM: ~20,000 parameters\n- Ratio: ~8,750,000x smaller\n\nExpecting a 20KB model to match Claude is like expecting\na calculator to beat a supercomputer at chess.\n\nREALISTIC USE CASES FOR SMALL MODELS:\n1. Issue triage and routing\n2. Quick file location hints\n3. Bug type classification\n4. Similar issue retrieval\n5. Confidence scoring for human review\n\nThis benchmark demonstrates HONEST capabilities, not marketing claims.\n",
+  "provenance": {
+    "publicKey": "302a300506032b6570032100e62c57866d54eddef2f32dbae5142e9fa93a903517a6acd0d210022f667372d7",
+    "chainHash": "51390dcb3e739014f3af7c04afd5be160e92945c190c44ffff0dac86edf51353",
+    "signature": "4c1cb66d04abb2900abafd466ab472a53ac7dc6ebf7f2423b2e197b69206fb3c6a8ed390876864284b2f5c8c4fcd2ebf9e3a94a05502bcad248e9232bf5df10c"
+  }
+}
