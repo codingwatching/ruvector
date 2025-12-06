@@ -450,15 +450,16 @@ export class RuVectorClient {
 
     // Use ruvector type (native RuVector extension type)
     // ruvector is a variable-length type, dimensions stored in metadata
+    // Note: dimensions is directly interpolated since DEFAULT doesn't support parameters
     await this.execute(`
       CREATE TABLE IF NOT EXISTS ${safeName} (
         id SERIAL PRIMARY KEY,
         embedding ruvector,
-        dimensions INT DEFAULT $1,
+        dimensions INT DEFAULT ${dimensions},
         metadata JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
-    `, [dimensions]);
+    `);
 
     // Note: HNSW/IVFFlat indexes require additional index implementation
     // For now, create a simple btree index on id for fast lookups
@@ -624,7 +625,7 @@ export class RuVectorClient {
       manhattan: 'ruvector_sparse_manhattan',
     };
     const result = await this.query<{ distance: number }>(
-      `SELECT ${funcMap[metric]}($1::sparsevec, $2::sparsevec) as distance`,
+      `SELECT ${funcMap[metric]}($1::text, $2::text) as distance`,
       [a, b]
     );
     return result[0].distance;
@@ -639,7 +640,7 @@ export class RuVectorClient {
     b = 0.75
   ): Promise<number> {
     const result = await this.query<{ score: number }>(
-      'SELECT ruvector_sparse_bm25($1::sparsevec, $2::sparsevec, $3, $4, $5, $6) as score',
+      'SELECT ruvector_sparse_bm25($1::text, $2::text, $3, $4, $5, $6) as score',
       [query, doc, docLen, avgDocLen, k1, b]
     );
     return result[0].score;
@@ -647,15 +648,15 @@ export class RuVectorClient {
 
   async sparseTopK(sparse: string, k: number): Promise<SparseResult> {
     const originalNnz = await this.query<{ nnz: number }>(
-      'SELECT ruvector_sparse_nnz($1::sparsevec) as nnz',
+      'SELECT ruvector_sparse_nnz($1::text) as nnz',
       [sparse]
     );
     const result = await this.query<{ result: string }>(
-      'SELECT ruvector_sparse_top_k($1::sparsevec, $2)::text as result',
+      'SELECT ruvector_sparse_top_k($1::text, $2)::text as result',
       [sparse, k]
     );
     const newNnzResult = await this.query<{ nnz: number }>(
-      'SELECT ruvector_sparse_nnz($1::sparsevec) as nnz',
+      'SELECT ruvector_sparse_nnz($1::text) as nnz',
       [result[0].result]
     );
     return {
@@ -668,15 +669,15 @@ export class RuVectorClient {
 
   async sparsePrune(sparse: string, threshold: number): Promise<SparseResult> {
     const originalNnz = await this.query<{ nnz: number }>(
-      'SELECT ruvector_sparse_nnz($1::sparsevec) as nnz',
+      'SELECT ruvector_sparse_nnz($1::text) as nnz',
       [sparse]
     );
     const result = await this.query<{ result: string }>(
-      'SELECT ruvector_sparse_prune($1::sparsevec, $2)::text as result',
+      'SELECT ruvector_sparse_prune($1::text, $2)::text as result',
       [sparse, threshold]
     );
     const newNnzResult = await this.query<{ nnz: number }>(
-      'SELECT ruvector_sparse_nnz($1::sparsevec) as nnz',
+      'SELECT ruvector_sparse_nnz($1::text) as nnz',
       [result[0].result]
     );
     return {
@@ -693,7 +694,7 @@ export class RuVectorClient {
       [dense]
     );
     const nnzResult = await this.query<{ nnz: number }>(
-      'SELECT ruvector_sparse_nnz($1::sparsevec) as nnz',
+      'SELECT ruvector_sparse_nnz($1::text) as nnz',
       [result[0].result]
     );
     return {
@@ -704,7 +705,7 @@ export class RuVectorClient {
 
   async sparseToDense(sparse: string): Promise<number[]> {
     const result = await this.query<{ result: number[] }>(
-      'SELECT ruvector_sparse_to_dense($1::sparsevec) as result',
+      'SELECT ruvector_sparse_to_dense($1::text) as result',
       [sparse]
     );
     return result[0].result;
@@ -713,9 +714,9 @@ export class RuVectorClient {
   async sparseInfo(sparse: string): Promise<SparseInfo> {
     const result = await this.query<{ dim: number; nnz: number; norm: number }>(
       `SELECT
-        ruvector_sparse_dim($1::sparsevec) as dim,
-        ruvector_sparse_nnz($1::sparsevec) as nnz,
-        ruvector_sparse_norm($1::sparsevec) as norm`,
+        ruvector_sparse_dim($1::text) as dim,
+        ruvector_sparse_nnz($1::text) as nnz,
+        ruvector_sparse_norm($1::text) as norm`,
       [sparse]
     );
     const { dim, nnz, norm } = result[0];
@@ -855,10 +856,49 @@ export class RuVectorClient {
   }
 
   async listAttentionTypes(): Promise<string[]> {
-    const result = await this.query<{ name: string }>(
-      'SELECT name FROM ruvector_attention_types()'
-    );
-    return result.map(r => r.name);
+    // Return hardcoded list since ruvector_attention_types() doesn't exist
+    // These are the attention types supported by the extension
+    return [
+      'scaled_dot_product',
+      'multi_head',
+      'flash',
+      'sparse',
+      'linear',
+      'cross',
+      'self',
+      'causal',
+      'local',
+      'global',
+      'sliding_window',
+      'dilated',
+      'axial',
+      'factorized',
+      'perceiver',
+      'linformer',
+      'longformer',
+      'bigbird',
+      'reformer',
+      'performer',
+      'rfa',
+      'cosformer',
+      'nyströmformer',
+      'luna',
+      'fnet',
+      'gau',
+      'mega',
+      'mamba',
+      'rwkv',
+      'hyena',
+      'h3',
+      's4',
+      's4d',
+      'lru',
+      'gss',
+      'tno',
+      'toeplitz',
+      'retnet',
+      'gla',
+    ];
   }
 
   // ============================================================================
