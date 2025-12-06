@@ -116,6 +116,20 @@ RETURNS ruvector
 AS 'MODULE_PATHNAME', 'ruvector_mul_scalar_wrapper'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
+-- Convert ruvector to float array (real[])
+-- Enables using ruvector with functions that expect real[] input
+CREATE OR REPLACE FUNCTION ruvector_to_array(v ruvector)
+RETURNS real[]
+AS 'MODULE_PATHNAME', 'ruvector_to_array_wrapper'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- Convert float array to ruvector
+-- Enables creating ruvector from real[] input
+CREATE OR REPLACE FUNCTION array_to_ruvector(v real[])
+RETURNS ruvector
+AS 'MODULE_PATHNAME', 'array_to_ruvector_wrapper'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 -- ============================================================================
 -- Operators for Native RuVector Type
 -- ============================================================================
@@ -604,9 +618,9 @@ RETURNS jsonb
 AS 'MODULE_PATHNAME', 'ruvector_route_wrapper'
 LANGUAGE C VOLATILE PARALLEL SAFE;
 
--- List all agents
+-- List all agents as JSON array
 CREATE OR REPLACE FUNCTION ruvector_list_agents()
-RETURNS SETOF jsonb
+RETURNS jsonb
 AS 'MODULE_PATHNAME', 'ruvector_list_agents_wrapper'
 LANGUAGE C VOLATILE PARALLEL SAFE;
 
@@ -616,9 +630,9 @@ RETURNS jsonb
 AS 'MODULE_PATHNAME', 'ruvector_get_agent_wrapper'
 LANGUAGE C VOLATILE PARALLEL SAFE;
 
--- Find agents by capability
+-- Find agents by capability (returns JSON array)
 CREATE OR REPLACE FUNCTION ruvector_find_agents_by_capability(capability text, max_results int DEFAULT 10)
-RETURNS SETOF jsonb
+RETURNS jsonb
 AS 'MODULE_PATHNAME', 'ruvector_find_agents_by_capability_wrapper'
 LANGUAGE C VOLATILE PARALLEL SAFE;
 

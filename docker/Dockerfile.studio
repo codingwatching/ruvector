@@ -1,0 +1,75 @@
+# RuVector Studio - Custom build Dockerfile
+#
+# This Dockerfile builds a custom RuVector Studio image with all our modifications.
+# It clones the Supabase repository, applies our custom pages and components,
+# then builds the Next.js application.
+#
+# Build time: ~15-20 minutes (due to full monorepo build)
+#
+# Usage:
+#   docker build -f docker/Dockerfile.studio -t ruvector-studio:custom .
+#   docker run -p 3001:3000 -e STUDIO_PG_META_URL=http://host.docker.internal:8080 ruvector-studio:custom
+
+# Use Debian-based node image for better native module compatibility
+FROM node:20-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    python3 \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone Supabase repository at the specific version
+RUN git clone --depth 1 --branch v1.24.09 https://github.com/supabase/supabase.git .
+
+# Copy all our custom RuVector modifications in one layer
+# Using a staging directory to handle the bracket paths
+COPY studio/components/interfaces/RuVector /tmp/ruvector-components/
+COPY studio/pages/project /tmp/ruvector-pages/
+
+# Move files to correct locations
+RUN mkdir -p apps/studio/components/interfaces/RuVector && \
+    cp /tmp/ruvector-components/RuVectorHome.tsx apps/studio/components/interfaces/RuVector/ && \
+    cp /tmp/ruvector-pages/\[ref\]/index.tsx apps/studio/pages/project/\[ref\]/index.tsx && \
+    mkdir -p apps/studio/pages/project/\[ref\]/vectors && \
+    mkdir -p apps/studio/pages/project/\[ref\]/attention && \
+    mkdir -p apps/studio/pages/project/\[ref\]/gnn && \
+    mkdir -p apps/studio/pages/project/\[ref\]/hyperbolic && \
+    mkdir -p apps/studio/pages/project/\[ref\]/learning && \
+    mkdir -p apps/studio/pages/project/\[ref\]/routing && \
+    cp /tmp/ruvector-pages/\[ref\]/vectors/index.tsx apps/studio/pages/project/\[ref\]/vectors/ && \
+    cp /tmp/ruvector-pages/\[ref\]/attention/index.tsx apps/studio/pages/project/\[ref\]/attention/ && \
+    cp /tmp/ruvector-pages/\[ref\]/gnn/index.tsx apps/studio/pages/project/\[ref\]/gnn/ && \
+    cp /tmp/ruvector-pages/\[ref\]/hyperbolic/index.tsx apps/studio/pages/project/\[ref\]/hyperbolic/ && \
+    cp /tmp/ruvector-pages/\[ref\]/learning/index.tsx apps/studio/pages/project/\[ref\]/learning/ && \
+    cp /tmp/ruvector-pages/\[ref\]/routing/index.tsx apps/studio/pages/project/\[ref\]/routing/ && \
+    rm -rf /tmp/ruvector-components /tmp/ruvector-pages
+
+# Install dependencies using npm (Supabase uses npm workspaces + turbo)
+RUN npm install
+
+# Build just the studio
+ENV SKIP_ASSET_UPLOAD=1
+ENV NEXT_PUBLIC_IS_PLATFORM=false
+RUN npm run build:studio
+
+# Production image (use Alpine for smaller size)
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV NEXT_PUBLIC_IS_PLATFORM=false
+
+# Copy built application
+COPY --from=builder /build/apps/studio/.next/standalone ./
+COPY --from=builder /build/apps/studio/.next/static ./apps/studio/.next/static
+COPY --from=builder /build/apps/studio/public ./apps/studio/public
+
+EXPOSE 3000
+
+CMD ["node", "apps/studio/server.js"]

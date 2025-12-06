@@ -108,6 +108,36 @@ pub fn ruvector_mul_scalar(v: RuVector, scalar: f32) -> RuVector {
     v.mul_scalar(scalar)
 }
 
+/// Convert ruvector to float array (real[])
+/// Enables using ruvector with functions that expect real[] input
+///
+/// # Example
+/// ```sql
+/// SELECT ruvector_to_array(embedding) FROM documents WHERE id = 1;
+/// -- Or use with hyperbolic functions:
+/// SELECT ruvector_poincare_distance(
+///     ruvector_to_array((SELECT embedding FROM docs WHERE id = 1)),
+///     ruvector_to_array((SELECT embedding FROM docs WHERE id = 2)),
+///     -1.0
+/// );
+/// ```
+#[pg_extern(immutable, parallel_safe)]
+pub fn ruvector_to_array(v: RuVector) -> Vec<f32> {
+    v.into_vec()
+}
+
+/// Convert float array to ruvector
+/// Enables creating ruvector from real[] input
+///
+/// # Example
+/// ```sql
+/// SELECT array_to_ruvector(ARRAY[0.1, 0.2, 0.3]::real[]);
+/// ```
+#[pg_extern(immutable, parallel_safe)]
+pub fn array_to_ruvector(v: Vec<f32>) -> RuVector {
+    RuVector::from_slice(&v)
+}
+
 // ============================================================================
 // Distance Functions (Array-based) with SIMD Optimization
 // ============================================================================

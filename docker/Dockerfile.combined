@@ -1,0 +1,328 @@
+# RuVector Combined Image - PostgreSQL + Studio + Nginx with Basic Auth
+#
+# This Dockerfile creates an all-in-one image for Cloud Run deployment:
+# - PostgreSQL 17 with RuVector extension
+# - pg-meta API for database management
+# - Supabase Studio frontend
+# - Nginx reverse proxy with basic authentication
+#
+# Usage:
+#   docker build -f docker/Dockerfile.combined -t ruvector-combined .
+#   docker run -p 8080:8080 -e AUTH_USERNAME=admin -e AUTH_PASSWORD=secret ruvector-combined
+#
+# Cloud Run deployment:
+#   gcloud run deploy ruvector --image gcr.io/PROJECT/ruvector-combined --port 8080
+
+ARG PG_VERSION=17
+
+# =============================================================================
+# Stage 1: Build RuVector PostgreSQL Extension
+# =============================================================================
+FROM rust:1.83-bookworm AS rust-builder
+
+ARG PG_VERSION
+
+# Install PostgreSQL and build dependencies
+RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+
+RUN apt-get update && apt-get install -y \
+    postgresql-${PG_VERSION} \
+    postgresql-server-dev-${PG_VERSION} \
+    libclang-dev \
+    clang \
+    pkg-config \
+    libssl-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Rust toolchain
+RUN rustup component add rustfmt clippy
+
+WORKDIR /build/ruvector-postgres
+
+# Copy source code (including control file, build.rs, benches)
+COPY crates/ruvector-postgres/Cargo.toml ./
+COPY crates/ruvector-postgres/build.rs ./
+COPY crates/ruvector-postgres/ruvector.control ./
+COPY crates/ruvector-postgres/src ./src/
+COPY crates/ruvector-postgres/sql ./sql/
+COPY crates/ruvector-postgres/benches ./benches/
+
+# Install pgrx
+RUN cargo install cargo-pgrx --version 0.12.6 --locked
+RUN cargo pgrx init --pg${PG_VERSION} /usr/lib/postgresql/${PG_VERSION}/bin/pg_config
+
+ENV PGRX_PG_CONFIG_PATH=/usr/lib/postgresql/${PG_VERSION}/bin/pg_config
+ENV PGRX_HOME=/root/.pgrx
+
+# Build extension with feature flag
+RUN cargo pgrx package --pg-config /usr/lib/postgresql/${PG_VERSION}/bin/pg_config --features pg${PG_VERSION}
+
+# Copy SQL extension file
+RUN cp sql/ruvector--0.1.0.sql target/release/ruvector-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/
+
+# =============================================================================
+# Stage 2: Final Combined Image
+# =============================================================================
+FROM postgres:${PG_VERSION}-bookworm AS runtime
+
+ARG PG_VERSION
+
+# Install runtime dependencies (without nodejs - will install from NodeSource)
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    curl \
+    jq \
+    python3 \
+    nginx \
+    apache2-utils \
+    supervisor \
+    ca-certificates \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 from NodeSource (required by pg-meta 0.84.2)
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy RuVector extension
+COPY --from=rust-builder /build/ruvector-postgres/target/release/ruvector-pg${PG_VERSION}/usr/share/postgresql/${PG_VERSION}/extension/* /usr/share/postgresql/${PG_VERSION}/extension/
+COPY --from=rust-builder /build/ruvector-postgres/target/release/ruvector-pg${PG_VERSION}/usr/lib/postgresql/${PG_VERSION}/lib/* /usr/lib/postgresql/${PG_VERSION}/lib/
+
+# Install pg-meta globally
+RUN npm install -g @supabase/postgres-meta@0.84.2
+
+# Create directories
+RUN mkdir -p /var/log/supervisor /run/nginx /etc/nginx/auth
+
+# Copy initialization SQL
+COPY docker/init.sql /docker-entrypoint-initdb.d/00-init-ruvector.sql
+
+# =============================================================================
+# Nginx Configuration with Basic Auth
+# =============================================================================
+RUN cat > /etc/nginx/nginx.conf << 'NGINX'
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+
+    server {
+        listen 8080;
+        server_name _;
+
+        # Health check endpoint (no auth)
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        # Basic auth for all other routes
+        auth_basic "RuVector Admin";
+        auth_basic_user_file /etc/nginx/auth/.htpasswd;
+
+        # Studio frontend
+        location / {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        # pg-meta API
+        location /api/pg/ {
+            limit_req zone=api burst=20 nodelay;
+            rewrite ^/api/pg/(.*) /$1 break;
+            proxy_pass http://127.0.0.1:8085;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+
+        # Direct PostgreSQL info endpoint
+        location /api/ruvector {
+            limit_req zone=api burst=20 nodelay;
+            default_type application/json;
+            proxy_pass http://127.0.0.1:8085/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+}
+NGINX
+
+# =============================================================================
+# Supervisor Configuration
+# =============================================================================
+RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'SUPERVISOR'
+[supervisord]
+nodaemon=true
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+user=root
+
+[program:postgres]
+command=/usr/lib/postgresql/17/bin/postgres -D /var/lib/postgresql/data -c listen_addresses='127.0.0.1'
+user=postgres
+autostart=true
+autorestart=true
+priority=10
+stdout_logfile=/var/log/supervisor/postgres.log
+stderr_logfile=/var/log/supervisor/postgres-error.log
+
+[program:pgmeta]
+command=node /usr/local/lib/node_modules/@supabase/postgres-meta/dist/server/server.js
+autostart=true
+autorestart=true
+startretries=10
+startsecs=10
+priority=20
+environment=PG_META_PORT="8085",PG_META_DB_HOST="127.0.0.1",PG_META_DB_PORT="5432",PG_META_DB_NAME="ruvector",PG_META_DB_USER="ruvector",PG_META_DB_PASSWORD="%(ENV_POSTGRES_PASSWORD)s"
+stdout_logfile=/var/log/supervisor/pgmeta.log
+stderr_logfile=/var/log/supervisor/pgmeta-error.log
+
+[program:studio]
+command=node /app/studio/server.js
+directory=/app/studio
+autostart=true
+autorestart=true
+startretries=10
+startsecs=5
+priority=30
+environment=PORT="3000",STUDIO_PG_META_URL="http://127.0.0.1:8085",NEXT_PUBLIC_IS_PLATFORM="false",POSTGRES_PASSWORD="%(ENV_POSTGRES_PASSWORD)s",DEFAULT_ORGANIZATION_NAME="RuVector",DEFAULT_PROJECT_NAME="RuVector Database"
+stdout_logfile=/var/log/supervisor/studio.log
+stderr_logfile=/var/log/supervisor/studio-error.log
+
+[program:nginx]
+command=/usr/sbin/nginx -g "daemon off;"
+autostart=true
+autorestart=true
+priority=40
+stdout_logfile=/var/log/supervisor/nginx.log
+stderr_logfile=/var/log/supervisor/nginx-error.log
+SUPERVISOR
+
+# =============================================================================
+# Startup Script
+# =============================================================================
+RUN cat > /docker-entrypoint-combined.sh << 'ENTRYPOINT'
+#!/bin/bash
+set -e
+
+# Set defaults
+: ${AUTH_USERNAME:=admin}
+: ${AUTH_PASSWORD:=ruvector}
+: ${POSTGRES_USER:=ruvector}
+: ${POSTGRES_PASSWORD:=ruvector}
+: ${POSTGRES_DB:=ruvector}
+
+export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
+
+echo "=== RuVector Combined Service Starting ==="
+echo "Auth Username: $AUTH_USERNAME"
+
+# Create htpasswd file for nginx basic auth
+htpasswd -bc /etc/nginx/auth/.htpasswd "$AUTH_USERNAME" "$AUTH_PASSWORD"
+chmod 644 /etc/nginx/auth/.htpasswd
+
+# Initialize PostgreSQL if needed
+if [ ! -s "/var/lib/postgresql/data/PG_VERSION" ]; then
+    echo "Initializing PostgreSQL database..."
+    mkdir -p /var/log/postgresql /var/run/postgresql
+    chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql /var/run/postgresql
+    su - postgres -c "/usr/lib/postgresql/17/bin/initdb -D /var/lib/postgresql/data"
+
+    # Configure PostgreSQL
+    echo "host all all 127.0.0.1/32 md5" >> /var/lib/postgresql/data/pg_hba.conf
+    echo "local all all trust" >> /var/lib/postgresql/data/pg_hba.conf
+
+    # Start PostgreSQL temporarily for initialization
+    su - postgres -c "/usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/data -l /var/log/postgresql/postgresql.log start"
+    sleep 5
+
+    # Create user and database
+    su - postgres -c "psql -c \"CREATE USER $POSTGRES_USER WITH PASSWORD '$POSTGRES_PASSWORD' SUPERUSER;\""
+    su - postgres -c "psql -c \"CREATE DATABASE $POSTGRES_DB OWNER $POSTGRES_USER;\""
+
+    # Install RuVector extension
+    su - postgres -c "psql -d $POSTGRES_DB -c 'CREATE EXTENSION IF NOT EXISTS ruvector;'"
+
+    # Run init script if exists (skip if permission denied)
+    if [ -f /docker-entrypoint-initdb.d/00-init-ruvector.sql ]; then
+        chmod 644 /docker-entrypoint-initdb.d/00-init-ruvector.sql 2>/dev/null || true
+        su - postgres -c "psql -d $POSTGRES_DB -f /docker-entrypoint-initdb.d/00-init-ruvector.sql" 2>/dev/null || echo "Skipped init script"
+    fi
+
+    # Stop temporary PostgreSQL
+    su - postgres -c "/usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/data stop"
+    sleep 2
+fi
+
+echo "=== Starting Supervisor ==="
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+ENTRYPOINT
+
+RUN chmod +x /docker-entrypoint-combined.sh
+
+# Download and setup Supabase Studio
+RUN mkdir -p /app/studio && \
+    cd /tmp && \
+    curl -L https://github.com/supabase/supabase/releases/download/studio-v1.24.09/studio-standalone.tar.gz -o studio.tar.gz && \
+    tar -xzf studio.tar.gz -C /app/studio --strip-components=1 || \
+    echo "Studio download failed - will use placeholder"
+
+# Create a simple placeholder if Studio download fails
+RUN if [ ! -f /app/studio/server.js ]; then \
+    mkdir -p /app/studio && \
+    echo 'const http = require("http");' > /app/studio/server.js && \
+    echo 'const server = http.createServer((req, res) => {' >> /app/studio/server.js && \
+    echo '  res.writeHead(200, {"Content-Type": "text/html"});' >> /app/studio/server.js && \
+    echo '  res.end("<html><head><title>RuVector Studio</title></head><body style=font-family:sans-serif;padding:40px;><h1>RuVector Studio</h1><p>PostgreSQL with RuVector extension is running.</p><p><a href=/api/pg/>Database API</a></p></body></html>");' >> /app/studio/server.js && \
+    echo '});' >> /app/studio/server.js && \
+    echo 'server.listen(3000, () => console.log("Studio placeholder running on port 3000"));' >> /app/studio/server.js && \
+    echo "Created placeholder server"; \
+    fi
+
+# Expose port for Cloud Run
+EXPOSE 8080
+
+# Set environment defaults
+ENV POSTGRES_USER=ruvector \
+    POSTGRES_PASSWORD=ruvector \
+    POSTGRES_DB=ruvector \
+    AUTH_USERNAME=admin \
+    AUTH_PASSWORD=ruvector
+
+ENTRYPOINT ["/docker-entrypoint-combined.sh"]

@@ -1,0 +1,106 @@
+# RuVector Docker Compose Configuration
+#
+# Quick Start:
+#   docker compose up -d
+#
+# Build custom studio with RuVector modifications:
+#   docker compose --profile custom up -d --build
+#
+# Access:
+#   - Studio: http://localhost:3001
+#   - pg-meta API: http://localhost:8080
+#   - PostgreSQL: localhost:5432
+
+services:
+  # PostgreSQL with pgvector extension
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: ruvector-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ruvector
+      POSTGRES_PASSWORD: ruvector
+      POSTGRES_DB: ruvector
+    volumes:
+      - ruvector-db-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ruvector -d ruvector"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # pg-meta for database management API
+  pg-meta:
+    image: supabase/postgres-meta:v0.84.2
+    container_name: ruvector-pg-meta
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: ruvector
+      PG_META_DB_USER: ruvector
+      PG_META_DB_PASSWORD: ruvector
+
+  # RuVector Studio (default - uses pre-built Supabase Studio image)
+  studio:
+    image: supabase/studio:20241202-71e5240
+    container_name: ruvector-studio
+    restart: unless-stopped
+    profiles:
+      - default
+      - ""
+    depends_on:
+      db:
+        condition: service_healthy
+      pg-meta:
+        condition: service_started
+    ports:
+      - "3001:3000"
+    environment:
+      STUDIO_PG_META_URL: http://pg-meta:8080
+      POSTGRES_PASSWORD: ruvector
+      DEFAULT_ORGANIZATION_NAME: RuVector
+      DEFAULT_PROJECT_NAME: RuVector Database
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_IS_PLATFORM: "false"
+      SENTRY_IGNORE_API_RESOLUTION_ERROR: "1"
+
+  # RuVector Studio Custom (builds from source with RuVector modifications)
+  # Use with: docker compose --profile custom up -d --build
+  studio-custom:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.studio
+    container_name: ruvector-studio-custom
+    restart: unless-stopped
+    profiles:
+      - custom
+    depends_on:
+      db:
+        condition: service_healthy
+      pg-meta:
+        condition: service_started
+    ports:
+      - "3001:3000"
+    environment:
+      STUDIO_PG_META_URL: http://pg-meta:8080
+      POSTGRES_PASSWORD: ruvector
+      DEFAULT_ORGANIZATION_NAME: RuVector
+      DEFAULT_PROJECT_NAME: RuVector Database
+      NEXT_PUBLIC_IS_PLATFORM: "false"
+
+volumes:
+  ruvector-db-data:

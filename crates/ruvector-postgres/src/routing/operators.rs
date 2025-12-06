@@ -229,49 +229,41 @@ fn ruvector_route(
     Ok(JsonB(result))
 }
 
-/// List all registered agents
+/// List all registered agents as JSON array
+///
+/// Returns a JSON array of all registered agents to avoid pgrx TableIterator segfaults.
+/// Each agent object contains: name, agent_type, capabilities, cost_per_request,
+/// avg_latency_ms, quality_score, success_rate, total_requests, is_active
 ///
 /// # Example
 /// ```sql
-/// SELECT * FROM ruvector_list_agents();
+/// SELECT ruvector_list_agents();
+/// -- Returns: [{"name":"gpt-4","agent_type":"llm",...},...]
 /// ```
 #[pg_extern]
-fn ruvector_list_agents(
-) -> TableIterator<
-    'static,
-    (
-        name!(name, String),
-        name!(agent_type, String),
-        name!(capabilities, Vec<String>),
-        name!(cost_per_request, f32),
-        name!(avg_latency_ms, f32),
-        name!(quality_score, f32),
-        name!(success_rate, f32),
-        name!(total_requests, i64),
-        name!(is_active, bool),
-    ),
-> {
+fn ruvector_list_agents() -> JsonB {
     let registry = get_registry();
     let agents = registry.list_all();
 
-    TableIterator::new(
-        agents
-            .into_iter()
-            .map(|agent| {
-                (
-                    agent.name,
-                    agent.agent_type.as_str().to_string(),
-                    agent.capabilities,
-                    agent.cost_model.per_request,
-                    agent.performance.avg_latency_ms,
-                    agent.performance.quality_score,
-                    agent.performance.success_rate,
-                    agent.performance.total_requests as i64,
-                    agent.is_active,
-                )
+    // Convert to a JSON array - safer than TableIterator with complex types
+    let agent_list: Vec<serde_json::Value> = agents
+        .into_iter()
+        .map(|agent| {
+            serde_json::json!({
+                "name": agent.name,
+                "agent_type": agent.agent_type.as_str(),
+                "capabilities": agent.capabilities,
+                "cost_per_request": agent.cost_model.per_request,
+                "avg_latency_ms": agent.performance.avg_latency_ms,
+                "quality_score": agent.performance.quality_score,
+                "success_rate": agent.performance.success_rate,
+                "total_requests": agent.performance.total_requests,
+                "is_active": agent.is_active
             })
-            .collect::<Vec<_>>(),
-    )
+        })
+        .collect();
+
+    JsonB(serde_json::json!(agent_list))
 }
 
 /// Get detailed information about a specific agent
@@ -296,39 +288,34 @@ fn ruvector_get_agent(name: String) -> Result<JsonB, String> {
 
 /// Find agents by capability
 ///
+/// Returns a JSON array of agents matching the specified capability.
+///
 /// # Example
 /// ```sql
-/// SELECT * FROM ruvector_find_agents_by_capability('code_generation', 5);
+/// SELECT ruvector_find_agents_by_capability('code_generation', 5);
+/// -- Returns: [{"name":"gpt-4","quality_score":0.95,...},...]
 /// ```
 #[pg_extern]
 fn ruvector_find_agents_by_capability(
     capability: String,
     limit: default!(i32, 10),
-) -> TableIterator<
-    'static,
-    (
-        name!(name, String),
-        name!(quality_score, f32),
-        name!(avg_latency_ms, f32),
-        name!(cost_per_request, f32),
-    ),
-> {
+) -> JsonB {
     let registry = get_registry();
     let agents = registry.find_by_capability(&capability, limit as usize);
 
-    TableIterator::new(
-        agents
-            .into_iter()
-            .map(|agent| {
-                (
-                    agent.name,
-                    agent.performance.quality_score,
-                    agent.performance.avg_latency_ms,
-                    agent.cost_model.per_request,
-                )
+    let agent_list: Vec<serde_json::Value> = agents
+        .into_iter()
+        .map(|agent| {
+            serde_json::json!({
+                "name": agent.name,
+                "quality_score": agent.performance.quality_score,
+                "avg_latency_ms": agent.performance.avg_latency_ms,
+                "cost_per_request": agent.cost_model.per_request
             })
-            .collect::<Vec<_>>(),
-    )
+        })
+        .collect();
+
+    JsonB(serde_json::json!(agent_list))
 }
 
 /// Get routing statistics

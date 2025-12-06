@@ -1,36 +1,45 @@
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { configDefaults, defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+import tsconfigPaths from 'vite-tsconfig-paths'
+
+// Some tools like Vitest VSCode extensions, have trouble with resolving relative paths,
+// as they use the directory of the test file as `cwd`, which makes them believe that
+// `setupFiles` live next to the test file itself. This forces them to always resolve correctly.
+const dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/',
-        'src/test/',
-        '**/*.d.ts',
-        '**/*.config.*',
-        '**/mockData',
-        '**/*.test.{ts,tsx}',
-      ],
-    },
-  },
+  plugins: [
+    react(),
+    tsconfigPaths({
+      projects: ['.'],
+    }),
+  ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './src/components'),
-      '@/lib': path.resolve(__dirname, './src/lib'),
-      '@/types': path.resolve(__dirname, './src/types'),
-      '@/styles': path.resolve(__dirname, './src/styles'),
-      '@/hooks': path.resolve(__dirname, './src/lib/hooks'),
-      '@/utils': path.resolve(__dirname, './src/lib/utils'),
-      '@/api': path.resolve(__dirname, './src/lib/api'),
+      '@ui': resolve(__dirname, './../../packages/ui/src'),
     },
   },
-});
+  test: {
+    globals: true,
+    environment: 'jsdom', // TODO(kamil): This should be set per test via header in .tsx files only
+    setupFiles: [
+      resolve(dirname, './tests/vitestSetup.ts'),
+      resolve(dirname, './tests/setup/polyfills.ts'),
+      resolve(dirname, './tests/setup/radix.js'),
+    ],
+    // Don't look for tests in the nextjs output directory
+    exclude: [...configDefaults.exclude, `.next/*`],
+    reporters: [['default']],
+    coverage: {
+      reporter: ['lcov'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/base64url.ts', // [Jordi] Tests for this file exist in https://github.com/supabase-community/base64url-js/blob/main/src/base64url.test.ts so we can ignore.
+      ],
+      include: ['lib/**/*.ts'],
+    },
+  },
+})

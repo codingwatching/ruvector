@@ -1,0 +1,42 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ruvector-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF"/>
+      <stop offset="100%" stop-color="#7B2DFF"/>
+    </linearGradient>
+    <linearGradient id="ruvector-gradient-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#7B2DFF" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="60" cy="60" r="55" fill="url(#ruvector-gradient-light)" stroke="url(#ruvector-gradient)" stroke-width="2"/>
+
+  <!-- Neural network nodes -->
+  <circle cx="35" cy="40" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="85" cy="40" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="60" cy="30" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="35" cy="80" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="85" cy="80" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="60" cy="90" r="8" fill="url(#ruvector-gradient)"/>
+  <circle cx="60" cy="60" r="12" fill="url(#ruvector-gradient)"/>
+
+  <!-- Connection lines -->
+  <line x1="35" y1="40" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+  <line x1="85" y1="40" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+  <line x1="60" y1="30" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+  <line x1="35" y1="80" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+  <line x1="85" y1="80" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+  <line x1="60" y1="90" x2="60" y2="60" stroke="url(#ruvector-gradient)" stroke-width="2" opacity="0.7"/>
+
+  <!-- Cross connections for neural network effect -->
+  <line x1="35" y1="40" x2="85" y2="40" stroke="url(#ruvector-gradient)" stroke-width="1.5" opacity="0.5"/>
+  <line x1="35" y1="80" x2="85" y2="80" stroke="url(#ruvector-gradient)" stroke-width="1.5" opacity="0.5"/>
+  <line x1="35" y1="40" x2="35" y2="80" stroke="url(#ruvector-gradient)" stroke-width="1.5" opacity="0.5"/>
+  <line x1="85" y1="40" x2="85" y2="80" stroke="url(#ruvector-gradient)" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Vector arrows -->
+  <path d="M20 60 L10 55 L10 65 Z" fill="url(#ruvector-gradient)" opacity="0.8"/>
+  <path d="M100 60 L110 55 L110 65 Z" fill="url(#ruvector-gradient)" opacity="0.8"/>
+</svg>
