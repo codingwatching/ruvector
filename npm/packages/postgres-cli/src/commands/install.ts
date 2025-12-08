@@ -297,8 +297,9 @@ export class InstallCommands {
   /**
    * Install required build dependencies
    */
-  static async installBuildDeps(sys: SystemInfo): Promise<boolean> {
+  static async installBuildDeps(sys: SystemInfo, pgVersion?: string): Promise<boolean> {
     const spinner = ora('Installing build dependencies...').start();
+    const pg = pgVersion || sys.pgVersion || DEFAULT_PG_VERSION;
 
     try {
       if (sys.platform === 'darwin') {
@@ -306,17 +307,19 @@ export class InstallCommands {
       } else if (sys.platform === 'linux') {
         switch (sys.packageManager) {
           case 'apt':
-            this.sudoExec('apt-get install -y build-essential libclang-dev clang pkg-config libssl-dev cmake');
+            // Update package lists first, then install PostgreSQL server dev headers for pgrx
+            this.sudoExec('apt-get update');
+            this.sudoExec(`apt-get install -y build-essential libclang-dev clang pkg-config libssl-dev cmake postgresql-server-dev-${pg}`);
             break;
           case 'dnf':
           case 'yum':
-            this.sudoExec(`${sys.packageManager} install -y gcc gcc-c++ clang clang-devel openssl-devel cmake make`);
+            this.sudoExec(`${sys.packageManager} install -y gcc gcc-c++ clang clang-devel openssl-devel cmake make postgresql${pg}-devel`);
             break;
           case 'pacman':
-            this.sudoExec('pacman -S --noconfirm base-devel clang openssl cmake');
+            this.sudoExec('pacman -S --noconfirm base-devel clang openssl cmake postgresql-libs');
             break;
           default:
-            spinner.warn('Please install: gcc, clang, libclang-dev, pkg-config, libssl-dev, cmake');
+            spinner.warn('Please install: gcc, clang, libclang-dev, pkg-config, libssl-dev, cmake, postgresql-server-dev');
             return true;
         }
       }
@@ -373,50 +376,27 @@ export class InstallCommands {
    * Build and install ruvector-postgres extension
    */
   static async buildAndInstallExtension(pgVersion: string): Promise<boolean> {
-    const spinner = ora('Building ruvector-postgres extension from crates.io...').start();
+    const spinner = ora('Building ruvector-postgres extension...').start();
 
     try {
       // Create temporary directory
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ruvector-'));
-      const projectDir = path.join(tmpDir, 'ruvector-postgres');
 
-      spinner.text = 'Creating build project...';
-      fs.mkdirSync(projectDir, { recursive: true });
+      spinner.text = 'Cloning ruvector repository...';
 
-      // Create minimal Cargo.toml to build the extension
-      const cargoToml = `
-[package]
-name = "ruvector-build"
-version = "0.1.0"
-edition = "2021"
+      // Clone the actual repository (pgrx needs .control file and proper structure)
+      execSync(`git clone --depth 1 https://github.com/ruvnet/ruvector.git ${tmpDir}/ruvector`, {
+        stdio: 'pipe',
+      });
 
-[lib]
-crate-type = ["cdylib"]
+      const projectDir = path.join(tmpDir, 'ruvector', 'crates', 'ruvector-postgres');
 
-[features]
-default = ["pg${pgVersion}"]
-pg14 = ["ruvector-postgres/pg14"]
-pg15 = ["ruvector-postgres/pg15"]
-pg16 = ["ruvector-postgres/pg16"]
-pg17 = ["ruvector-postgres/pg17"]
+      // Verify the extension directory exists
+      if (!fs.existsSync(projectDir)) {
+        throw new Error('ruvector-postgres crate not found in repository');
+      }
 
-[dependencies]
-ruvector-postgres = "${RUVECTOR_CRATE_VERSION}"
-pgrx = "0.12"
-
-[dev-dependencies]
-pgrx-tests = "0.12"
-`;
-
-      fs.writeFileSync(path.join(projectDir, 'Cargo.toml'), cargoToml);
-
-      // Create minimal lib.rs that re-exports ruvector-postgres
-      fs.mkdirSync(path.join(projectDir, 'src'));
-      fs.writeFileSync(path.join(projectDir, 'src', 'lib.rs'), `
-pub use ruvector_postgres::*;
-`);
-
-      spinner.text = 'Downloading and compiling (this may take 5-10 minutes)...';
+      spinner.text = 'Building extension (this may take 5-10 minutes)...';
 
       // Build and install using pgrx
       execSync(`cargo pgrx install --features pg${pgVersion} --release`, {
@@ -429,6 +409,7 @@ pub use ruvector_postgres::*;
       });
 
       // Cleanup
+      spinner.text = 'Cleaning up...';
       fs.rmSync(tmpDir, { recursive: true, force: true });
 
       spinner.succeed('ruvector-postgres extension installed');
@@ -508,9 +489,10 @@ pub use ruvector_postgres::*;
       console.log(chalk.green(`✓ PostgreSQL ${sys.pgVersion} already installed`));
     }
 
-    // Install build dependencies
+    // Install build dependencies (including PostgreSQL dev headers)
+    const targetPgVersion = options.pgVersion || sys.pgVersion || DEFAULT_PG_VERSION;
     console.log(chalk.bold('\n🔧 Step 2: Installing build dependencies'));
-    await this.installBuildDeps(sys);
+    await this.installBuildDeps(sys, targetPgVersion);
 
     // Install Rust if needed
     if (!sys.rust && !options.skipRust) {
@@ -525,7 +507,6 @@ pub use ruvector_postgres::*;
     }
 
     // Install pgrx if needed
-    const targetPgVersion = options.pgVersion || sys.pgVersion || DEFAULT_PG_VERSION;
     if (!sys.pgrx || sys.pgrxVersion !== PGRX_VERSION) {
       console.log(chalk.bold('\n🔌 Step 4: Installing cargo-pgrx'));
       const installed = await this.installPgrx(targetPgVersion);
