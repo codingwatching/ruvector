@@ -29,6 +29,7 @@ pub mod distance;
 pub mod quantization;
 pub mod hnsw;
 pub mod ios_capabilities;
+pub mod ios_learning;
 mod embeddings;
 mod qlearning;
 mod attention;
@@ -38,6 +39,12 @@ pub use distance::{DistanceMetric, euclidean_distance, manhattan_distance};
 pub use quantization::{ScalarQuantized, BinaryQuantized, ProductQuantized, PQCodebook};
 pub use hnsw::{HnswIndex, HnswConfig};
 pub use ios_capabilities::{RuntimeCapabilities, OptimizationTier, MemoryConfig, Capability};
+pub use ios_learning::{
+    HealthMetric, HealthState, HealthLearner,
+    LocationCategory, LocationState, LocationLearner,
+    CommEventType, CommPattern, CommLearner,
+    iOSContext, iOSLearner, ContextRecommendations, ActivitySuggestion,
+};
 pub use embeddings::{ContentEmbedder, ContentMetadata, VibeState};
 pub use qlearning::{QLearner, UserInteraction, InteractionType};
 pub use attention::{AttentionHead, MultiHeadAttention, AttentionRanker};
