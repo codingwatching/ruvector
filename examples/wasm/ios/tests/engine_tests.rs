@@ -491,7 +491,7 @@ mod serialization {
     #[test]
     fn test_state_serialization() {
         // Test that Q-table can be serialized and restored
-        let q_table = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+        let q_table: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4, 0.5];
 
         // Serialize
         let mut bytes = Vec::new();

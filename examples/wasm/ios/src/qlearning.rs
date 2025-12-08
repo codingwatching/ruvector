@@ -3,8 +3,6 @@
 //! Lightweight reinforcement learning for adaptive recommendations.
 //! Uses tabular Q-learning with function approximation for state generalization.
 
-use crate::embeddings::ContentEmbedder;
-
 /// Maximum number of actions (content recommendations)
 const MAX_ACTIONS: usize = 100;
 
@@ -259,7 +257,9 @@ impl QLearner {
 
     /// Deserialize Q-table from bytes
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 32 {
+        // Header: 4+4+4+4+4+8 = 28 bytes
+        const HEADER_SIZE: usize = 28;
+        if bytes.len() < HEADER_SIZE {
             return None;
         }
 
@@ -274,7 +274,7 @@ impl QLearner {
         ]);
 
         let table_size = state_dim * action_dim;
-        let expected_len = 32 + table_size * 4;
+        let expected_len = HEADER_SIZE + table_size * 4;
 
         if bytes.len() < expected_len {
             return None;
@@ -282,7 +282,7 @@ impl QLearner {
 
         let mut q_table = Vec::with_capacity(table_size);
         for i in 0..table_size {
-            let offset = 32 + i * 4;
+            let offset = HEADER_SIZE + i * 4;
             let q = f32::from_le_bytes([
                 bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
             ]);
