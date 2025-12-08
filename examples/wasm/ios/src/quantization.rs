@@ -86,6 +86,31 @@ impl ScalarQuantized {
     pub fn memory_size(&self) -> usize {
         self.data.len() + 8 // data + min + scale
     }
+
+    /// Serialize to bytes
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(8 + self.data.len());
+        bytes.extend_from_slice(&self.min.to_le_bytes());
+        bytes.extend_from_slice(&self.scale.to_le_bytes());
+        bytes.extend_from_slice(&self.data);
+        bytes
+    }
+
+    /// Deserialize from bytes
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 8 {
+            return None;
+        }
+        let min = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let scale = f32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let data = bytes[8..].to_vec();
+        Some(Self { data, min, scale })
+    }
+
+    /// Estimate serialized size
+    pub fn serialized_size(&self) -> usize {
+        8 + self.data.len()
+    }
 }
 
 // ============================================
@@ -176,6 +201,29 @@ impl BinaryQuantized {
     /// Get memory size in bytes
     pub fn memory_size(&self) -> usize {
         self.bits.len() + 8 // bits + dimensions (as usize)
+    }
+
+    /// Serialize to bytes
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(4 + self.bits.len());
+        bytes.extend_from_slice(&(self.dimensions as u32).to_le_bytes());
+        bytes.extend_from_slice(&self.bits);
+        bytes
+    }
+
+    /// Deserialize from bytes
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 4 {
+            return None;
+        }
+        let dimensions = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let bits = bytes[4..].to_vec();
+        Some(Self { bits, dimensions })
+    }
+
+    /// Estimate serialized size
+    pub fn serialized_size(&self) -> usize {
+        4 + self.bits.len()
     }
 }
 

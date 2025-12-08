@@ -242,6 +242,174 @@ impl VectorDatabase {
 
         hnsw_size + scalar_size + binary_size
     }
+
+    // ============================================
+    // Persistence
+    // ============================================
+
+    /// Serialize the database to bytes
+    ///
+    /// Format:
+    /// - Header (16 bytes): magic, version, dim, quant_mode
+    /// - HNSW index (variable)
+    /// - Scalar store (if quant_mode == Scalar)
+    /// - Binary store (if quant_mode == Binary)
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Magic number "RVDB"
+        bytes.extend_from_slice(b"RVDB");
+        // Version
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        // Dimension
+        bytes.extend_from_slice(&(self.dim as u32).to_le_bytes());
+        // Quantization mode
+        bytes.push(self.quant_mode as u8);
+        bytes.extend_from_slice(&[0u8; 3]); // padding
+
+        // HNSW index
+        let hnsw_bytes = self.index.serialize();
+        bytes.extend_from_slice(&(hnsw_bytes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&hnsw_bytes);
+
+        // Scalar store
+        bytes.extend_from_slice(&(self.scalar_store.len() as u32).to_le_bytes());
+        for (id, sq) in &self.scalar_store {
+            bytes.extend_from_slice(&id.to_le_bytes());
+            let sq_bytes = sq.serialize();
+            bytes.extend_from_slice(&(sq_bytes.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&sq_bytes);
+        }
+
+        // Binary store
+        bytes.extend_from_slice(&(self.binary_store.len() as u32).to_le_bytes());
+        for (id, bq) in &self.binary_store {
+            bytes.extend_from_slice(&id.to_le_bytes());
+            let bq_bytes = bq.serialize();
+            bytes.extend_from_slice(&(bq_bytes.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&bq_bytes);
+        }
+
+        bytes
+    }
+
+    /// Deserialize database from bytes
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 20 {
+            return None;
+        }
+
+        // Check magic
+        if &bytes[0..4] != b"RVDB" {
+            return None;
+        }
+
+        let version = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        if version != 1 {
+            return None;
+        }
+
+        let dim = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+        let quant_mode = match bytes[12] {
+            1 => QuantizationMode::Scalar,
+            2 => QuantizationMode::Binary,
+            _ => QuantizationMode::None,
+        };
+
+        let mut offset = 16;
+
+        // HNSW index
+        if offset + 4 > bytes.len() {
+            return None;
+        }
+        let hnsw_len = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        if offset + hnsw_len > bytes.len() {
+            return None;
+        }
+        let index = HnswIndex::deserialize(&bytes[offset..offset+hnsw_len])?;
+        offset += hnsw_len;
+
+        // Scalar store
+        if offset + 4 > bytes.len() {
+            return None;
+        }
+        let scalar_count = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        let mut scalar_store = Vec::with_capacity(scalar_count);
+        for _ in 0..scalar_count {
+            if offset + 12 > bytes.len() {
+                return None;
+            }
+            let id = u64::from_le_bytes([
+                bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+            ]);
+            offset += 8;
+            let sq_len = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+
+            if offset + sq_len > bytes.len() {
+                return None;
+            }
+            let sq = ScalarQuantized::deserialize(&bytes[offset..offset+sq_len])?;
+            scalar_store.push((id, sq));
+            offset += sq_len;
+        }
+
+        // Binary store
+        if offset + 4 > bytes.len() {
+            return None;
+        }
+        let binary_count = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        let mut binary_store = Vec::with_capacity(binary_count);
+        for _ in 0..binary_count {
+            if offset + 12 > bytes.len() {
+                return None;
+            }
+            let id = u64::from_le_bytes([
+                bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+            ]);
+            offset += 8;
+            let bq_len = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+
+            if offset + bq_len > bytes.len() {
+                return None;
+            }
+            let bq = BinaryQuantized::deserialize(&bytes[offset..offset+bq_len])?;
+            binary_store.push((id, bq));
+            offset += bq_len;
+        }
+
+        Some(Self {
+            index,
+            scalar_store,
+            binary_store,
+            quant_mode,
+            dim,
+        })
+    }
+
+    /// Estimate serialized size
+    pub fn serialized_size(&self) -> usize {
+        let mut size = 20; // header + hnsw_len
+        size += self.index.serialized_size();
+        size += 4; // scalar_count
+        for (_, sq) in &self.scalar_store {
+            size += 12 + sq.serialized_size();
+        }
+        size += 4; // binary_count
+        for (_, bq) in &self.binary_store {
+            size += 12 + bq.serialized_size();
+        }
+        size
+    }
 }
 
 // ============================================
@@ -439,6 +607,49 @@ pub extern "C" fn db_size() -> u32 {
 pub extern "C" fn db_memory_usage() -> u64 {
     unsafe {
         VECTOR_DB.as_ref().map(|db| db.memory_usage() as u64).unwrap_or(0)
+    }
+}
+
+/// Get serialized size for database
+#[no_mangle]
+pub extern "C" fn db_serialized_size() -> u64 {
+    unsafe {
+        VECTOR_DB.as_ref().map(|db| db.serialized_size() as u64).unwrap_or(0)
+    }
+}
+
+/// Serialize database to memory buffer
+/// Returns the number of bytes written, or 0 on failure
+#[no_mangle]
+pub extern "C" fn db_save(out_ptr: *mut u8, max_len: u32) -> u32 {
+    unsafe {
+        if let Some(db) = VECTOR_DB.as_ref() {
+            let bytes = db.serialize();
+            if bytes.len() <= max_len as usize {
+                let out = slice::from_raw_parts_mut(out_ptr, bytes.len());
+                out.copy_from_slice(&bytes);
+                bytes.len() as u32
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+    }
+}
+
+/// Load database from memory buffer
+/// Returns 0 on success, -1 on failure
+#[no_mangle]
+pub extern "C" fn db_load(data_ptr: *const u8, len: u32) -> i32 {
+    unsafe {
+        let data = slice::from_raw_parts(data_ptr, len as usize);
+        if let Some(db) = VectorDatabase::deserialize(data) {
+            VECTOR_DB = Some(db);
+            0
+        } else {
+            -1
+        }
     }
 }
 
@@ -941,5 +1152,72 @@ mod tests {
 
         let recs = engine.get_recommendations(&candidates, 5);
         assert!(recs.len() <= 5);
+    }
+
+    #[test]
+    fn test_hnsw_persistence() {
+        // Create and populate index
+        let mut index = HnswIndex::with_defaults(4, DistanceMetric::Euclidean);
+        for i in 0..20u64 {
+            index.insert(i, vec![i as f32, 0.0, 0.0, 0.0]);
+        }
+        assert_eq!(index.len(), 20);
+
+        // Serialize
+        let bytes = index.serialize();
+        assert!(!bytes.is_empty());
+
+        // Deserialize
+        let restored = HnswIndex::deserialize(&bytes).unwrap();
+        assert_eq!(restored.len(), 20);
+
+        // Verify search still works
+        let results = restored.search(&[10.0, 0.0, 0.0, 0.0], 3);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_vector_database_persistence() {
+        // Create and populate database
+        let mut db = VectorDatabase::new(4, DistanceMetric::Cosine, QuantizationMode::Scalar);
+        for i in 0..10u64 {
+            db.insert(i, vec![i as f32 / 10.0, 0.5, 0.5, 0.0]);
+        }
+        assert_eq!(db.len(), 10);
+
+        // Serialize
+        let bytes = db.serialize();
+        assert!(!bytes.is_empty());
+        assert!(bytes.len() < 10000); // Sanity check
+
+        // Deserialize
+        let restored = VectorDatabase::deserialize(&bytes).unwrap();
+        assert_eq!(restored.len(), 10);
+
+        // Verify search still works
+        let results = restored.search(&[0.5, 0.5, 0.5, 0.0], 3);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_quantization_persistence() {
+        // Scalar quantization
+        let vector = vec![0.1, 0.5, 0.9, 0.0];
+        let sq = ScalarQuantized::quantize(&vector);
+        let sq_bytes = sq.serialize();
+        let sq_restored = ScalarQuantized::deserialize(&sq_bytes).unwrap();
+
+        let original = sq.reconstruct();
+        let restored = sq_restored.reconstruct();
+        for (a, b) in original.iter().zip(restored.iter()) {
+            assert!((a - b).abs() < 0.01);
+        }
+
+        // Binary quantization
+        let bq = BinaryQuantized::quantize(&vector);
+        let bq_bytes = bq.serialize();
+        let bq_restored = BinaryQuantized::deserialize(&bq_bytes).unwrap();
+        assert_eq!(bq.dimensions, bq_restored.dimensions);
+        assert_eq!(bq.bits, bq_restored.bits);
     }
 }

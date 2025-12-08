@@ -387,6 +387,184 @@ impl HnswIndex {
             .and_then(|&idx| self.nodes.get(idx))
             .map(|n| n.vector.as_slice())
     }
+
+    // ============================================
+    // Persistence
+    // ============================================
+
+    /// Serialize the HNSW index to bytes
+    ///
+    /// Format:
+    /// - Header (32 bytes): dim, metric, m, m_max_0, ef_construction, ef_search, max_level, node_count
+    /// - For each node: id (8), level (4), vector (dim*4), connections per layer
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Header
+        bytes.extend_from_slice(&(self.dim as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.metric as u8).to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 3]); // padding
+        bytes.extend_from_slice(&(self.config.m as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.config.m_max_0 as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.config.ef_construction as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.config.ef_search as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.max_level as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.nodes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&self.entry_point.map(|e| e as u32).unwrap_or(u32::MAX).to_le_bytes());
+
+        // Nodes
+        for node in &self.nodes {
+            // Node header: id, level
+            bytes.extend_from_slice(&node.id.to_le_bytes());
+            bytes.extend_from_slice(&(node.level as u32).to_le_bytes());
+
+            // Vector
+            for &v in &node.vector {
+                bytes.extend_from_slice(&v.to_le_bytes());
+            }
+
+            // Connections: count per layer, then connection IDs
+            bytes.extend_from_slice(&(node.connections.len() as u32).to_le_bytes());
+            for layer_conns in &node.connections {
+                bytes.extend_from_slice(&(layer_conns.len() as u32).to_le_bytes());
+                for &conn_id in layer_conns {
+                    bytes.extend_from_slice(&conn_id.to_le_bytes());
+                }
+            }
+        }
+
+        bytes
+    }
+
+    /// Deserialize HNSW index from bytes
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 36 {
+            return None;
+        }
+
+        let mut offset = 0;
+
+        // Read header
+        let dim = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let metric = DistanceMetric::from_u8(bytes[4]);
+        offset = 8;
+
+        let m = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let m_max_0 = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let ef_construction = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let ef_search = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let max_level = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let node_count = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+        let entry_point_raw = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]);
+        offset += 4;
+        let entry_point = if entry_point_raw == u32::MAX { None } else { Some(entry_point_raw as usize) };
+
+        let config = HnswConfig {
+            m,
+            m_max_0,
+            ef_construction,
+            ef_search,
+            level_mult: 1.0 / (m as f32).ln(),
+        };
+
+        let mut nodes = Vec::with_capacity(node_count);
+        let mut id_to_idx = std::collections::HashMap::new();
+
+        for node_idx in 0..node_count {
+            if offset + 12 > bytes.len() {
+                return None;
+            }
+
+            // Node header
+            let id = u64::from_le_bytes([
+                bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+            ]);
+            offset += 8;
+            let level = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+
+            // Vector
+            let mut vector = Vec::with_capacity(dim);
+            for _ in 0..dim {
+                if offset + 4 > bytes.len() {
+                    return None;
+                }
+                let v = f32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]);
+                vector.push(v);
+                offset += 4;
+            }
+
+            // Connections
+            if offset + 4 > bytes.len() {
+                return None;
+            }
+            let num_layers = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+
+            let mut connections = Vec::with_capacity(num_layers);
+            for _ in 0..num_layers {
+                if offset + 4 > bytes.len() {
+                    return None;
+                }
+                let num_conns = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+                offset += 4;
+
+                let mut layer_conns = Vec::with_capacity(num_conns);
+                for _ in 0..num_conns {
+                    if offset + 8 > bytes.len() {
+                        return None;
+                    }
+                    let conn_id = u64::from_le_bytes([
+                        bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                        bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+                    ]);
+                    layer_conns.push(conn_id);
+                    offset += 8;
+                }
+                connections.push(layer_conns);
+            }
+
+            id_to_idx.insert(id, node_idx);
+            nodes.push(HnswNode {
+                id,
+                vector,
+                connections,
+                level,
+            });
+        }
+
+        Some(Self {
+            nodes,
+            id_to_idx,
+            entry_point,
+            max_level,
+            config,
+            metric,
+            dim,
+            seed: 12345,
+        })
+    }
+
+    /// Estimate serialized size in bytes
+    pub fn serialized_size(&self) -> usize {
+        let mut size = 36; // Header
+        for node in &self.nodes {
+            size += 12; // id + level
+            size += node.vector.len() * 4; // vector
+            size += 4; // num_layers
+            for layer in &node.connections {
+                size += 4 + layer.len() * 8; // count + connection IDs
+            }
+        }
+        size
+    }
 }
 
 // ============================================
