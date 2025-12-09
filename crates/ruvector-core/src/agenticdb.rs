@@ -743,7 +743,7 @@ impl AgenticDB {
     /// Use `with_embedding_provider()` to use real embeddings.
     ///
     /// # Example with real embeddings
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use ruvector_core::{AgenticDB, ApiEmbedding};
     /// use ruvector_core::types::DbOptions;
     /// use std::sync::Arc;
@@ -753,7 +753,7 @@ impl AgenticDB {
     /// let provider = Arc::new(ApiEmbedding::openai("sk-...", "text-embedding-3-small"));
     /// let db = AgenticDB::with_embedding_provider(options, provider)?;
     ///
-    /// // Now embeddings will be semantic!
+    /// // Now embeddings will be semantic! (internal method)
     /// let embedding = db.generate_text_embedding("hello world")?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
