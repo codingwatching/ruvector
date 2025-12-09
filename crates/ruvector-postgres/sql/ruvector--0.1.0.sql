@@ -695,3 +695,116 @@ COMMENT ON FUNCTION graph_pagerank_base(int, real) IS 'Initialize PageRank base 
 COMMENT ON FUNCTION graph_is_connected(real[], real[], real) IS 'Check if vectors are semantically connected';
 COMMENT ON FUNCTION graph_centroid_update(real[], real[], real) IS 'Update centroid with neighbor contribution';
 COMMENT ON FUNCTION graph_bipartite_score(real[], real[], real) IS 'Compute bipartite matching score for RAG';
+-- ============================================================================
+-- ============================================================================
+-- Embedding Generation Functions
+-- ============================================================================
+
+-- Generate embedding from text using default or specified model
+CREATE OR REPLACE FUNCTION ruvector_embed(text text, model_name text DEFAULT 'all-MiniLM-L6-v2')
+RETURNS real[]
+AS 'MODULE_PATHNAME', 'ruvector_embed_wrapper'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- Generate embeddings for multiple texts in batch
+CREATE OR REPLACE FUNCTION ruvector_embed_batch(texts text[], model_name text DEFAULT 'all-MiniLM-L6-v2')
+RETURNS real[][]
+AS 'MODULE_PATHNAME', 'ruvector_embed_batch_wrapper'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- List all available embedding models
+CREATE OR REPLACE FUNCTION ruvector_embedding_models()
+RETURNS TABLE (
+    model_name text,
+    dimensions integer,
+    description text,
+    is_loaded boolean
+)
+AS 'MODULE_PATHNAME', 'ruvector_embedding_models_wrapper'
+LANGUAGE C IMMUTABLE STRICT;
+
+-- Load embedding model into memory
+CREATE OR REPLACE FUNCTION ruvector_load_model(model_name text)
+RETURNS boolean
+AS 'MODULE_PATHNAME', 'ruvector_load_model_wrapper'
+LANGUAGE C STRICT;
+
+-- Unload embedding model from memory
+CREATE OR REPLACE FUNCTION ruvector_unload_model(model_name text)
+RETURNS boolean
+AS 'MODULE_PATHNAME', 'ruvector_unload_model_wrapper'
+LANGUAGE C STRICT;
+
+-- Get information about a specific model
+CREATE OR REPLACE FUNCTION ruvector_model_info(model_name text)
+RETURNS jsonb
+AS 'MODULE_PATHNAME', 'ruvector_model_info_wrapper'
+LANGUAGE C IMMUTABLE STRICT;
+
+-- Set default embedding model
+CREATE OR REPLACE FUNCTION ruvector_set_default_model(model_name text)
+RETURNS boolean
+AS 'MODULE_PATHNAME', 'ruvector_set_default_model_wrapper'
+LANGUAGE C STRICT;
+
+-- Get current default embedding model
+CREATE OR REPLACE FUNCTION ruvector_default_model()
+RETURNS text
+AS 'MODULE_PATHNAME', 'ruvector_default_model_wrapper'
+LANGUAGE C IMMUTABLE STRICT;
+
+-- Get embedding generation statistics
+CREATE OR REPLACE FUNCTION ruvector_embedding_stats()
+RETURNS jsonb
+AS 'MODULE_PATHNAME', 'ruvector_embedding_stats_wrapper'
+LANGUAGE C IMMUTABLE STRICT;
+
+-- Get dimensions for a specific model
+CREATE OR REPLACE FUNCTION ruvector_embedding_dims(model_name text)
+RETURNS integer
+AS 'MODULE_PATHNAME', 'ruvector_embedding_dims_wrapper'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- ============================================================================
+-- HNSW Access Method
+-- ============================================================================
+
+-- HNSW Access Method Handler
+CREATE OR REPLACE FUNCTION hnsw_handler(internal)
+RETURNS index_am_handler
+AS 'MODULE_PATHNAME', 'hnsw_handler_wrapper'
+LANGUAGE C STRICT;
+
+-- Create HNSW Access Method
+CREATE ACCESS METHOD hnsw TYPE INDEX HANDLER hnsw_handler;
+
+-- ============================================================================
+-- Operator Classes for HNSW
+-- ============================================================================
+
+-- HNSW Operator Class for L2 (Euclidean) distance
+CREATE OPERATOR CLASS ruvector_l2_ops
+    DEFAULT FOR TYPE ruvector USING hnsw AS
+    OPERATOR 1 <-> (ruvector, ruvector) FOR ORDER BY float_ops,
+    FUNCTION 1 ruvector_l2_distance(ruvector, ruvector);
+
+COMMENT ON OPERATOR CLASS ruvector_l2_ops USING hnsw IS
+'ruvector HNSW operator class for L2/Euclidean distance';
+
+-- HNSW Operator Class for Cosine distance
+CREATE OPERATOR CLASS ruvector_cosine_ops
+    FOR TYPE ruvector USING hnsw AS
+    OPERATOR 1 <=> (ruvector, ruvector) FOR ORDER BY float_ops,
+    FUNCTION 1 ruvector_cosine_distance(ruvector, ruvector);
+
+COMMENT ON OPERATOR CLASS ruvector_cosine_ops USING hnsw IS
+'ruvector HNSW operator class for cosine distance';
+
+-- HNSW Operator Class for Inner Product
+CREATE OPERATOR CLASS ruvector_ip_ops
+    FOR TYPE ruvector USING hnsw AS
+    OPERATOR 1 <#> (ruvector, ruvector) FOR ORDER BY float_ops,
+    FUNCTION 1 ruvector_inner_product(ruvector, ruvector);
+
+COMMENT ON OPERATOR CLASS ruvector_ip_ops USING hnsw IS
+'ruvector HNSW operator class for inner product (max similarity)';
