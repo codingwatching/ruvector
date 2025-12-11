@@ -138,6 +138,34 @@ impl TrmEngine {
         pooled
     }
 
+    /// Mean pool an embedding into a pre-allocated buffer (avoids allocation)
+    fn mean_pool_into(&self, input: &[f32], output: &mut [f32]) {
+        let target_dim = output.len();
+
+        if input.len() == target_dim {
+            output.copy_from_slice(input);
+            return;
+        }
+
+        if input.len() < target_dim {
+            output[..input.len()].copy_from_slice(input);
+            output[input.len()..].fill(0.0);
+            return;
+        }
+
+        output.fill(0.0);
+        let num_chunks = input.len() / target_dim;
+        let scale = 1.0 / num_chunks as f32;
+
+        for chunk in input.chunks(target_dim) {
+            for (i, &v) in chunk.iter().enumerate() {
+                if i < target_dim {
+                    output[i] += v * scale;
+                }
+            }
+        }
+    }
+
     /// Run a single latent update iteration
     fn latent_update_step(
         &self,
@@ -157,13 +185,16 @@ impl TrmEngine {
     ) -> TrmResult {
         let start_time = Instant::now();
 
-        // Initialize trajectory
+        // Initialize trajectory - pool question once (doesn't change)
         let question_pooled = self.mean_pool(question, self.config.embedding_dim);
         let mut trajectory = TrmTrajectory::new(question_pooled.clone());
 
-        // Initialize latent state
-        let mut latent = self.latent_buffer.clone();
+        // Initialize latent state - reuse buffer
+        let mut latent = std::mem::take(&mut self.latent_buffer);
         latent.fill(0.0);
+
+        // Pre-allocate answer pooling buffer to avoid repeated allocations
+        let mut answer_pooled = vec![0.0; self.config.embedding_dim];
 
         let mut prev_confidence = 0.0;
         let mut early_stopped = false;
@@ -173,8 +204,8 @@ impl TrmEngine {
         for k in 0..k_iterations {
             let iter_start = Instant::now();
 
-            // Pool current answer
-            let answer_pooled = self.mean_pool(answer, self.config.embedding_dim);
+            // Pool current answer into pre-allocated buffer
+            self.mean_pool_into(answer, &mut answer_pooled);
 
             // N latent update iterations
             for _ in 0..self.config.latent_iterations {
@@ -227,6 +258,9 @@ impl TrmEngine {
 
             prev_confidence = confidence;
         }
+
+        // Restore latent buffer for reuse
+        self.latent_buffer = latent;
 
         let total_latency = start_time.elapsed().as_micros() as u64;
         let final_confidence = trajectory.final_confidence();

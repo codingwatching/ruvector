@@ -159,10 +159,12 @@ impl MlpLatentUpdater {
         }
     }
 
-    /// Sigmoid activation
+    /// Sigmoid activation with NaN protection
     fn sigmoid_inplace(data: &mut [f32]) {
         for x in data.iter_mut() {
-            *x = 1.0 / (1.0 + (-*x).exp());
+            // Clamp to prevent overflow in exp()
+            let clamped = (*x).clamp(-20.0, 20.0);
+            *x = 1.0 / (1.0 + (-clamped).exp());
         }
     }
 

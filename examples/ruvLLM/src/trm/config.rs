@@ -38,7 +38,8 @@ pub struct TrmConfig {
     /// Confidence threshold for early stopping
     pub confidence_threshold: f32,
 
-    /// Enable SIMD optimizations
+    /// Enable SIMD optimizations (reserved for future use)
+    #[serde(default)]
     pub use_simd: bool,
 
     /// Residual scale for answer refinement

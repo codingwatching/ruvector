@@ -107,8 +107,9 @@ impl ConfidenceScorer {
             output += hidden_buffer[i] * self.w2[i];
         }
 
-        // Sigmoid to bound in [0, 1]
-        1.0 / (1.0 + (-output).exp())
+        // Sigmoid to bound in [0, 1] with NaN protection
+        let clamped = output.clamp(-20.0, 20.0);
+        1.0 / (1.0 + (-clamped).exp())
     }
 
     /// Score with additional entropy-based adjustment
