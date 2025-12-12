@@ -37,9 +37,7 @@ members = [
     "examples/ruvLLM",
     "crates/sona",
     "crates/rvlite",
-    # WASM App Store & Payments
-    "crates/agentic-payments",
-    "crates/agentic-payments-wasm",
+    # WASM App Store (uses agentic-payments from crates.io)
     "crates/wasm-app-store",
     "crates/wasm-app-store-wasm",
 ]
@@ -122,6 +120,9 @@ flate2 = "1.0"
 
 # Serialization extensions
 serde_bytes = "0.11"
+
+# Agentic Payments (from crates.io)
+agentic-payments = { version = "0.1.0", features = ["async-runtime"] }
 
 [profile.release]
 opt-level = 3

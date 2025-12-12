@@ -46,7 +46,8 @@
     "url": "https://github.com/ruvnet/ruvector/issues"
   },
   "dependencies": {
-    "@ruvector/agentic-payments": "^0.1.0"
+    "@ruvector/agentic-payments": "^0.1.1",
+    "agentic-payments": "^0.1.13"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

@@ -23,8 +23,8 @@ verification = ["ed25519-dalek"]
 full = ["std", "payments", "verification"]
 
 [dependencies]
-# Internal dependencies
-agentic-payments = { path = "../agentic-payments", optional = true }
+# External agentic-payments from crates.io
+agentic-payments = { workspace = true, optional = true }
 
 # Serialization
 serde = { workspace = true }
@@ -48,6 +48,7 @@ sha2 = "0.10"
 ed25519-dalek = { version = "2.1", optional = true }
 hex = "0.4"
 serde_bytes = "0.11"
+rand = { workspace = true }
 
 # Compression
 flate2 = "1.0"
