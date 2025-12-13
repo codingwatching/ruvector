@@ -1,0 +1,45 @@
+{
+	"id": 16,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-item-9395-15",
+		"title": "BookWorld Pro Sweater",
+		"price": 529.14,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "BookWorld",
+		"rating": 3.1,
+		"reviewCount": 1609,
+		"inStock": true,
+		"stockCount": 107,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller247",
+			"rating": 3.6,
+			"totalSales": 11070
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 10.62
+		},
+		"images": [
+			"https://example-store.com/images/product-15-0.jpg",
+			"https://example-store.com/images/product-15-1.jpg",
+			"https://example-store.com/images/product-15-2.jpg"
+		],
+		"specifications": {
+			"material": "Cotton",
+			"size": "XL"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

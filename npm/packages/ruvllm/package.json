@@ -1,7 +1,7 @@
 {
   "name": "@ruvector/ruvllm",
-  "version": "0.2.2",
-  "description": "Self-learning LLM orchestration with SONA adaptive learning, HNSW memory, FastGRNN routing, and SIMD inference",
+  "version": "0.2.3",
+  "description": "Self-learning LLM orchestration with TRM recursive reasoning, SONA adaptive learning, HNSW memory, FastGRNN routing, and SIMD inference",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/cjs/index.d.ts",
@@ -65,17 +65,20 @@
     "ora": "^5.4.1"
   },
   "optionalDependencies": {
-    "@ruvector/ruvllm-linux-x64-gnu": "0.2.0",
-    "@ruvector/ruvllm-linux-arm64-gnu": "0.2.0",
-    "@ruvector/ruvllm-darwin-x64": "0.2.0",
-    "@ruvector/ruvllm-darwin-arm64": "0.2.0",
-    "@ruvector/ruvllm-win32-x64-msvc": "0.2.0"
+    "@ruvector/ruvllm-linux-x64-gnu": "0.2.3",
+    "@ruvector/ruvllm-linux-arm64-gnu": "0.2.3",
+    "@ruvector/ruvllm-darwin-x64": "0.2.3",
+    "@ruvector/ruvllm-darwin-arm64": "0.2.3",
+    "@ruvector/ruvllm-win32-x64-msvc": "0.2.3"
   },
   "keywords": [
     "ruvllm",
     "llm",
     "self-learning",
     "adaptive-learning",
+    "trm",
+    "tiny-recursive-models",
+    "recursive-reasoning",
     "sona",
     "lora",
     "ewc",

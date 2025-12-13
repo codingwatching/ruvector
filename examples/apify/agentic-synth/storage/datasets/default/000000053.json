@@ -1,0 +1,46 @@
+{
+	"id": 53,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/top-item-2059-52",
+		"title": "KidsFun Smart Charger",
+		"price": 671.21,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "KidsFun",
+		"rating": 4.5,
+		"reviewCount": 1030,
+		"inStock": false,
+		"stockCount": 408,
+		"condition": "New",
+		"seller": {
+			"name": "Seller545",
+			"rating": 3.8,
+			"totalSales": 14214
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 5,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-52-0.jpg",
+			"https://example-store.com/images/product-52-1.jpg",
+			"https://example-store.com/images/product-52-2.jpg"
+		],
+		"specifications": {
+			"battery": "1813mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

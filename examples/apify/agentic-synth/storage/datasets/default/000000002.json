@@ -1,0 +1,45 @@
+{
+	"id": 2,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/amazing-article-365-1",
+		"title": "KidsFun Advanced Sweater",
+		"price": 529.11,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "KidsFun",
+		"rating": 4,
+		"reviewCount": 4618,
+		"inStock": true,
+		"stockCount": 497,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller354",
+			"rating": 4.4,
+			"totalSales": 46686
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-1-0.jpg",
+			"https://example-store.com/images/product-1-1.jpg",
+			"https://example-store.com/images/product-1-2.jpg"
+		],
+		"specifications": {
+			"material": "Polyester",
+			"size": "L"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.914Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

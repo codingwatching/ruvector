@@ -1,0 +1,45 @@
+{
+	"id": 39,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-guide-6669-38",
+		"title": "GlowUp Wireless Adapter",
+		"price": 931.39,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "GlowUp",
+		"rating": 3.7,
+		"reviewCount": 4933,
+		"inStock": true,
+		"stockCount": 111,
+		"condition": "New",
+		"seller": {
+			"name": "Seller606",
+			"rating": 4,
+			"totalSales": 38876
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 6,
+			"price": 1.67
+		},
+		"images": [
+			"https://example-store.com/images/product-38-0.jpg",
+			"https://example-store.com/images/product-38-1.jpg"
+		],
+		"specifications": {
+			"battery": "4696mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

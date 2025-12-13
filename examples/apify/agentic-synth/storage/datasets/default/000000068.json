@@ -1,0 +1,44 @@
+{
+	"id": 68,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/pro-item-4633-67",
+		"title": "KidsFun Portable Organizer",
+		"price": 256.02,
+		"originalPrice": 345.4,
+		"currency": "USD",
+		"category": "Home & Garden",
+		"brand": "KidsFun",
+		"rating": 3.5,
+		"reviewCount": 4961,
+		"inStock": true,
+		"stockCount": 229,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller978",
+			"rating": 4,
+			"totalSales": 9626
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 8,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-67-0.jpg",
+			"https://example-store.com/images/product-67-1.jpg"
+		],
+		"specifications": {
+			"dimensions": "46x22cm",
+			"weight": "3kg"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

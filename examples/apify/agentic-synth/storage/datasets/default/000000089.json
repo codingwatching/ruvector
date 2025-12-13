@@ -1,0 +1,44 @@
+{
+	"id": 89,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/premium-offer-2193-88",
+		"title": "AutoParts Smart Dress",
+		"price": 591.6,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "AutoParts",
+		"rating": 3.9,
+		"reviewCount": 333,
+		"inStock": false,
+		"stockCount": 274,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller824",
+			"rating": 4.4,
+			"totalSales": 38182
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 5,
+			"price": 11.98
+		},
+		"images": [
+			"https://example-store.com/images/product-88-0.jpg",
+			"https://example-store.com/images/product-88-1.jpg"
+		],
+		"specifications": {
+			"material": "Polyester",
+			"size": "S"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

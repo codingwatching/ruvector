@@ -1,0 +1,45 @@
+{
+	"id": 92,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/new-guide-5113-91",
+		"title": "GlowUp Ultra Mouse",
+		"price": 727.74,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "GlowUp",
+		"rating": 4.7,
+		"reviewCount": 419,
+		"inStock": false,
+		"stockCount": 49,
+		"condition": "New",
+		"seller": {
+			"name": "Seller527",
+			"rating": 4.7,
+			"totalSales": 46585
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 6,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-91-0.jpg",
+			"https://example-store.com/images/product-91-1.jpg"
+		],
+		"specifications": {
+			"battery": "1874mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

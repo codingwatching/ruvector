@@ -1,0 +1,46 @@
+{
+	"id": 14,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/max-deal-404-13",
+		"title": "HomeEssentials Ultra Cable",
+		"price": 487.4,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "HomeEssentials",
+		"rating": 3.6,
+		"reviewCount": 2626,
+		"inStock": false,
+		"stockCount": 473,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller383",
+			"rating": 3.7,
+			"totalSales": 17361
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 1.05
+		},
+		"images": [
+			"https://example-store.com/images/product-13-0.jpg",
+			"https://example-store.com/images/product-13-1.jpg",
+			"https://example-store.com/images/product-13-2.jpg"
+		],
+		"specifications": {
+			"battery": "1999mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

@@ -1,0 +1,469 @@
+{
+  "title": "Self-Learning Postgres DB Input",
+  "description": "A distributed vector database that learns. 30+ operations including semantic search, batch operations, RAG queries, clustering, deduplication, and GNN training.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string",
+      "description": "The operation to perform on the vector database",
+      "default": "full_workflow",
+      "enum": [
+        "full_workflow",
+        "search",
+        "insert",
+        "batch_insert",
+        "get",
+        "list",
+        "update",
+        "delete",
+        "upsert",
+        "hybrid_search",
+        "multi_query_search",
+        "mmr_search",
+        "graph_search",
+        "range_search",
+        "batch_search",
+        "create_table",
+        "drop_table",
+        "list_tables",
+        "table_stats",
+        "create_index",
+        "reindex",
+        "train_gnn",
+        "optimize_index",
+        "analyze_patterns",
+        "sona_learn",
+        "sona_status",
+        "cluster",
+        "find_duplicates",
+        "deduplicate",
+        "export",
+        "import",
+        "rag_query",
+        "summarize",
+        "ping",
+        "version",
+        "embedding_models",
+        "generate_embedding",
+        "similarity"
+      ],
+      "enumTitles": [
+        "Full Workflow - Demo: create + insert + search",
+        "Search - Semantic similarity search",
+        "Insert - Add documents with embeddings",
+        "Batch Insert - Add many documents efficiently",
+        "Get - Retrieve single document by ID",
+        "List - List documents with filters",
+        "Update - Modify existing document",
+        "Delete - Remove documents",
+        "Upsert - Insert or update documents",
+        "Hybrid Search - Vector + keyword combined",
+        "Multi Query Search - Multiple queries aggregated",
+        "MMR Search - Diverse results (Maximal Marginal Relevance)",
+        "Graph Search - Graph-based similarity",
+        "Range Search - All results within distance",
+        "Batch Search - Multiple queries at once",
+        "Create Table - Create new collection",
+        "Drop Table - Delete collection",
+        "List Tables - Show all vector collections",
+        "Table Stats - Collection statistics",
+        "Create Index - Add HNSW/IVFFlat index",
+        "Reindex - Rebuild indexes",
+        "Train GNN - Train Graph Neural Network",
+        "Optimize Index - Auto-tune parameters",
+        "Analyze Patterns - Analyze data patterns",
+        "SONA Learn - Trigger TRM/SONA self-learning cycle",
+        "SONA Status - Check SONA learning status",
+        "Cluster - K-means clustering",
+        "Find Duplicates - Detect similar documents",
+        "Deduplicate - Remove duplicates",
+        "Export - Export data to JSON/CSV",
+        "Import - Import data from JSON",
+        "RAG Query - Retrieval-Augmented Generation",
+        "Summarize - Document statistics",
+        "Ping - Test database connection",
+        "Version - Get version info",
+        "Embedding Models - List available models",
+        "Generate Embedding - Create embeddings only",
+        "Similarity - Compare two texts"
+      ],
+      "editor": "select",
+      "prefill": "full_workflow",
+      "sectionCaption": "Core Settings",
+      "sectionDescription": "Choose the operation to perform"
+    },
+    "connectionString": {
+      "title": "Database Connection",
+      "type": "string",
+      "description": "PostgreSQL connection URL. Leave empty for embedded database (non-persistent). For persistent storage, use your own PostgreSQL with ruvector/pgvector extension.",
+      "editor": "textfield",
+      "isSecret": true,
+      "nullable": true,
+      "example": "postgresql://user:password@host:5432/database"
+    },
+    "tableName": {
+      "title": "Table/Collection Name",
+      "type": "string",
+      "description": "Name of the vector table (collection)",
+      "default": "documents",
+      "editor": "textfield"
+    },
+    "query": {
+      "title": "Search Query",
+      "type": "string",
+      "description": "Natural language query for semantic search. The AI understands meaning, not just keywords.",
+      "editor": "textarea",
+      "example": "How does machine learning work?",
+      "sectionCaption": "Search Settings"
+    },
+    "queryVector": {
+      "title": "Query Vector",
+      "type": "array",
+      "description": "Pre-computed embedding vector (alternative to query text). Use with external embedding APIs.",
+      "editor": "json",
+      "nullable": true
+    },
+    "documents": {
+      "title": "Documents",
+      "type": "array",
+      "description": "Documents to insert. Each should have 'content' and optional 'metadata' and 'embedding'.",
+      "editor": "json",
+      "prefill": [
+        {"content": "Machine learning is a type of AI that learns patterns from data to make predictions.", "metadata": {"category": "AI"}},
+        {"content": "PostgreSQL is a powerful open-source relational database.", "metadata": {"category": "Database"}},
+        {"content": "Neural networks are inspired by the human brain and consist of layers of nodes.", "metadata": {"category": "AI"}},
+        {"content": "Vector databases store data as mathematical embeddings for similarity search.", "metadata": {"category": "Database"}}
+      ],
+      "sectionCaption": "Document Input"
+    },
+    "topK": {
+      "title": "Number of Results",
+      "type": "integer",
+      "description": "Maximum number of results to return",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 1000,
+      "editor": "number"
+    },
+    "distanceMetric": {
+      "title": "Distance Metric",
+      "type": "string",
+      "description": "How to measure vector similarity",
+      "default": "cosine",
+      "enum": ["cosine", "l2", "inner_product", "manhattan"],
+      "enumTitles": [
+        "Cosine - Angular similarity (recommended)",
+        "L2 (Euclidean) - Straight-line distance",
+        "Inner Product - Dot product",
+        "Manhattan (L1) - City-block distance"
+      ],
+      "editor": "select"
+    },
+    "filter": {
+      "title": "Filter",
+      "type": "string",
+      "description": "SQL WHERE clause for filtering. Example: metadata->>'category' = 'AI'",
+      "editor": "textfield",
+      "nullable": true,
+      "example": "metadata->>'category' = 'AI'"
+    },
+    "minScore": {
+      "title": "Minimum Score",
+      "type": "number",
+      "description": "Minimum similarity score threshold (0-1)",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 1,
+      "editor": "number"
+    },
+    "maxDistance": {
+      "title": "Maximum Distance",
+      "type": "number",
+      "description": "Maximum distance threshold for range search",
+      "nullable": true,
+      "editor": "number"
+    },
+    "includeEmbeddings": {
+      "title": "Include Embeddings",
+      "type": "boolean",
+      "description": "Include embedding vectors in results (increases response size)",
+      "default": false
+    },
+    "includeMetadata": {
+      "title": "Include Metadata",
+      "type": "boolean",
+      "description": "Include metadata in results",
+      "default": true
+    },
+    "embeddingModel": {
+      "title": "Embedding Model",
+      "type": "string",
+      "description": "AI model for generating text embeddings. No API key needed - runs locally!",
+      "default": "all-MiniLM-L6-v2",
+      "enum": [
+        "all-MiniLM-L6-v2",
+        "bge-small-en-v1.5",
+        "bge-base-en-v1.5",
+        "nomic-embed-text-v1",
+        "gte-small",
+        "e5-small-v2"
+      ],
+      "enumTitles": [
+        "all-MiniLM-L6-v2 (384d) - Fast, general purpose",
+        "bge-small-en-v1.5 (384d) - MTEB benchmark #1",
+        "bge-base-en-v1.5 (768d) - Higher accuracy",
+        "nomic-embed-text-v1 (768d) - Long documents (8K)",
+        "gte-small (384d) - Good quality, fast",
+        "e5-small-v2 (384d) - Multilingual"
+      ],
+      "editor": "select",
+      "sectionCaption": "Embedding Settings"
+    },
+    "generateEmbeddings": {
+      "title": "Generate Embeddings",
+      "type": "boolean",
+      "description": "Auto-generate embeddings for documents without them",
+      "default": true
+    },
+    "dimensions": {
+      "title": "Vector Dimensions",
+      "type": "integer",
+      "description": "Embedding dimensions (384 for MiniLM/BGE-small, 768 for larger models)",
+      "default": 384,
+      "minimum": 64,
+      "maximum": 4096,
+      "editor": "number"
+    },
+    "indexType": {
+      "title": "Index Type",
+      "type": "string",
+      "description": "Vector index algorithm for faster search",
+      "default": "hnsw",
+      "enum": ["hnsw", "ivfflat", "none"],
+      "enumTitles": [
+        "HNSW - Fastest search, uses more memory",
+        "IVFFlat - Balanced speed and memory",
+        "None - No index, exact search"
+      ],
+      "editor": "select",
+      "sectionCaption": "Index Settings"
+    },
+    "hnswM": {
+      "title": "HNSW M Parameter",
+      "type": "integer",
+      "description": "Max connections per node. Higher = better recall, more memory",
+      "default": 16,
+      "minimum": 4,
+      "maximum": 64,
+      "editor": "number"
+    },
+    "hnswEfConstruction": {
+      "title": "HNSW ef_construction",
+      "type": "integer",
+      "description": "Index build quality. Higher = better index, slower build",
+      "default": 64,
+      "minimum": 16,
+      "maximum": 512,
+      "editor": "number"
+    },
+    "hnswEfSearch": {
+      "title": "HNSW ef_search",
+      "type": "integer",
+      "description": "Search quality. Higher = better recall, slower search",
+      "default": 100,
+      "minimum": 16,
+      "maximum": 512,
+      "editor": "number"
+    },
+    "ivfLists": {
+      "title": "IVF Lists",
+      "type": "integer",
+      "description": "Number of IVF partitions for IVFFlat index",
+      "default": 100,
+      "minimum": 10,
+      "maximum": 1000,
+      "editor": "number"
+    },
+    "hybridWeight": {
+      "title": "Hybrid Weight",
+      "type": "number",
+      "description": "Balance between vector (1.0) and keyword (0.0) search",
+      "default": 0.7,
+      "minimum": 0,
+      "maximum": 1,
+      "editor": "number",
+      "sectionCaption": "Hybrid Search"
+    },
+    "batchSize": {
+      "title": "Batch Size",
+      "type": "integer",
+      "description": "Documents per batch for batch operations",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 1000,
+      "editor": "number",
+      "sectionCaption": "Batch Settings"
+    },
+    "documentId": {
+      "title": "Document ID",
+      "type": "integer",
+      "description": "Single document ID for get/update/delete operations",
+      "nullable": true,
+      "editor": "number",
+      "sectionCaption": "Document Operations"
+    },
+    "documentIds": {
+      "title": "Document IDs",
+      "type": "array",
+      "description": "Multiple document IDs for batch delete",
+      "editor": "json",
+      "nullable": true
+    },
+    "updates": {
+      "title": "Updates",
+      "type": "object",
+      "description": "Fields to update: {content, metadata, embedding}",
+      "editor": "json",
+      "nullable": true
+    },
+    "enableLearning": {
+      "title": "Enable Learning",
+      "type": "boolean",
+      "description": "Enable self-learning index optimization",
+      "default": false,
+      "sectionCaption": "Self-Learning / GNN"
+    },
+    "learningRate": {
+      "title": "Learning Rate",
+      "type": "number",
+      "description": "GNN training learning rate",
+      "default": 0.01,
+      "minimum": 0.0001,
+      "maximum": 1,
+      "editor": "number"
+    },
+    "gnnLayers": {
+      "title": "GNN Layers",
+      "type": "integer",
+      "description": "Number of Graph Neural Network layers",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 10,
+      "editor": "number"
+    },
+    "trainEpochs": {
+      "title": "Training Epochs",
+      "type": "integer",
+      "description": "Number of GNN training epochs",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "editor": "number"
+    },
+    "numClusters": {
+      "title": "Number of Clusters",
+      "type": "integer",
+      "description": "K-means cluster count",
+      "default": 10,
+      "minimum": 2,
+      "maximum": 100,
+      "editor": "number",
+      "sectionCaption": "Clustering & Deduplication"
+    },
+    "clusteringAlgorithm": {
+      "title": "Clustering Algorithm",
+      "type": "string",
+      "description": "Clustering method",
+      "default": "kmeans",
+      "enum": ["kmeans", "hierarchical"],
+      "editor": "select"
+    },
+    "similarityThreshold": {
+      "title": "Similarity Threshold",
+      "type": "number",
+      "description": "Threshold for duplicate detection (0-1, higher = stricter)",
+      "default": 0.95,
+      "minimum": 0.5,
+      "maximum": 1,
+      "editor": "number"
+    },
+    "exportFormat": {
+      "title": "Export Format",
+      "type": "string",
+      "description": "Data export format",
+      "default": "json",
+      "enum": ["json", "csv"],
+      "editor": "select",
+      "sectionCaption": "Export/Import"
+    },
+    "importData": {
+      "title": "Import Data",
+      "type": "array",
+      "description": "Data to import (array of documents with content and optional metadata)",
+      "editor": "json",
+      "nullable": true
+    },
+    "ragMaxTokens": {
+      "title": "RAG Max Tokens",
+      "type": "integer",
+      "description": "Maximum context tokens for RAG query",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 10000,
+      "editor": "number",
+      "sectionCaption": "RAG Settings"
+    },
+    "ragContext": {
+      "title": "RAG Context",
+      "type": "string",
+      "description": "Additional context to prepend to RAG results",
+      "editor": "textarea",
+      "nullable": true
+    },
+    "sonaEnabled": {
+      "title": "Enable SONA Learning",
+      "type": "boolean",
+      "description": "Enable TRM/SONA self-learning with trajectory tracking and pattern recognition",
+      "default": true,
+      "sectionCaption": "SONA / TRM Self-Learning",
+      "sectionDescription": "Self-Optimizing Neural Architecture with Tiny Recursive Models"
+    },
+    "ewcLambda": {
+      "title": "EWC Lambda",
+      "type": "number",
+      "description": "Elastic Weight Consolidation strength for anti-forgetting protection. Higher values preserve more learned knowledge.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 10000,
+      "editor": "number"
+    },
+    "patternThreshold": {
+      "title": "Pattern Threshold",
+      "type": "number",
+      "description": "Minimum confidence threshold for pattern recognition (0-1)",
+      "default": 0.7,
+      "minimum": 0.1,
+      "maximum": 1,
+      "editor": "number"
+    },
+    "maxTrajectories": {
+      "title": "Max Trajectories",
+      "type": "integer",
+      "description": "Maximum number of trajectory steps to track for learning",
+      "default": 100,
+      "minimum": 10,
+      "maximum": 1000,
+      "editor": "number"
+    },
+    "sonaLearningTiers": {
+      "title": "Learning Tiers",
+      "type": "array",
+      "description": "SONA learning tiers to enable (instant=real-time, background=async, deep=comprehensive)",
+      "default": ["instant", "background"],
+      "editor": "json"
+    }
+  },
+  "required": ["action"]
+}

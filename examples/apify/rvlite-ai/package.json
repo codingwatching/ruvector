@@ -1,0 +1,41 @@
+{
+  "name": "rvlite-ai-memory-apify-actor",
+  "version": "1.1.0",
+  "description": "AI Memory Engine - Self-Learning Vector Database with TRM Reasoning, SONA Adaptive Learning, and ONNX Inference",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node src/main.js"
+  },
+  "dependencies": {
+    "apify": "^3.5.2",
+    "apify-client": "^2.9.0",
+    "@google/generative-ai": "^0.24.1",
+    "@ruvector/ruvllm": "^0.2.3"
+  },
+  "optionalDependencies": {
+    "@ruvector/ruvllm-linux-x64-gnu": "0.2.3",
+    "@ruvector/ruvllm-linux-arm64-gnu": "0.2.3",
+    "@ruvector/ruvllm-darwin-x64": "0.2.3",
+    "@ruvector/ruvllm-darwin-arm64": "0.2.3",
+    "@ruvector/ruvllm-win32-x64-msvc": "0.2.3"
+  },
+  "author": "rUv",
+  "license": "MIT",
+  "keywords": [
+    "ai-memory",
+    "vector-database",
+    "semantic-search",
+    "trm",
+    "sona",
+    "onnx",
+    "self-learning",
+    "llm",
+    "rag",
+    "knowledge-graph"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "title": "AI Memory Engine - Self-Learning Database with TRM & SONA",
+  "description": "Give your AI persistent memory that learns and improves over time. Powered by RuvLLM with TRM recursive reasoning (7M params), SONA adaptive learning, HNSW indexing, and SIMD-optimized inference. Perfect for chatbots, RAG systems, and intelligent agents.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string",
+      "description": "What do you want to do?",
+      "editor": "select",
+      "default": "demo",
+      "enum": [
+        "demo",
+        "store",
+        "search",
+        "chat",
+        "build_knowledge",
+        "recommend",
+        "analyze",
+        "export",
+        "import",
+        "integrate_synthetic",
+        "integrate_scraper",
+        "learn"
+      ],
+      "enumTitles": [
+        "Demo - Try all features with sample data",
+        "Store - Add memories/documents to database",
+        "Search - Find similar content semantically",
+        "Chat - Conversational AI with memory",
+        "Build Knowledge - Create knowledge graph from data",
+        "Recommend - Get personalized recommendations",
+        "Analyze - Analyze patterns with SONA insights",
+        "Export - Export memory database",
+        "Import - Import existing data",
+        "Integrate: Synthetic Data - Generate and store mock data",
+        "Integrate: Web Scraper - Scrape and memorize content",
+        "Learn - Force SONA background learning cycle"
+      ]
+    },
+    "memories": {
+      "title": "Memories/Documents to Store",
+      "type": "array",
+      "description": "Text content to store in memory. Each item becomes a searchable memory with RuvLLM embeddings.",
+      "editor": "json",
+      "prefill": [
+        {"text": "The customer prefers fast shipping over lower prices", "metadata": {"type": "preference", "customer_id": "123"}},
+        {"text": "Product X works best with Product Y for home automation", "metadata": {"type": "knowledge", "category": "products"}},
+        {"text": "User asked about return policy on December 10th", "metadata": {"type": "conversation", "date": "2024-12-10"}}
+      ]
+    },
+    "query": {
+      "title": "Search Query",
+      "type": "string",
+      "description": "What are you looking for? Uses RuvLLM HNSW for O(log N) semantic search.",
+      "editor": "textfield",
+      "prefill": "What does the customer prefer?"
+    },
+    "chatHistory": {
+      "title": "Chat History",
+      "type": "array",
+      "description": "Previous conversation messages for context-aware chat",
+      "editor": "json",
+      "prefill": [
+        {"role": "user", "content": "What products do you recommend?"},
+        {"role": "assistant", "content": "Based on your preferences, I recommend Product X."}
+      ]
+    },
+    "chatMessage": {
+      "title": "Chat Message",
+      "type": "string",
+      "description": "Your message for the AI assistant",
+      "editor": "textfield"
+    },
+    "topK": {
+      "title": "Number of Results",
+      "type": "integer",
+      "description": "How many similar results to return (1-100)",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100
+    },
+    "similarityThreshold": {
+      "title": "Similarity Threshold",
+      "type": "number",
+      "description": "Minimum similarity score (0-1). Higher = more relevant results.",
+      "default": 0.7,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "distanceMetric": {
+      "title": "Distance Metric",
+      "type": "string",
+      "description": "How to measure similarity between memories",
+      "editor": "select",
+      "default": "cosine",
+      "enum": ["cosine", "euclidean", "dot_product", "manhattan"],
+      "enumTitles": [
+        "Cosine - Best for text similarity (recommended)",
+        "Euclidean - L2 distance for numerical data",
+        "Dot Product - Fast, good for normalized vectors",
+        "Manhattan - L1 distance, robust to outliers"
+      ]
+    },
+    "embeddingModel": {
+      "title": "Embedding Model",
+      "type": "string",
+      "description": "Model to convert text to vectors (RuvLLM uses native SIMD when available)",
+      "editor": "select",
+      "default": "ruvllm-768",
+      "enum": ["ruvllm-768", "ruvllm-384", "gemini", "openai"],
+      "enumTitles": [
+        "RuvLLM 768d - Native SIMD embeddings (recommended)",
+        "RuvLLM 384d - Faster, smaller embeddings",
+        "Gemini - Google's embedding model",
+        "OpenAI - Ada-002 embeddings"
+      ]
+    },
+    "namespace": {
+      "title": "Memory Namespace",
+      "type": "string",
+      "description": "Organize memories into separate collections (like folders)",
+      "editor": "textfield",
+      "default": "default"
+    },
+    "sessionId": {
+      "title": "Session ID",
+      "type": "string",
+      "description": "Unique ID to maintain memory and SONA learning across multiple runs",
+      "editor": "textfield"
+    },
+    "learningEnabled": {
+      "title": "Enable Self-Learning",
+      "type": "boolean",
+      "description": "Allow SONA to learn and improve from interactions",
+      "default": true
+    },
+    "sonaEnabled": {
+      "title": "Enable SONA Learning System",
+      "type": "boolean",
+      "description": "Enable SONA (Self-Optimizing Neural Architecture) with 3-tier learning loops",
+      "default": true
+    },
+    "ewcLambda": {
+      "title": "EWC++ Lambda",
+      "type": "number",
+      "description": "Elastic Weight Consolidation strength (100-15000). Higher = stronger anti-forgetting.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 15000
+    },
+    "patternThreshold": {
+      "title": "Pattern Learning Threshold",
+      "type": "number",
+      "description": "Minimum confidence to learn a pattern (0.5-1.0)",
+      "default": 0.85,
+      "minimum": 0.5,
+      "maximum": 1.0
+    },
+    "forceBackgroundLearning": {
+      "title": "Force Background Learning",
+      "type": "boolean",
+      "description": "Run SONA background learning loop after operation",
+      "default": false
+    },
+    "knowledgeGraphEnabled": {
+      "title": "Build Knowledge Graph",
+      "type": "boolean",
+      "description": "Automatically extract entities and relationships",
+      "default": false
+    },
+    "integrationConfig": {
+      "title": "Integration Configuration",
+      "type": "object",
+      "description": "Settings for integrating with other Apify actors",
+      "editor": "json",
+      "prefill": {
+        "syntheticDataActor": "ruv/ai-synthetic-data-generator",
+        "dataType": "ecommerce",
+        "count": 100,
+        "memorizeFields": ["title", "description", "category"]
+      }
+    },
+    "scraperConfig": {
+      "title": "Web Scraper Configuration",
+      "type": "object",
+      "description": "Configure web scraping for memory ingestion",
+      "editor": "json",
+      "prefill": {
+        "urls": ["https://example.com/docs"],
+        "selector": "article",
+        "maxPages": 10
+      }
+    },
+    "exportFormat": {
+      "title": "Export Format",
+      "type": "string",
+      "description": "Format for exporting memory database",
+      "editor": "select",
+      "default": "json",
+      "enum": ["json", "csv", "embeddings"],
+      "enumTitles": [
+        "JSON - Full export with metadata",
+        "CSV - Spreadsheet compatible",
+        "Embeddings - Raw vectors for ML"
+      ]
+    },
+    "importData": {
+      "title": "Import Data",
+      "type": "object",
+      "description": "Data to import into memory (JSON format)",
+      "editor": "json"
+    },
+    "provider": {
+      "title": "AI Provider (Optional)",
+      "type": "string",
+      "description": "AI provider for chat and advanced features",
+      "editor": "select",
+      "default": "gemini",
+      "enum": ["gemini", "openrouter", "local"],
+      "enumTitles": [
+        "Gemini - Google AI (free tier available)",
+        "OpenRouter - GPT-4, Claude, Llama, 100+ models",
+        "Local - RuvLLM only (basic features)"
+      ]
+    },
+    "apiKey": {
+      "title": "API Key (Optional)",
+      "type": "string",
+      "description": "API key for your chosen provider",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "model": {
+      "title": "LLM Model",
+      "type": "string",
+      "description": "Language model for chat and generation",
+      "editor": "select",
+      "default": "gemini-2.0-flash-exp",
+      "enum": [
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-1.5-pro",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3.5-sonnet",
+        "meta-llama/llama-3.3-70b-instruct"
+      ]
+    },
+    "seed": {
+      "title": "Random Seed",
+      "type": "string",
+      "description": "For reproducible results",
+      "editor": "textfield"
+    }
+  },
+  "required": ["action"]
+}

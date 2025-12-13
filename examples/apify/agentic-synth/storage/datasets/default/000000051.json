@@ -1,0 +1,46 @@
+{
+	"id": 51,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/max-post-9917-50",
+		"title": "AutoParts Premium Charger",
+		"price": 703.72,
+		"originalPrice": 1018.64,
+		"currency": "USD",
+		"category": "Automotive",
+		"brand": "AutoParts",
+		"rating": 3.9,
+		"reviewCount": 3143,
+		"inStock": true,
+		"stockCount": 106,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller4",
+			"rating": 4.6,
+			"totalSales": 36974
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 6,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-50-0.jpg",
+			"https://example-store.com/images/product-50-1.jpg",
+			"https://example-store.com/images/product-50-2.jpg",
+			"https://example-store.com/images/product-50-3.jpg",
+			"https://example-store.com/images/product-50-4.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

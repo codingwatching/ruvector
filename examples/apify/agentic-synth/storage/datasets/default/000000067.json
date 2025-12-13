@@ -1,0 +1,45 @@
+{
+	"id": 67,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-offer-8723-66",
+		"title": "KidsFun Advanced Light",
+		"price": 517.89,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Automotive",
+		"brand": "KidsFun",
+		"rating": 3.3,
+		"reviewCount": 2644,
+		"inStock": true,
+		"stockCount": 33,
+		"condition": "New",
+		"seller": {
+			"name": "Seller64",
+			"rating": 3.6,
+			"totalSales": 11499
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-66-0.jpg",
+			"https://example-store.com/images/product-66-1.jpg",
+			"https://example-store.com/images/product-66-2.jpg",
+			"https://example-store.com/images/product-66-3.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

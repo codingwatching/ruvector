@@ -1,0 +1,43 @@
+{
+	"id": 85,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/best-post-5722-84",
+		"title": "StyleMax Classic Brush",
+		"price": 734.97,
+		"originalPrice": 1097.74,
+		"currency": "USD",
+		"category": "Beauty",
+		"brand": "StyleMax",
+		"rating": 3.2,
+		"reviewCount": 1173,
+		"inStock": true,
+		"stockCount": 108,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller562",
+			"rating": 3.6,
+			"totalSales": 21836
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 8,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-84-0.jpg",
+			"https://example-store.com/images/product-84-1.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

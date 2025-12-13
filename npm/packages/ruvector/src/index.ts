@@ -23,9 +23,9 @@ try {
   implementation = require('@ruvector/core');
   implementationType = 'native';
 
-  // Verify it's actually working
-  if (typeof implementation.VectorDB !== 'function') {
-    throw new Error('Native module loaded but VectorDB not found');
+  // Verify it's actually working (native exports VectorDb, not VectorDB)
+  if (typeof implementation.VectorDb !== 'function') {
+    throw new Error('Native module loaded but VectorDb not found');
   }
 } catch (e: any) {
   // No WASM fallback available yet
@@ -73,8 +73,9 @@ export function getVersion(): { version: string; implementation: string } {
   };
 }
 
-// Export the VectorDB class
-export const VectorDB = implementation.VectorDB;
+// Export the VectorDb class (aliased as VectorDB for backwards compatibility)
+export const VectorDb = implementation.VectorDb;
+export const VectorDB = implementation.VectorDb;
 
 // Export everything from the implementation
 export default implementation;

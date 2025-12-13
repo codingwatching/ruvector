@@ -1,0 +1,42 @@
+{
+	"id": 12,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-guide-9025-11",
+		"title": "KidsFun Smart Bag",
+		"price": 655.51,
+		"originalPrice": 874.83,
+		"currency": "USD",
+		"category": "Sports",
+		"brand": "KidsFun",
+		"rating": 4.7,
+		"reviewCount": 4641,
+		"inStock": true,
+		"stockCount": 54,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller31",
+			"rating": 4.8,
+			"totalSales": 33150
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-11-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

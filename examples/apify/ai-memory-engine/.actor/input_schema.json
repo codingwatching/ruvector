@@ -1,0 +1,472 @@
+{
+  "title": "AI Memory Engine - Self-Learning Database with TRM & SONA",
+  "description": "Give your AI persistent memory that learns and improves over time. Powered by RuvLLM with TRM recursive reasoning (7M params), SONA adaptive learning, HNSW indexing, and SIMD-optimized inference. Perfect for chatbots, RAG systems, and intelligent agents.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string",
+      "description": "What do you want to do?",
+      "editor": "select",
+      "default": "demo",
+      "enum": [
+        "demo",
+        "store",
+        "search",
+        "get",
+        "list",
+        "delete",
+        "update",
+        "clear",
+        "stats",
+        "batch_search",
+        "hybrid_search",
+        "find_duplicates",
+        "deduplicate",
+        "chat",
+        "build_knowledge",
+        "recommend",
+        "analyze",
+        "feedback",
+        "export",
+        "import",
+        "integrate_synthetic",
+        "integrate_scraper",
+        "integrate_actor",
+        "template",
+        "natural",
+        "cluster",
+        "export_vectordb",
+        "learn"
+      ],
+      "enumTitles": [
+        "Demo - Try all features with sample data",
+        "Store - Add memories/documents to database",
+        "Search - Find similar content semantically",
+        "Get - Retrieve a specific memory by ID",
+        "List - List memories with pagination and filters",
+        "Delete - Remove memories by ID or filter",
+        "Update - Modify an existing memory",
+        "Clear - Remove all memories from namespace",
+        "Stats - Get memory database statistics",
+        "Batch Search - Run multiple searches at once",
+        "Hybrid Search - Combined semantic + keyword search",
+        "Find Duplicates - Identify similar/duplicate memories",
+        "Deduplicate - Remove duplicate memories",
+        "Chat - Conversational AI with memory",
+        "Build Knowledge - Create knowledge graph from data",
+        "Recommend - Get personalized recommendations",
+        "Analyze - Analyze patterns with SONA insights",
+        "Feedback - Provide feedback to improve SONA learning",
+        "Export - Export memory database",
+        "Import - Import existing data",
+        "Integrate: Synthetic Data - Generate and store mock data",
+        "Integrate: Web Scraper - Scrape and memorize content",
+        "Integrate: Actor - One-click memory from any Apify actor",
+        "Template - Load pre-built memory templates",
+        "Natural Language - Execute commands in plain English",
+        "Cluster - Group memories by similarity",
+        "Export: Vector DB - Export to Pinecone, Weaviate, etc.",
+        "Learn - Force SONA background learning cycle"
+      ]
+    },
+    "memories": {
+      "title": "Memories/Documents to Store",
+      "type": "array",
+      "description": "Text content to store in memory. Each item becomes a searchable memory with RuvLLM embeddings.",
+      "editor": "json",
+      "prefill": [
+        {"text": "The customer prefers fast shipping over lower prices", "metadata": {"type": "preference", "customer_id": "123"}},
+        {"text": "Product X works best with Product Y for home automation", "metadata": {"type": "knowledge", "category": "products"}},
+        {"text": "User asked about return policy on December 10th", "metadata": {"type": "conversation", "date": "2024-12-10"}}
+      ]
+    },
+    "query": {
+      "title": "Search Query",
+      "type": "string",
+      "description": "What are you looking for? Uses RuvLLM HNSW for O(log N) semantic search.",
+      "editor": "textfield",
+      "prefill": "What does the customer prefer?"
+    },
+    "queries": {
+      "title": "Batch Search Queries",
+      "type": "array",
+      "description": "Multiple search queries for batch_search action. Each query runs in parallel.",
+      "editor": "json",
+      "prefill": [
+        "What does the customer prefer?",
+        "Product recommendations",
+        "Support history"
+      ]
+    },
+    "memoryId": {
+      "title": "Memory ID",
+      "type": "string",
+      "description": "ID of a specific memory for get/delete/update operations",
+      "editor": "textfield"
+    },
+    "memoryIds": {
+      "title": "Memory IDs",
+      "type": "array",
+      "description": "Array of memory IDs for batch delete operation",
+      "editor": "json",
+      "prefill": ["mem_123", "mem_456"]
+    },
+    "updates": {
+      "title": "Memory Updates",
+      "type": "object",
+      "description": "Fields to update on a memory (text, metadata)",
+      "editor": "json",
+      "prefill": {
+        "text": "Updated memory text",
+        "metadata": {"updated": true}
+      }
+    },
+    "metadataFilter": {
+      "title": "Metadata Filter",
+      "type": "object",
+      "description": "Filter memories by metadata fields for delete/list operations",
+      "editor": "json",
+      "prefill": {"type": "preference"}
+    },
+    "limit": {
+      "title": "List Limit",
+      "type": "integer",
+      "description": "Maximum number of memories to return in list action (1-1000)",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "offset": {
+      "title": "List Offset",
+      "type": "integer",
+      "description": "Number of memories to skip for pagination",
+      "default": 0,
+      "minimum": 0
+    },
+    "sortBy": {
+      "title": "Sort By",
+      "type": "string",
+      "description": "Field to sort list results by",
+      "editor": "select",
+      "default": "createdAt",
+      "enum": ["createdAt", "updatedAt", "accessCount"],
+      "enumTitles": [
+        "Created At - Most recent first",
+        "Updated At - Recently updated first",
+        "Access Count - Most accessed first"
+      ]
+    },
+    "sortOrder": {
+      "title": "Sort Order",
+      "type": "string",
+      "description": "Sort direction for list results",
+      "editor": "select",
+      "default": "desc",
+      "enum": ["asc", "desc"],
+      "enumTitles": [
+        "Ascending - Oldest/lowest first",
+        "Descending - Newest/highest first"
+      ]
+    },
+    "keywordWeight": {
+      "title": "Keyword Weight",
+      "type": "number",
+      "description": "Weight for keyword matching in hybrid search (0-1)",
+      "default": 0.3,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "semanticWeight": {
+      "title": "Semantic Weight",
+      "type": "number",
+      "description": "Weight for semantic similarity in hybrid search (0-1)",
+      "default": 0.7,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "duplicateThreshold": {
+      "title": "Duplicate Threshold",
+      "type": "number",
+      "description": "Similarity threshold for finding duplicates (0.8-1.0). Higher = stricter matching.",
+      "default": 0.95,
+      "minimum": 0.8,
+      "maximum": 1
+    },
+    "feedbackRating": {
+      "title": "Feedback Rating",
+      "type": "number",
+      "description": "Rate a search result or recommendation (1-5 stars)",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "feedbackCorrection": {
+      "title": "Feedback Correction",
+      "type": "string",
+      "description": "Correct text for a memory (for SONA learning)",
+      "editor": "textfield"
+    },
+    "chatHistory": {
+      "title": "Chat History",
+      "type": "array",
+      "description": "Previous conversation messages for context-aware chat",
+      "editor": "json",
+      "prefill": [
+        {"role": "user", "content": "What products do you recommend?"},
+        {"role": "assistant", "content": "Based on your preferences, I recommend Product X."}
+      ]
+    },
+    "chatMessage": {
+      "title": "Chat Message",
+      "type": "string",
+      "description": "Your message for the AI assistant",
+      "editor": "textfield"
+    },
+    "topK": {
+      "title": "Number of Results",
+      "type": "integer",
+      "description": "How many similar results to return (1-100)",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100
+    },
+    "similarityThreshold": {
+      "title": "Similarity Threshold",
+      "type": "number",
+      "description": "Minimum similarity score (0-1). Higher = more relevant results.",
+      "default": 0.7,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "distanceMetric": {
+      "title": "Distance Metric",
+      "type": "string",
+      "description": "How to measure similarity between memories",
+      "editor": "select",
+      "default": "cosine",
+      "enum": ["cosine", "euclidean", "dot_product", "manhattan"],
+      "enumTitles": [
+        "Cosine - Best for text similarity (recommended)",
+        "Euclidean - L2 distance for numerical data",
+        "Dot Product - Fast, good for normalized vectors",
+        "Manhattan - L1 distance, robust to outliers"
+      ]
+    },
+    "embeddingModel": {
+      "title": "Embedding Model",
+      "type": "string",
+      "description": "Model to convert text to vectors (RuvLLM uses native SIMD when available)",
+      "editor": "select",
+      "default": "ruvllm-768",
+      "enum": ["ruvllm-768", "ruvllm-384", "gemini", "openai"],
+      "enumTitles": [
+        "RuvLLM 768d - Native SIMD embeddings (recommended)",
+        "RuvLLM 384d - Faster, smaller embeddings",
+        "Gemini - Google's embedding model",
+        "OpenAI - Ada-002 embeddings"
+      ]
+    },
+    "namespace": {
+      "title": "Memory Namespace",
+      "type": "string",
+      "description": "Organize memories into separate collections (like folders)",
+      "editor": "textfield",
+      "default": "default"
+    },
+    "sessionId": {
+      "title": "Session ID",
+      "type": "string",
+      "description": "Unique ID to maintain memory and SONA learning across multiple runs",
+      "editor": "textfield"
+    },
+    "learningEnabled": {
+      "title": "Enable Self-Learning",
+      "type": "boolean",
+      "description": "Allow SONA to learn and improve from interactions",
+      "default": true
+    },
+    "sonaEnabled": {
+      "title": "Enable SONA Learning System",
+      "type": "boolean",
+      "description": "Enable SONA (Self-Optimizing Neural Architecture) with 3-tier learning loops",
+      "default": true
+    },
+    "ewcLambda": {
+      "title": "EWC++ Lambda",
+      "type": "number",
+      "description": "Elastic Weight Consolidation strength (100-15000). Higher = stronger anti-forgetting.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 15000
+    },
+    "patternThreshold": {
+      "title": "Pattern Learning Threshold",
+      "type": "number",
+      "description": "Minimum confidence to learn a pattern (0.5-1.0)",
+      "default": 0.85,
+      "minimum": 0.5,
+      "maximum": 1.0
+    },
+    "forceBackgroundLearning": {
+      "title": "Force Background Learning",
+      "type": "boolean",
+      "description": "Run SONA background learning loop after operation",
+      "default": false
+    },
+    "knowledgeGraphEnabled": {
+      "title": "Build Knowledge Graph",
+      "type": "boolean",
+      "description": "Automatically extract entities and relationships",
+      "default": false
+    },
+    "integrationConfig": {
+      "title": "Integration Configuration",
+      "type": "object",
+      "description": "Settings for integrating with other Apify actors",
+      "editor": "json",
+      "prefill": {
+        "syntheticDataActor": "ruv/ai-synthetic-data-generator",
+        "dataType": "ecommerce",
+        "count": 100,
+        "memorizeFields": ["title", "description", "category"]
+      }
+    },
+    "scraperConfig": {
+      "title": "Web Scraper Configuration",
+      "type": "object",
+      "description": "Configure web scraping for memory ingestion",
+      "editor": "json",
+      "prefill": {
+        "urls": ["https://example.com/docs"],
+        "selector": "article",
+        "maxPages": 10
+      }
+    },
+    "exportFormat": {
+      "title": "Export Format",
+      "type": "string",
+      "description": "Format for exporting memory database",
+      "editor": "select",
+      "default": "json",
+      "enum": ["json", "csv", "embeddings"],
+      "enumTitles": [
+        "JSON - Full export with metadata",
+        "CSV - Spreadsheet compatible",
+        "Embeddings - Raw vectors for ML"
+      ]
+    },
+    "importData": {
+      "title": "Import Data",
+      "type": "object",
+      "description": "Data to import into memory (JSON format)",
+      "editor": "json"
+    },
+    "provider": {
+      "title": "AI Provider (Optional)",
+      "type": "string",
+      "description": "AI provider for chat and advanced features",
+      "editor": "select",
+      "default": "gemini",
+      "enum": ["gemini", "openrouter", "local"],
+      "enumTitles": [
+        "Gemini - Google AI (free tier available)",
+        "OpenRouter - GPT-4, Claude, Llama, 100+ models",
+        "Local - RuvLLM only (basic features)"
+      ]
+    },
+    "apiKey": {
+      "title": "API Key (Optional)",
+      "type": "string",
+      "description": "API key for your chosen provider",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "model": {
+      "title": "LLM Model",
+      "type": "string",
+      "description": "Language model for chat and generation",
+      "editor": "select",
+      "default": "gemini-2.0-flash-exp",
+      "enum": [
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-1.5-pro",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3.5-sonnet",
+        "meta-llama/llama-3.3-70b-instruct"
+      ]
+    },
+    "seed": {
+      "title": "Random Seed",
+      "type": "string",
+      "description": "For reproducible results",
+      "editor": "textfield"
+    },
+    "actorId": {
+      "title": "Actor ID",
+      "type": "string",
+      "description": "Apify actor to integrate with (e.g., apify/google-maps-scraper, apify/instagram-scraper)",
+      "editor": "textfield",
+      "prefill": "apify/google-maps-scraper"
+    },
+    "actorConfig": {
+      "title": "Actor Integration Config",
+      "type": "object",
+      "description": "Configuration for actor integration (runId, datasetId, actorInput, memorizeFields)",
+      "editor": "json",
+      "prefill": {
+        "runId": "latest",
+        "memorizeFields": ["title", "description", "address"],
+        "limit": 100
+      }
+    },
+    "template": {
+      "title": "Template",
+      "type": "string",
+      "description": "Pre-built template to load",
+      "editor": "select",
+      "enum": ["lead-intelligence", "customer-support", "research-assistant", "competitor-intelligence", "content-library", "product-catalog"],
+      "enumTitles": [
+        "Lead Intelligence - Sales lead tracking",
+        "Customer Support - Knowledge base & FAQ",
+        "Research Assistant - Academic & market research",
+        "Competitor Intelligence - Market tracking",
+        "Content Library - Content ideas & references",
+        "Product Catalog - E-commerce knowledge"
+      ]
+    },
+    "command": {
+      "title": "Natural Language Command",
+      "type": "string",
+      "description": "Execute commands in plain English (e.g., 'remember that John prefers email', 'what do you know about customers')",
+      "editor": "textfield",
+      "prefill": "what do you know about customers"
+    },
+    "numClusters": {
+      "title": "Number of Clusters",
+      "type": "integer",
+      "description": "Number of memory clusters to create (2-20)",
+      "default": 5,
+      "minimum": 2,
+      "maximum": 20
+    },
+    "vectorDbFormat": {
+      "title": "Vector DB Export Format",
+      "type": "string",
+      "description": "Export format for popular vector databases",
+      "editor": "select",
+      "enum": ["pinecone", "weaviate", "chromadb", "qdrant", "langchain", "openai"],
+      "enumTitles": [
+        "Pinecone - Managed vector database",
+        "Weaviate - Open-source vector search",
+        "ChromaDB - AI-native embedding database",
+        "Qdrant - High-performance vector DB",
+        "LangChain - LangChain document format",
+        "OpenAI - OpenAI-compatible format"
+      ]
+    }
+  },
+  "required": ["action"]
+}

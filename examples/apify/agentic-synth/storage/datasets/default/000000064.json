@@ -1,0 +1,46 @@
+{
+	"id": 64,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/pro-review-8705-63",
+		"title": "SportZone Classic Cookbook",
+		"price": 465.89,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Books",
+		"brand": "SportZone",
+		"rating": 4.6,
+		"reviewCount": 1052,
+		"inStock": true,
+		"stockCount": 143,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller491",
+			"rating": 4.7,
+			"totalSales": 42786
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-63-0.jpg",
+			"https://example-store.com/images/product-63-1.jpg",
+			"https://example-store.com/images/product-63-2.jpg",
+			"https://example-store.com/images/product-63-3.jpg",
+			"https://example-store.com/images/product-63-4.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

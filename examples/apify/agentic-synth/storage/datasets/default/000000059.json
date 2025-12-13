@@ -1,0 +1,42 @@
+{
+	"id": 59,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/best-deal-594-58",
+		"title": "AutoParts Premium Weights",
+		"price": 747.08,
+		"originalPrice": 1017.36,
+		"currency": "USD",
+		"category": "Sports",
+		"brand": "AutoParts",
+		"rating": 4.2,
+		"reviewCount": 3719,
+		"inStock": true,
+		"stockCount": 272,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller257",
+			"rating": 3.7,
+			"totalSales": 42437
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 8,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-58-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

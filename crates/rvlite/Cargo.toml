@@ -51,7 +51,7 @@ wasm-bindgen-test = "0.3"
 
 # Ensure getrandom uses js feature for WASM (version 0.2)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 [features]
 default = []

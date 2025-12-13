@@ -1,0 +1,44 @@
+{
+	"id": 7,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-review-629-6",
+		"title": "HomeEssentials Classic Lamp",
+		"price": 47.89,
+		"originalPrice": 57.5,
+		"currency": "USD",
+		"category": "Home & Garden",
+		"brand": "HomeEssentials",
+		"rating": 3.4,
+		"reviewCount": 1159,
+		"inStock": true,
+		"stockCount": 232,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller442",
+			"rating": 4.5,
+			"totalSales": 46589
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 5,
+			"price": 8.66
+		},
+		"images": [
+			"https://example-store.com/images/product-6-0.jpg",
+			"https://example-store.com/images/product-6-1.jpg"
+		],
+		"specifications": {
+			"dimensions": "15x54cm",
+			"weight": "7kg"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

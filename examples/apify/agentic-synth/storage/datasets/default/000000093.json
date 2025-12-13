@@ -1,0 +1,45 @@
+{
+	"id": 93,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/pro-deal-4963-92",
+		"title": "TechPro Pro Jacket",
+		"price": 328.94,
+		"originalPrice": 462.02,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "TechPro",
+		"rating": 4.7,
+		"reviewCount": 3164,
+		"inStock": true,
+		"stockCount": 114,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller430",
+			"rating": 3.6,
+			"totalSales": 39457
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-92-0.jpg",
+			"https://example-store.com/images/product-92-1.jpg",
+			"https://example-store.com/images/product-92-2.jpg"
+		],
+		"specifications": {
+			"material": "Cotton",
+			"size": "XL"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

@@ -1,0 +1,42 @@
+{
+	"id": 44,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/amazing-deal-4583-43",
+		"title": "AutoParts Ultra Gloves",
+		"price": 67.43,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Sports",
+		"brand": "AutoParts",
+		"rating": 3.8,
+		"reviewCount": 1874,
+		"inStock": true,
+		"stockCount": 288,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller209",
+			"rating": 4.1,
+			"totalSales": 43023
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 9,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-43-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

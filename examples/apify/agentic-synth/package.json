@@ -1,0 +1,59 @@
+{
+  "name": "agentic-synth-apify-actor",
+  "version": "2.2.0",
+  "description": "AI Synthetic Data Generator with TRM/SONA self-learning, MCP server, and Apify actor integrations",
+  "main": "src/main.js",
+  "type": "module",
+  "bin": {
+    "agentic-synth": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node src/main.js",
+    "mcp": "node src/mcp-server.js",
+    "deploy": "bash scripts/deploy.sh",
+    "login": "dotenv -e ../../../.env -- apify login -t $APIFY_API_TOKEN",
+    "push": "dotenv -e ../../../.env -- apify push"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@ruvector/ruvllm": "^0.2.3",
+    "apify": "^3.5.2"
+  },
+  "optionalDependencies": {
+    "@ruvector/ruvllm-darwin-arm64": "0.2.3",
+    "@ruvector/ruvllm-darwin-x64": "0.2.3",
+    "@ruvector/ruvllm-linux-arm64-gnu": "0.2.3",
+    "@ruvector/ruvllm-linux-x64-gnu": "0.2.3",
+    "@ruvector/ruvllm-win32-x64-msvc": "0.2.3"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.4"
+  },
+  "author": {
+    "name": "Reuven Cohen",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  },
+  "license": "MIT",
+  "keywords": [
+    "apify",
+    "actor",
+    "synthetic-data",
+    "mock-data",
+    "test-data",
+    "ai-generation",
+    "TRM",
+    "SONA",
+    "self-learning",
+    "bloomberg-data",
+    "medical-data",
+    "enterprise-simulator"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector"
+  },
+  "homepage": "https://apify.com/ruv/ai-synthetic-data-generator"
+}

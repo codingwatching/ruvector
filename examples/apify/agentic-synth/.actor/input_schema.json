@@ -1,0 +1,323 @@
+{
+  "title": "AI Synthetic Data Generator",
+  "description": "Generate unlimited, high-quality synthetic data for testing scrapers, training AI models, and building agentic applications. 18 data types including e-commerce, Bloomberg terminal, medical records, supply chain, and more. Now with one-click Apify actor integration and use case templates. Powered by TRM/SONA self-learning.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "mode": {
+      "title": "Mode",
+      "type": "string",
+      "description": "Operation mode: generate synthetic data or integrate with other Apify actors",
+      "editor": "select",
+      "default": "generate",
+      "enum": ["generate", "integrate", "template"],
+      "enumTitles": [
+        "Generate - Create synthetic data from scratch",
+        "Integrate - Transform data from other Apify actors",
+        "Template - Use pre-built use case templates"
+      ],
+      "sectionCaption": "Operation Mode",
+      "sectionDescription": "Choose how to generate or transform data"
+    },
+    "dataType": {
+      "title": "Website/API Type",
+      "type": "string",
+      "description": "What type of website or API do you want to simulate?",
+      "editor": "select",
+      "default": "ecommerce",
+      "enum": ["ecommerce", "social", "api_response", "search_results", "real_estate", "jobs", "news", "stock_trading", "medical", "company", "supply_chain", "financial", "bloomberg", "structured", "timeseries", "events", "embeddings", "demo"],
+      "enumTitles": [
+        "E-Commerce - Amazon, eBay, Shopify style product listings",
+        "Social Media - Twitter, Instagram, TikTok style posts",
+        "API Response - REST API mock responses with pagination",
+        "Search Results - Google, Bing style search results",
+        "Real Estate - Zillow, Realtor style property listings",
+        "Job Boards - LinkedIn, Indeed style job listings",
+        "News Sites - News articles with engagement metrics",
+        "Stock Trading - OHLCV, quotes, orders, market data (Bloomberg-style)",
+        "Medical/Healthcare - Patient records, diagnoses, billing, vitals",
+        "Company/Corporate - Org structure, financials, workforce, leadership",
+        "Supply Chain - Shipments, inventory, logistics, suppliers",
+        "Financial Services - Transactions, accounts, fraud detection",
+        "Bloomberg Terminal - Full market data, fundamentals, analytics, news",
+        "Custom Schema - Define your own data structure",
+        "Time-Series - Stock prices, IoT sensors, metrics",
+        "Web Events - Page views, clicks, form submissions",
+        "Embeddings - Vector data for ML/RAG testing",
+        "Demo - Try all types with sample data"
+      ]
+    },
+    "count": {
+      "title": "Number of Records",
+      "type": "integer",
+      "description": "How many records to generate (1-10,000). Start small to test, then scale up.",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "integrateActorId": {
+      "title": "Apify Actor to Integrate",
+      "type": "string",
+      "description": "Actor ID to pull data from (e.g., apify/google-maps-scraper). Used in 'integrate' mode.",
+      "editor": "select",
+      "enum": [
+        "apify/google-maps-scraper",
+        "apify/google-search-scraper",
+        "apify/instagram-scraper",
+        "apify/tiktok-scraper",
+        "apify/youtube-scraper",
+        "apify/twitter-scraper",
+        "apify/amazon-scraper",
+        "apify/shopify-scraper",
+        "apify/web-scraper",
+        "apify/website-content-crawler",
+        "apify/cheerio-scraper",
+        "apify/news-scraper",
+        "apify/linkedin-scraper"
+      ],
+      "enumTitles": [
+        "Google Maps Scraper - Local business data",
+        "Google Search Scraper - Search results",
+        "Instagram Scraper - Posts, reels, stories",
+        "TikTok Scraper - Videos, engagement",
+        "YouTube Scraper - Videos, channels",
+        "Twitter/X Scraper - Tweets, profiles",
+        "Amazon Scraper - Product listings",
+        "Shopify Scraper - Store products",
+        "Web Scraper - General web pages",
+        "Website Content Crawler - Full site content",
+        "Cheerio Scraper - Structured extraction",
+        "News Scraper - News articles",
+        "LinkedIn Scraper - Jobs, profiles"
+      ],
+      "sectionCaption": "Actor Integration",
+      "sectionDescription": "One-click integration with top Apify actors for RAG/memory use cases"
+    },
+    "integrateRunId": {
+      "title": "Run ID",
+      "type": "string",
+      "description": "Specific run ID to pull data from, or 'latest' for most recent run",
+      "default": "latest",
+      "editor": "textfield"
+    },
+    "integrateDatasetId": {
+      "title": "Dataset ID (Alternative)",
+      "type": "string",
+      "description": "Direct dataset ID to pull data from (alternative to Run ID)",
+      "editor": "textfield"
+    },
+    "memorizeFields": {
+      "title": "Fields to Memorize",
+      "type": "array",
+      "description": "Which fields to extract for RAG/memory. Leave empty for defaults.",
+      "editor": "stringList",
+      "prefill": []
+    },
+    "useTemplate": {
+      "title": "Use Case Template",
+      "type": "string",
+      "description": "Pre-built template for common use cases. Used in 'template' mode.",
+      "editor": "select",
+      "enum": ["lead-intelligence", "competitor-monitor", "support-knowledge", "research-assistant", "content-library", "product-catalog"],
+      "enumTitles": [
+        "Lead Intelligence - Sales teams memorizing prospect data",
+        "Competitor Monitor - Track competitor mentions/changes",
+        "Support Knowledge - Customer support RAG system",
+        "Research Assistant - Academic/market research",
+        "Content Library - Content creators' reference",
+        "Product Catalog - E-commerce product memory"
+      ],
+      "sectionCaption": "Use Case Templates",
+      "sectionDescription": "Pre-configured templates for common data workflows"
+    },
+    "schema": {
+      "title": "Custom Data Schema",
+      "type": "object",
+      "description": "Define your own data structure for 'structured' type. Example: {\"url\": \"string (url)\", \"title\": \"string\", \"price\": \"number (10-500)\"}",
+      "editor": "json",
+      "prefill": {
+        "url": "string (url)",
+        "title": "string",
+        "price": "number (10-500)",
+        "rating": "number (1-5)",
+        "inStock": "boolean",
+        "category": "string (Electronics, Clothing, Home, Sports)"
+      }
+    },
+    "apiEndpoint": {
+      "title": "API Endpoint (for API Response)",
+      "type": "string",
+      "description": "Base endpoint path for API simulation. Example: /api/products",
+      "default": "/api/products",
+      "editor": "textfield"
+    },
+    "eventTypes": {
+      "title": "Event Types (for Web Events)",
+      "type": "array",
+      "description": "Types of web events to generate",
+      "editor": "stringList",
+      "prefill": ["page_view", "click", "scroll", "form_submit", "api_call"]
+    },
+    "timeSeriesConfig": {
+      "title": "Time-Series Configuration",
+      "type": "object",
+      "description": "Settings for time-series data (prices, metrics, etc.)",
+      "editor": "json",
+      "prefill": {
+        "interval": "1h",
+        "trend": "upward",
+        "seasonality": true,
+        "noise": 0.1,
+        "startDate": "2024-01-01"
+      }
+    },
+    "embeddingDimensions": {
+      "title": "Embedding Dimensions",
+      "type": "integer",
+      "description": "Vector size for embeddings. 384 (fast), 768 (accurate), 1536 (OpenAI compatible)",
+      "default": 384,
+      "minimum": 32,
+      "maximum": 4096
+    },
+    "generateEmbeddings": {
+      "title": "Generate Embeddings",
+      "type": "boolean",
+      "description": "Generate vector embeddings for all output records (useful for RAG systems)",
+      "default": false
+    },
+    "simulationMode": {
+      "title": "Long-Running Simulation",
+      "type": "boolean",
+      "description": "Enable simulation mode for testing scrapers that poll for updates. Data is pushed in batches with delays.",
+      "default": false
+    },
+    "batchSize": {
+      "title": "Batch Size (Simulation)",
+      "type": "integer",
+      "description": "Number of records per batch in simulation mode",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "delayBetweenBatches": {
+      "title": "Delay Between Batches (ms)",
+      "type": "integer",
+      "description": "Milliseconds to wait between batches in simulation mode. Use 1000 for 1 second delays.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 60000
+    },
+    "seed": {
+      "title": "Random Seed",
+      "type": "string",
+      "description": "Set a seed for reproducible results. Same seed = same data every time.",
+      "editor": "textfield"
+    },
+    "outputFormat": {
+      "title": "Output Format",
+      "type": "string",
+      "description": "Format for output data",
+      "editor": "select",
+      "default": "json",
+      "enum": ["json", "jsonl", "csv"],
+      "enumTitles": [
+        "JSON - Standard JSON format",
+        "JSONL - JSON Lines (one record per line)",
+        "CSV - Comma-separated values"
+      ],
+      "sectionCaption": "Output Options",
+      "sectionDescription": "Control how data is formatted and delivered"
+    },
+    "webhookUrl": {
+      "title": "Webhook URL",
+      "type": "string",
+      "description": "URL to POST results to when generation completes (for async workflows)",
+      "editor": "textfield"
+    },
+    "provider": {
+      "title": "AI Provider (Optional)",
+      "type": "string",
+      "description": "AI model for enhanced generation. Works great without it too!",
+      "editor": "select",
+      "default": "gemini",
+      "enum": ["gemini", "openrouter"],
+      "enumTitles": [
+        "Gemini - Free tier available, fast generation",
+        "OpenRouter - Access GPT-4, Claude, Llama, and 100+ models"
+      ],
+      "sectionCaption": "AI Enhancement",
+      "sectionDescription": "Optional AI-powered data enhancement"
+    },
+    "apiKey": {
+      "title": "API Key (Optional)",
+      "type": "string",
+      "description": "Your API key. Gemini: https://makersuite.google.com/app/apikey | OpenRouter: https://openrouter.ai/keys",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "model": {
+      "title": "Model",
+      "type": "string",
+      "description": "Model to use. Gemini models for Gemini provider, others for OpenRouter.",
+      "editor": "select",
+      "default": "gemini-2.0-flash-exp",
+      "enum": [
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "openai/o1-preview",
+        "openai/o1-mini",
+        "anthropic/claude-3.5-sonnet",
+        "anthropic/claude-3.5-haiku",
+        "anthropic/claude-3-opus",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemini-pro-1.5",
+        "mistralai/mistral-large-2411",
+        "deepseek/deepseek-chat"
+      ]
+    },
+    "quality": {
+      "title": "Data Quality",
+      "type": "number",
+      "description": "Quality level (0.1-1.0). Higher = more realistic but uses more AI tokens.",
+      "default": 0.8,
+      "minimum": 0.1,
+      "maximum": 1.0
+    },
+    "sonaEnabled": {
+      "title": "Enable SONA Learning",
+      "type": "boolean",
+      "description": "Enable TRM/SONA self-learning for intelligent pattern recognition in data generation. Learns from generation patterns to improve data quality.",
+      "default": true,
+      "sectionCaption": "SONA / TRM Self-Learning",
+      "sectionDescription": "Self-Optimizing Neural Architecture with Tiny Recursive Models (7M params, 83% GSM8K)"
+    },
+    "ewcLambda": {
+      "title": "EWC Lambda",
+      "type": "number",
+      "description": "Elastic Weight Consolidation strength for pattern preservation. Higher values maintain more learned patterns across generations.",
+      "default": 2000,
+      "minimum": 100,
+      "maximum": 10000
+    },
+    "patternThreshold": {
+      "title": "Pattern Threshold",
+      "type": "number",
+      "description": "Minimum confidence threshold for pattern recognition in data generation (0-1)",
+      "default": 0.7,
+      "minimum": 0.1,
+      "maximum": 1
+    },
+    "sonaLearningTiers": {
+      "title": "Learning Tiers",
+      "type": "array",
+      "description": "SONA learning tiers: instant (real-time), background (async optimization), deep (comprehensive analysis)",
+      "default": ["instant", "background"],
+      "editor": "json"
+    }
+  },
+  "required": ["count"]
+}

@@ -1,0 +1,74 @@
+{
+  "actorSpecification": 1,
+  "name": "ai-memory-engine",
+  "title": "AI Memory Engine - Smart Database That Learns & Remembers",
+  "description": "Give your AI applications persistent memory that learns and improves over time. Store conversations, search semantically, build knowledge graphs, and integrate with any LLM. Perfect for chatbots, RAG systems, recommendation engines, and intelligent agents.",
+  "version": "1.0",
+  "buildTag": "latest",
+  "dockerfile": "./Dockerfile",
+  "readme": "../README.md",
+  "input": "./input_schema.json",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "AI Memory Results",
+      "views": {
+        "overview": {
+          "title": "Memory Operations",
+          "transformation": {
+            "fields": ["operation", "success", "result", "metadata"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "operation": { "label": "Operation", "format": "text" },
+              "success": { "label": "Success", "format": "boolean" },
+              "result": { "label": "Result", "format": "object" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "meta": {
+    "author": "rUv",
+    "email": "ruv@ruv.net",
+    "website": "https://github.com/ruvnet/ruvector",
+    "license": "MIT",
+    "categories": ["AI", "DEVELOPMENT", "AUTOMATION", "DATA"],
+    "useCases": [
+      "Add persistent memory to AI chatbots",
+      "Build RAG (Retrieval Augmented Generation) systems",
+      "Create intelligent recommendation engines",
+      "Store and search conversation history",
+      "Build knowledge graphs from unstructured data",
+      "Semantic search across documents",
+      "Multi-agent memory sharing",
+      "Customer support with context memory",
+      "Personalized AI assistants",
+      "Research knowledge management"
+    ],
+    "keywords": [
+      "ai memory",
+      "vector database",
+      "semantic search",
+      "rag",
+      "retrieval augmented generation",
+      "knowledge graph",
+      "embeddings",
+      "llm memory",
+      "chatbot memory",
+      "ai assistant",
+      "context memory",
+      "conversation history",
+      "neural search",
+      "similarity search",
+      "hnsw",
+      "self-learning ai",
+      "adaptive memory",
+      "intelligent agents",
+      "multi-agent",
+      "apify integration"
+    ]
+  }
+}

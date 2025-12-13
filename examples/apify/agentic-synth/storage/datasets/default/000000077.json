@@ -1,0 +1,43 @@
+{
+	"id": 77,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/premium-item-3079-76",
+		"title": "TechPro Smart Hat",
+		"price": 713.18,
+		"originalPrice": 935.58,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "TechPro",
+		"rating": 4.8,
+		"reviewCount": 1301,
+		"inStock": false,
+		"stockCount": 115,
+		"condition": "New",
+		"seller": {
+			"name": "Seller32",
+			"rating": 3.7,
+			"totalSales": 22331
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 2,
+			"price": 10.37
+		},
+		"images": [
+			"https://example-store.com/images/product-76-0.jpg"
+		],
+		"specifications": {
+			"material": "Cotton",
+			"size": "L"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

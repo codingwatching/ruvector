@@ -1,0 +1,43 @@
+{
+	"id": 62,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/amazing-guide-1132-61",
+		"title": "KidsFun Smart Biography",
+		"price": 188.32,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Books",
+		"brand": "KidsFun",
+		"rating": 4.7,
+		"reviewCount": 1363,
+		"inStock": true,
+		"stockCount": 180,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller981",
+			"rating": 4.4,
+			"totalSales": 21327
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 4,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-61-0.jpg",
+			"https://example-store.com/images/product-61-1.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

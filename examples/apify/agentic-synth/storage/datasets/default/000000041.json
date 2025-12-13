@@ -1,0 +1,45 @@
+{
+	"id": 41,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/max-item-2043-40",
+		"title": "AutoParts Ultra Ball",
+		"price": 122.07,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Sports",
+		"brand": "AutoParts",
+		"rating": 3.5,
+		"reviewCount": 4655,
+		"inStock": false,
+		"stockCount": 204,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller562",
+			"rating": 4.1,
+			"totalSales": 3392
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 9,
+			"price": 0.72
+		},
+		"images": [
+			"https://example-store.com/images/product-40-0.jpg",
+			"https://example-store.com/images/product-40-1.jpg",
+			"https://example-store.com/images/product-40-2.jpg",
+			"https://example-store.com/images/product-40-3.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

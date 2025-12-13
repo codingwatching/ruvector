@@ -1,0 +1,77 @@
+{
+  "actorSpecification": 1,
+  "name": "self-learning-postgres-db",
+  "title": "Self Learning Postgres DB",
+  "description": "A distributed vector database that truly learns. Store embeddings, query with semantic search, and let the index improve itself through TRM (Tiny Recursive Models with 83% GSM8K) and SONA (Self-Optimizing Neural Architecture with 3-tier learning). Features Graph Neural Networks, EWC++ anti-forgetting, trajectory tracking, and 30+ actions including search, batch operations, RAG queries, clustering, and deduplication.",
+  "version": "2.1",
+  "buildTag": "latest",
+  "minMemoryMbytes": 512,
+  "maxMemoryMbytes": 4096,
+  "dockerfile": "./Dockerfile",
+  "input": "./input_schema.json",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "views": {
+        "searchResults": {
+          "title": "Search Results",
+          "transformation": {
+            "fields": ["id", "content", "distance", "score", "metadata", "action", "status"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "id": { "label": "ID", "format": "number" },
+              "content": { "label": "Content", "format": "text" },
+              "distance": { "label": "Distance", "format": "number" },
+              "score": { "label": "Score", "format": "number" },
+              "metadata": { "label": "Metadata", "format": "object" },
+              "action": { "label": "Action", "format": "text" },
+              "status": { "label": "Status", "format": "text" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "meta": {
+    "website": "https://github.com/ruvnet/ruvector",
+    "license": "MIT",
+    "categories": ["AI", "DEVELOPER_TOOLS", "DATA_PROCESSING"],
+    "keywords": [
+      "AI memory",
+      "agent memory",
+      "self-learning database",
+      "vector database",
+      "semantic search",
+      "RAG",
+      "retrieval augmented generation",
+      "LLM memory",
+      "chatbot memory",
+      "knowledge base",
+      "AI agents",
+      "embeddings",
+      "PostgreSQL",
+      "pgvector",
+      "ruvector",
+      "similarity search",
+      "document search",
+      "neural search",
+      "machine learning",
+      "GNN",
+      "graph neural network",
+      "NLP",
+      "hybrid search",
+      "HNSW",
+      "IVFFlat",
+      "intelligent search",
+      "context retrieval",
+      "long-term memory",
+      "conversational AI",
+      "clustering",
+      "deduplication",
+      "batch processing",
+      "MMR search"
+    ]
+  }
+}

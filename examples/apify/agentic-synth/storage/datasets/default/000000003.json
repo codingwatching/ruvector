@@ -1,0 +1,42 @@
+{
+	"id": 3,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/new-item-2748-2",
+		"title": "HomeEssentials Advanced Biography",
+		"price": 48.35,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Books",
+		"brand": "HomeEssentials",
+		"rating": 3.4,
+		"reviewCount": 863,
+		"inStock": true,
+		"stockCount": 318,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller887",
+			"rating": 4.6,
+			"totalSales": 6677
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 3,
+			"price": 10.77
+		},
+		"images": [
+			"https://example-store.com/images/product-2-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.914Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

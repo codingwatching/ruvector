@@ -1,0 +1,47 @@
+{
+	"id": 15,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/premium-review-8762-14",
+		"title": "KidsFun Pro Cable",
+		"price": 838.65,
+		"originalPrice": 1182.71,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "KidsFun",
+		"rating": 4.4,
+		"reviewCount": 2361,
+		"inStock": true,
+		"stockCount": 378,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller687",
+			"rating": 4.2,
+			"totalSales": 37668
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-14-0.jpg",
+			"https://example-store.com/images/product-14-1.jpg",
+			"https://example-store.com/images/product-14-2.jpg",
+			"https://example-store.com/images/product-14-3.jpg"
+		],
+		"specifications": {
+			"battery": "1734mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

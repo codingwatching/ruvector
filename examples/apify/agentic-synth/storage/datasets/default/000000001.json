@@ -1,0 +1,42 @@
+{
+	"id": 1,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/elite-offer-8705-0",
+		"title": "AutoParts Wireless Manual",
+		"price": 364.58,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Books",
+		"brand": "AutoParts",
+		"rating": 3.7,
+		"reviewCount": 1332,
+		"inStock": true,
+		"stockCount": 288,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller511",
+			"rating": 4.6,
+			"totalSales": 36181
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 2,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-0-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.914Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

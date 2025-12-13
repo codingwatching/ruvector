@@ -1,0 +1,46 @@
+{
+	"id": 87,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/smart-item-2440-86",
+		"title": "BookWorld Advanced Gloves",
+		"price": 518.54,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Sports",
+		"brand": "BookWorld",
+		"rating": 3.4,
+		"reviewCount": 4858,
+		"inStock": true,
+		"stockCount": 76,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller225",
+			"rating": 4.1,
+			"totalSales": 41841
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 2,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-86-0.jpg",
+			"https://example-store.com/images/product-86-1.jpg",
+			"https://example-store.com/images/product-86-2.jpg",
+			"https://example-store.com/images/product-86-3.jpg",
+			"https://example-store.com/images/product-86-4.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

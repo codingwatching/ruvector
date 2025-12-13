@@ -1,0 +1,48 @@
+{
+	"id": 56,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/ultra-post-4838-55",
+		"title": "SportZone Smart Cable",
+		"price": 290.75,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "SportZone",
+		"rating": 3.1,
+		"reviewCount": 2590,
+		"inStock": true,
+		"stockCount": 46,
+		"condition": "New",
+		"seller": {
+			"name": "Seller735",
+			"rating": 4.5,
+			"totalSales": 32838
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-55-0.jpg",
+			"https://example-store.com/images/product-55-1.jpg",
+			"https://example-store.com/images/product-55-2.jpg",
+			"https://example-store.com/images/product-55-3.jpg",
+			"https://example-store.com/images/product-55-4.jpg"
+		],
+		"specifications": {
+			"battery": "3634mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

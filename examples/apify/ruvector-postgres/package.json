@@ -1,0 +1,64 @@
+{
+  "name": "self-learning-postgres-db",
+  "version": "2.1.0",
+  "description": "A distributed vector database that learns with TRM recursive reasoning and SONA adaptive learning. Store embeddings, query with semantic search, scale horizontally, and let the index improve itself through Graph Neural Networks and SONA 3-tier learning loops.",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node src/test.js",
+    "deploy": "bash scripts/deploy.sh",
+    "login": "dotenv -e ../../../.env -- apify login -t $APIFY_API_TOKEN",
+    "push": "dotenv -e ../../../.env -- apify push"
+  },
+  "author": {
+    "name": "Reuven Cohen",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "apify": "^3.2.0",
+    "pg": "^8.13.0",
+    "@ruvector/ruvllm": "^0.2.3"
+  },
+  "optionalDependencies": {
+    "@ruvector/ruvllm-linux-x64-gnu": "0.2.3",
+    "@ruvector/ruvllm-linux-arm64-gnu": "0.2.3",
+    "@ruvector/ruvllm-darwin-x64": "0.2.3",
+    "@ruvector/ruvllm-darwin-arm64": "0.2.3",
+    "@ruvector/ruvllm-win32-x64-msvc": "0.2.3"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "apify",
+    "actor",
+    "ruvector",
+    "vector-database",
+    "semantic-search",
+    "postgresql",
+    "pgvector",
+    "embeddings",
+    "ai",
+    "machine-learning",
+    "gnn",
+    "graph-neural-network",
+    "self-learning",
+    "rag",
+    "llm",
+    "ai-agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector"
+  },
+  "homepage": "https://apify.com/ruv/self-learning-postgres-db",
+  "bugs": {
+    "url": "https://github.com/ruvnet/ruvector/issues"
+  }
+}

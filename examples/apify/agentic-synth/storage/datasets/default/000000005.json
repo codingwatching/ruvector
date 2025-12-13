@@ -1,0 +1,44 @@
+{
+	"id": 5,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/ultra-product-9755-4",
+		"title": "BookWorld Portable Cleaner",
+		"price": 715.95,
+		"originalPrice": 811.14,
+		"currency": "USD",
+		"category": "Automotive",
+		"brand": "BookWorld",
+		"rating": 4.4,
+		"reviewCount": 4069,
+		"inStock": true,
+		"stockCount": 394,
+		"condition": "New",
+		"seller": {
+			"name": "Seller378",
+			"rating": 4.1,
+			"totalSales": 3608
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 9,
+			"price": 10.02
+		},
+		"images": [
+			"https://example-store.com/images/product-4-0.jpg",
+			"https://example-store.com/images/product-4-1.jpg",
+			"https://example-store.com/images/product-4-2.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.914Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

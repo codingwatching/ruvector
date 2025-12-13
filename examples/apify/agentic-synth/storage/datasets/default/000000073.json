@@ -1,0 +1,46 @@
+{
+	"id": 73,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/new-product-7678-72",
+		"title": "StyleMax Advanced Decoration",
+		"price": 874.45,
+		"originalPrice": 1023.59,
+		"currency": "USD",
+		"category": "Home & Garden",
+		"brand": "StyleMax",
+		"rating": 4,
+		"reviewCount": 4782,
+		"inStock": false,
+		"stockCount": 252,
+		"condition": "New",
+		"seller": {
+			"name": "Seller693",
+			"rating": 4.1,
+			"totalSales": 36767
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 3,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-72-0.jpg",
+			"https://example-store.com/images/product-72-1.jpg",
+			"https://example-store.com/images/product-72-2.jpg",
+			"https://example-store.com/images/product-72-3.jpg"
+		],
+		"specifications": {
+			"dimensions": "57x10cm",
+			"weight": "4kg"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

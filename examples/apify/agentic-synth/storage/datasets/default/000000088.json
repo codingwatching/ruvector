@@ -1,0 +1,44 @@
+{
+	"id": 88,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/pro-post-1228-87",
+		"title": "BookWorld Portable Adapter",
+		"price": 756.33,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "BookWorld",
+		"rating": 3.6,
+		"reviewCount": 4197,
+		"inStock": true,
+		"stockCount": 329,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller358",
+			"rating": 4.4,
+			"totalSales": 12560
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-87-0.jpg"
+		],
+		"specifications": {
+			"battery": "3432mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

@@ -77,7 +77,6 @@ import {
   XCircle,
   Truck,
   ArrowRight,
-  Rocket,
   HelpCircle,
   BookOpen,
   Github,
@@ -86,6 +85,7 @@ import {
   LayoutGrid,
   Workflow,
   Package2,
+  Home,
 } from 'lucide-react';
 import {
   XAxis,
@@ -1155,6 +1155,7 @@ function App() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
         <button
           onClick={() => {
+            setActiveTab('vectors');
             setShowWelcome(true);
             localStorage.removeItem('rvlite-welcome-seen');
           }}
@@ -1181,20 +1182,20 @@ function App() {
           >
             {isReady ? 'Connected' : 'Disconnected'}
           </Chip>
-          {!showWelcome && (
-            <Tooltip content="Show Welcome Screen">
-              <Button
-                isIconOnly
-                variant="flat"
-                onPress={() => {
-                  setShowWelcome(true);
-                  localStorage.removeItem('rvlite-welcome-seen');
-                }}
-              >
-                <Rocket className="w-4 h-4" />
-              </Button>
-            </Tooltip>
-          )}
+          <Tooltip content="Home">
+            <Button
+              isIconOnly
+              variant={activeTab === 'vectors' ? 'solid' : 'flat'}
+              color={activeTab === 'vectors' ? 'primary' : 'default'}
+              onPress={() => {
+                setActiveTab('vectors');
+                setShowWelcome(true);
+                localStorage.removeItem('rvlite-welcome-seen');
+              }}
+            >
+              <Home className="w-4 h-4" />
+            </Button>
+          </Tooltip>
           <Tooltip content="Save to IndexedDB">
             <Button isIconOnly variant="flat" onPress={handleSave}>
               <Save className="w-4 h-4" />
@@ -1205,6 +1206,30 @@ function App() {
               <RefreshCw className="w-4 h-4" />
             </Button>
           </Tooltip>
+          <div className="h-6 w-px bg-gray-700" />
+          <Tooltip content="Supply Chain Simulation">
+            <Button
+              variant={activeTab === 'supply-chain' ? 'solid' : 'flat'}
+              color={activeTab === 'supply-chain' ? 'success' : 'default'}
+              onPress={() => setActiveTab('supply-chain')}
+              startContent={<Truck className="w-4 h-4" />}
+              size="sm"
+            >
+              Supply Chain
+            </Button>
+          </Tooltip>
+          <Tooltip content="RuvLLM - AI & Self-Learning">
+            <Button
+              variant={activeTab === 'ruvllm' ? 'solid' : 'flat'}
+              color={activeTab === 'ruvllm' ? 'secondary' : 'default'}
+              onPress={() => setActiveTab('ruvllm')}
+              startContent={<Brain className="w-4 h-4" />}
+              size="sm"
+            >
+              RuvLLM
+            </Button>
+          </Tooltip>
+          <div className="h-6 w-px bg-gray-700" />
           <Button isIconOnly variant="flat" onPress={onSettingsOpen}>
             <Settings className="w-4 h-4" />
           </Button>
@@ -1216,7 +1241,8 @@ function App() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Hidden on Supply Chain and RuvLLM pages */}
+      {activeTab !== 'supply-chain' && activeTab !== 'ruvllm' && (
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
         <Card className="bg-gray-900/50 border border-gray-800">
           <CardBody className="flex flex-row items-center gap-3 py-4">
@@ -1290,9 +1316,10 @@ function App() {
           </CardBody>
         </Card>
       </div>
+      )}
 
-      {/* Welcome Screen */}
-      {showWelcome && (
+      {/* Welcome Screen - Only shown on main vectors tab */}
+      {activeTab === 'vectors' && showWelcome && (
         <Card className="bg-gradient-to-br from-gray-900/80 via-primary/10 to-secondary/10 border border-primary/30 mb-6">
           <CardBody className="p-6 md:p-8">
             <div className="flex flex-col md:flex-row justify-between items-start gap-6">
@@ -1467,9 +1494,9 @@ function App() {
       )}
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid gap-6 ${activeTab === 'supply-chain' || activeTab === 'ruvllm' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'}`}>
         {/* Left Panel - Main Features */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`space-y-6 ${activeTab === 'supply-chain' || activeTab === 'ruvllm' ? '' : 'lg:col-span-2'}`}>
           <Card className="bg-gray-900/50 border border-gray-800">
             <CardBody className="p-0">
               <Tabs
@@ -2634,16 +2661,10 @@ function App() {
                   </div>
                 </Tab>
 
-                {/* Supply Chain Simulation Tab */}
+                {/* Supply Chain Simulation Tab - Hidden from tab bar, accessible via header button */}
                 <Tab
                   key="supply-chain"
-                  title={
-                    <div className="flex items-center gap-2">
-                      <Network className="w-4 h-4" />
-                      <span>Supply Chain</span>
-                      <Chip size="sm" variant="flat" color="success">Demo</Chip>
-                    </div>
-                  }
+                  title={<span style={{ display: 'none' }} />}
                 >
                   <div className="p-4">
                     <SupplyChainSimulation
@@ -2695,16 +2716,10 @@ function App() {
                   </div>
                 </Tab>
 
-                {/* RuvLLM Tab - TRM + Self-Learning */}
+                {/* RuvLLM Tab - Hidden from tab bar, accessible via header button */}
                 <Tab
                   key="ruvllm"
-                  title={
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4" />
-                      <span>RuvLLM</span>
-                      <Chip size="sm" variant="flat" color="secondary">AI</Chip>
-                    </div>
-                  }
+                  title={<span style={{ display: 'none' }} />}
                 >
                   <div className="p-4 space-y-6">
                     {/* Header */}
@@ -2984,7 +2999,8 @@ function App() {
           </Card>
         </div>
 
-        {/* Right Panel - Logs & Stats */}
+        {/* Right Panel - Logs & Stats - Hidden on Supply Chain and RuvLLM pages */}
+        {activeTab !== 'supply-chain' && activeTab !== 'ruvllm' && (
         <div className="space-y-6">
           {/* Quick Actions - Moved to top */}
           <Card className="bg-gray-900/50 border border-gray-800">
@@ -3226,6 +3242,7 @@ function App() {
             </CardBody>
           </Card>
         </div>
+        )}
       </div>
 
       {/* Add Vector Modal */}

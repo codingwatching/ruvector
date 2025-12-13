@@ -1,0 +1,45 @@
+{
+	"id": 49,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/top-offer-4961-48",
+		"title": "StyleMax Ultra Dress",
+		"price": 460.41,
+		"originalPrice": 598.02,
+		"currency": "USD",
+		"category": "Clothing",
+		"brand": "StyleMax",
+		"rating": 3.6,
+		"reviewCount": 3692,
+		"inStock": true,
+		"stockCount": 469,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller805",
+			"rating": 3.9,
+			"totalSales": 49610
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 2,
+			"price": 9.35
+		},
+		"images": [
+			"https://example-store.com/images/product-48-0.jpg",
+			"https://example-store.com/images/product-48-1.jpg",
+			"https://example-store.com/images/product-48-2.jpg"
+		],
+		"specifications": {
+			"material": "Cotton",
+			"size": "S"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

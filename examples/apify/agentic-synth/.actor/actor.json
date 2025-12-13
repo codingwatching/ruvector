@@ -1,0 +1,86 @@
+{
+  "actorSpecification": 1,
+  "name": "ai-synthetic-data-generator",
+  "title": "AI Synthetic Data Generator - Enterprise Mock Data with MCP & Actor Integration",
+  "description": "Generate unlimited, high-quality synthetic data with TRM/SONA self-learning. NEW: MCP server for AI agent integration + one-click data from Google Maps, Instagram, TikTok, Amazon scrapers. 6 use-case templates (Lead Intelligence, Competitor Monitor, Support Knowledge). Simulate Bloomberg terminals, medical records, supply chains, e-commerce, and more.",
+  "seoTitle": "AI Synthetic Data Generator - MCP Server & Actor Integration for RAG",
+  "seoDescription": "Generate synthetic data with MCP server support. One-click integration with Google Maps, Instagram, TikTok, Amazon scrapers. 6 pre-built templates for Lead Intelligence, Competitor Monitor, Support RAG. TRM/SONA self-learning.",
+  "version": "2.2",
+  "buildTag": "latest",
+  "minMemoryMbytes": 256,
+  "maxMemoryMbytes": 4096,
+  "dockerfile": "./Dockerfile",
+  "readme": "../README.md",
+  "input": "./input_schema.json",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Generated Synthetic Data",
+      "views": {
+        "overview": {
+          "title": "Synthetic Data Results",
+          "transformation": {
+            "fields": ["id", "type", "data", "metadata"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "id": { "label": "ID", "format": "number" },
+              "type": { "label": "Type", "format": "text" },
+              "data": { "label": "Data", "format": "object" },
+              "metadata": { "label": "Metadata", "format": "object" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "meta": {
+    "author": "rUv",
+    "email": "info@ruv.io",
+    "website": "https://github.com/ruvnet/ruvector",
+    "license": "MIT",
+    "categories": ["AI", "DEVELOPMENT", "AUTOMATION", "DATA_PROCESSING"],
+    "useCases": [
+      "Train AI models with unlimited synthetic data",
+      "Test web scrapers without hitting rate limits",
+      "Generate Bloomberg-style market data for trading systems",
+      "Create HIPAA-compliant format medical records for testing",
+      "Simulate supply chain and logistics data",
+      "Mock enterprise APIs for development",
+      "Build AI agent memory datasets",
+      "CI/CD pipeline integration testing",
+      "Load testing with realistic data patterns"
+    ],
+    "keywords": [
+      "AI synthetic data",
+      "TRM recursive reasoning",
+      "SONA self-learning",
+      "Bloomberg simulator",
+      "medical data generator",
+      "enterprise mock data",
+      "AI agent training",
+      "scraper testing",
+      "mock data",
+      "api simulator",
+      "synthetic data",
+      "test data generator",
+      "e-commerce scraper",
+      "amazon scraper test",
+      "social media scraper",
+      "linkedin scraper test",
+      "job scraper",
+      "real estate scraper",
+      "zillow scraper test",
+      "stock trading data",
+      "HIPAA compliant",
+      "supply chain",
+      "financial data",
+      "ci/cd testing",
+      "load testing",
+      "machine learning",
+      "RAG training data",
+      "LLM fine-tuning"
+    ]
+  }
+}

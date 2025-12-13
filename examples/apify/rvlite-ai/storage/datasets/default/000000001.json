@@ -1,0 +1,60 @@
+{
+	"action": "export",
+	"success": true,
+	"result": {
+		"format": "json",
+		"data": {
+			"memories": [],
+			"knowledgeGraph": {
+				"nodes": [],
+				"edges": []
+			},
+			"stats": {
+				"queries": 0,
+				"stores": 0,
+				"hits": 0,
+				"trajectories": 0,
+				"patterns": 0,
+				"simdEnabled": true,
+				"ruvllmNative": true,
+				"sonaEnabled": true,
+				"ruvllmStats": {},
+				"sonaStats": {
+					"signalsReceived": 0,
+					"trajectoriesBuffered": 0,
+					"patterns": {
+						"totalPatterns": 0,
+						"avgSuccessRate": 0,
+						"byType": {}
+					},
+					"ewc": {
+						"tasksLearned": 0,
+						"fisherComputed": false,
+						"protectionStrength": 2000,
+						"forgettingRate": 0
+					}
+				}
+			},
+			"config": {
+				"dimensions": 768,
+				"distanceMetric": "cosine",
+				"namespace": "default"
+			}
+		},
+		"memoryCount": 0,
+		"graphNodes": 0,
+		"graphEdges": 0
+	},
+	"metadata": {
+		"namespace": "default",
+		"memoryCount": 0,
+		"timestamp": "2025-12-13T14:36:36.885Z",
+		"engine": {
+			"ruvllmLoaded": true,
+			"simdEnabled": true,
+			"nativeLoaded": true,
+			"sonaEnabled": true,
+			"version": "0.1.0"
+		}
+	}
+}

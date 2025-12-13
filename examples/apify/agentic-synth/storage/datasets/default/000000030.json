@@ -1,0 +1,42 @@
+{
+	"id": 30,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/pro-article-8653-29",
+		"title": "GlowUp Smart Car",
+		"price": 690.92,
+		"originalPrice": 772.2,
+		"currency": "USD",
+		"category": "Toys",
+		"brand": "GlowUp",
+		"rating": 4.3,
+		"reviewCount": 3792,
+		"inStock": true,
+		"stockCount": 19,
+		"condition": "Used - Good",
+		"seller": {
+			"name": "Seller419",
+			"rating": 3.9,
+			"totalSales": 22986
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 7,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-29-0.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

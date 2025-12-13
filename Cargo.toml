@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["crates/micro-hnsw-wasm"]
+exclude = ["crates/micro-hnsw-wasm", "crates/rvlite"]
 members = [
     "crates/ruvector-core",
     "crates/ruvector-node",

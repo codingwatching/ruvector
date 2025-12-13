@@ -1,0 +1,45 @@
+{
+	"id": 54,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/max-offer-9909-53",
+		"title": "StyleMax Premium Charger",
+		"price": 355.04,
+		"originalPrice": null,
+		"currency": "USD",
+		"category": "Automotive",
+		"brand": "StyleMax",
+		"rating": 4.7,
+		"reviewCount": 1784,
+		"inStock": false,
+		"stockCount": 96,
+		"condition": "New",
+		"seller": {
+			"name": "Seller208",
+			"rating": 4,
+			"totalSales": 12639
+		},
+		"shipping": {
+			"free": false,
+			"estimatedDays": 3,
+			"price": 0
+		},
+		"images": [
+			"https://example-store.com/images/product-53-0.jpg",
+			"https://example-store.com/images/product-53-1.jpg",
+			"https://example-store.com/images/product-53-2.jpg",
+			"https://example-store.com/images/product-53-3.jpg"
+		],
+		"specifications": {
+			"general": "Standard specifications"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

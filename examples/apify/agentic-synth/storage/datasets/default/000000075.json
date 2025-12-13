@@ -1,0 +1,43 @@
+{
+	"id": 75,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/max-review-5019-74",
+		"title": "TechPro Classic Rug",
+		"price": 516.78,
+		"originalPrice": 767.4,
+		"currency": "USD",
+		"category": "Home & Garden",
+		"brand": "TechPro",
+		"rating": 5,
+		"reviewCount": 2811,
+		"inStock": true,
+		"stockCount": 116,
+		"condition": "Refurbished",
+		"seller": {
+			"name": "Seller411",
+			"rating": 3.7,
+			"totalSales": 26951
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 9,
+			"price": 14.01
+		},
+		"images": [
+			"https://example-store.com/images/product-74-0.jpg"
+		],
+		"specifications": {
+			"dimensions": "36x18cm",
+			"weight": "4kg"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}

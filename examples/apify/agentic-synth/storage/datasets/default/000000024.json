@@ -1,0 +1,45 @@
+{
+	"id": 24,
+	"type": "ecommerce",
+	"data": {
+		"url": "https://example-store.com/products/amazing-review-459-23",
+		"title": "BookWorld Smart Cable",
+		"price": 745.97,
+		"originalPrice": 1014.96,
+		"currency": "USD",
+		"category": "Electronics",
+		"brand": "BookWorld",
+		"rating": 3.3,
+		"reviewCount": 3332,
+		"inStock": true,
+		"stockCount": 356,
+		"condition": "Used - Like New",
+		"seller": {
+			"name": "Seller986",
+			"rating": 4.1,
+			"totalSales": 32277
+		},
+		"shipping": {
+			"free": true,
+			"estimatedDays": 4,
+			"price": 6.68
+		},
+		"images": [
+			"https://example-store.com/images/product-23-0.jpg",
+			"https://example-store.com/images/product-23-1.jpg"
+		],
+		"specifications": {
+			"battery": "1627mAh",
+			"connectivity": "Bluetooth 5.0",
+			"warranty": "1 year"
+		},
+		"scrapedAt": "2025-12-13T15:12:31.915Z"
+	},
+	"metadata": {
+		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"provider": "gemini",
+		"model": "gemini-2.0-flash-exp",
+		"quality": 0.8,
+		"seed": "random"
+	}
+}
