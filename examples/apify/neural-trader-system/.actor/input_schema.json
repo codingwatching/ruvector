@@ -344,6 +344,211 @@
         "stochastic": true,
         "atr": true
       }
+    },
+    "dryRun": {
+      "title": "Dry Run Mode",
+      "type": "boolean",
+      "description": "Simulate trades without executing (paper trading)",
+      "default": true,
+      "editor": "checkbox",
+      "sectionCaption": "Live Trading Settings",
+      "sectionDescription": "Configuration for live trading mode with Alpaca API"
+    },
+    "alpacaApiKey": {
+      "title": "Alpaca API Key",
+      "type": "string",
+      "description": "Your Alpaca API key for live/paper trading",
+      "editor": "textfield",
+      "isSecret": true,
+      "nullable": true
+    },
+    "alpacaSecretKey": {
+      "title": "Alpaca Secret Key",
+      "type": "string",
+      "description": "Your Alpaca secret key for live/paper trading",
+      "editor": "textfield",
+      "isSecret": true,
+      "nullable": true
+    },
+    "alpacaPaper": {
+      "title": "Use Paper Trading",
+      "type": "boolean",
+      "description": "Use Alpaca paper trading environment (recommended for testing)",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "initialCapital": {
+      "title": "Initial Capital ($)",
+      "type": "number",
+      "description": "Starting capital for backtest simulation",
+      "minimum": 1000,
+      "maximum": 10000000,
+      "default": 100000,
+      "sectionCaption": "Backtest Settings",
+      "sectionDescription": "Configuration for Monte Carlo backtesting mode"
+    },
+    "monteCarloRuns": {
+      "title": "Monte Carlo Simulations",
+      "type": "integer",
+      "description": "Number of Monte Carlo simulation runs for confidence intervals",
+      "minimum": 100,
+      "maximum": 10000,
+      "default": 1000
+    },
+    "bankroll": {
+      "title": "Bankroll ($)",
+      "type": "number",
+      "description": "Starting bankroll for sports betting",
+      "minimum": 100,
+      "maximum": 1000000,
+      "default": 10000,
+      "sectionCaption": "Sports Betting Settings",
+      "sectionDescription": "Configuration for sports betting with Kelly Criterion"
+    },
+    "minEdge": {
+      "title": "Minimum Edge (%)",
+      "type": "number",
+      "description": "Minimum edge percentage required to place a bet",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 5,
+      "unit": "%"
+    },
+    "sportsLeagues": {
+      "title": "Sports Leagues",
+      "type": "array",
+      "description": "Sports leagues to analyze for betting opportunities",
+      "editor": "select",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "nfl",
+          "nba",
+          "mlb",
+          "nhl",
+          "soccer_epl",
+          "soccer_mls",
+          "tennis",
+          "ufc",
+          "all"
+        ],
+        "enumTitles": [
+          "NFL (American Football)",
+          "NBA (Basketball)",
+          "MLB (Baseball)",
+          "NHL (Hockey)",
+          "English Premier League",
+          "MLS (Soccer)",
+          "Tennis (ATP/WTA)",
+          "UFC (MMA)",
+          "All Sports"
+        ]
+      },
+      "default": ["nfl", "nba"]
+    },
+    "oddsApiKey": {
+      "title": "The Odds API Key",
+      "type": "string",
+      "description": "API key for The Odds API (get free key at the-odds-api.com)",
+      "editor": "textfield",
+      "isSecret": true,
+      "nullable": true
+    },
+    "minLiquidity": {
+      "title": "Minimum Liquidity ($)",
+      "type": "number",
+      "description": "Minimum market liquidity to consider",
+      "minimum": 1000,
+      "maximum": 10000000,
+      "default": 10000,
+      "sectionCaption": "Prediction Markets Settings",
+      "sectionDescription": "Configuration for Polymarket analysis"
+    },
+    "marketCategories": {
+      "title": "Market Categories",
+      "type": "array",
+      "description": "Prediction market categories to analyze",
+      "editor": "select",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "politics",
+          "crypto",
+          "sports",
+          "entertainment",
+          "economics",
+          "science",
+          "all"
+        ],
+        "enumTitles": [
+          "Politics & Elections",
+          "Cryptocurrency",
+          "Sports Events",
+          "Entertainment",
+          "Economics & Finance",
+          "Science & Tech",
+          "All Categories"
+        ]
+      },
+      "default": ["politics", "crypto"]
+    },
+    "exchanges": {
+      "title": "Exchanges",
+      "type": "array",
+      "description": "Cryptocurrency exchanges to monitor for arbitrage",
+      "editor": "select",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "binance",
+          "coinbase",
+          "kraken",
+          "bybit",
+          "okx",
+          "kucoin",
+          "gate",
+          "huobi"
+        ],
+        "enumTitles": [
+          "Binance",
+          "Coinbase",
+          "Kraken",
+          "Bybit",
+          "OKX",
+          "KuCoin",
+          "Gate.io",
+          "Huobi"
+        ]
+      },
+      "default": ["binance", "coinbase", "kraken"],
+      "sectionCaption": "Arbitrage Settings",
+      "sectionDescription": "Configuration for cross-exchange arbitrage detection"
+    },
+    "minSpread": {
+      "title": "Minimum Spread (%)",
+      "type": "number",
+      "description": "Minimum price spread percentage to report",
+      "minimum": 0.1,
+      "maximum": 10,
+      "default": 0.5,
+      "unit": "%"
+    },
+    "includeDeFi": {
+      "title": "Include DeFi",
+      "type": "boolean",
+      "description": "Include decentralized exchange (DEX) arbitrage opportunities",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "includeFlashLoans": {
+      "title": "Include Flash Loans",
+      "type": "boolean",
+      "description": "Detect flash loan arbitrage opportunities (advanced)",
+      "default": false,
+      "editor": "checkbox"
     }
   },
   "required": [
