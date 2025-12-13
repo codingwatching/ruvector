@@ -1,0 +1,161 @@
+{
+  "title": "RAG Knowledge Base Builder Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "sourceType": {
+      "title": "Source Type",
+      "type": "string",
+      "description": "Type of content source to process",
+      "default": "urls",
+      "enum": ["urls", "sitemap", "actor_dataset", "file_upload"],
+      "enumTitles": ["URLs List", "XML Sitemap", "Actor Dataset", "File Upload"]
+    },
+    "urls": {
+      "title": "Start URLs",
+      "type": "array",
+      "description": "List of URLs to crawl and process",
+      "editor": "requestListSources",
+      "default": [],
+      "prefill": [
+        { "url": "https://docs.python.org/3/tutorial/index.html" }
+      ]
+    },
+    "sitemapUrl": {
+      "title": "Sitemap URL",
+      "type": "string",
+      "description": "URL to XML sitemap (only used if sourceType is 'sitemap')",
+      "editor": "textfield"
+    },
+    "actorDatasetId": {
+      "title": "Actor Dataset ID",
+      "type": "string",
+      "description": "Dataset ID from another actor (only used if sourceType is 'actor_dataset')",
+      "editor": "textfield"
+    },
+    "crawlDepth": {
+      "title": "Crawl Depth",
+      "type": "integer",
+      "description": "Maximum depth to follow links (1 = only start URLs, 5 = up to 5 levels deep)",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 5
+    },
+    "maxPages": {
+      "title": "Max Pages",
+      "type": "integer",
+      "description": "Maximum number of pages to crawl (0 = unlimited)",
+      "default": 100,
+      "minimum": 0
+    },
+    "chunkStrategy": {
+      "title": "Chunking Strategy",
+      "type": "string",
+      "description": "How to split content into chunks",
+      "default": "fixed_size",
+      "enum": ["fixed_size", "semantic", "paragraph", "sentence"],
+      "enumTitles": ["Fixed Size", "Semantic (Topic-based)", "Paragraph-based", "Sentence-based"]
+    },
+    "chunkSize": {
+      "title": "Chunk Size (tokens)",
+      "type": "integer",
+      "description": "Target size for each chunk in tokens",
+      "default": 512,
+      "minimum": 256,
+      "maximum": 2048
+    },
+    "chunkOverlap": {
+      "title": "Chunk Overlap (tokens)",
+      "type": "integer",
+      "description": "Number of tokens to overlap between chunks",
+      "default": 128,
+      "minimum": 0,
+      "maximum": 256
+    },
+    "embeddingModel": {
+      "title": "Embedding Model",
+      "type": "string",
+      "description": "Model to use for generating embeddings",
+      "default": "text-embedding-3-small",
+      "enum": [
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+        "cohere-embed-english-v3",
+        "local-minilm",
+        "simulated"
+      ],
+      "enumTitles": [
+        "OpenAI text-embedding-3-small (1536d)",
+        "OpenAI text-embedding-3-large (3072d)",
+        "Cohere Embed English v3 (1024d)",
+        "Local MiniLM (384d)",
+        "Simulated (for testing)"
+      ]
+    },
+    "openaiApiKey": {
+      "title": "OpenAI API Key",
+      "type": "string",
+      "description": "Required if using OpenAI embedding models",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "cohereApiKey": {
+      "title": "Cohere API Key",
+      "type": "string",
+      "description": "Required if using Cohere embedding models",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "outputFormat": {
+      "title": "Output Format",
+      "type": "string",
+      "description": "Format for exporting processed chunks",
+      "default": "jsonl",
+      "enum": ["jsonl", "pinecone", "weaviate", "qdrant", "chroma", "agentdb"],
+      "enumTitles": ["JSONL (Generic)", "Pinecone Format", "Weaviate Format", "Qdrant Format", "Chroma Format", "AgentDB Format"]
+    },
+    "includeMetadata": {
+      "title": "Include Metadata",
+      "type": "boolean",
+      "description": "Include rich metadata (source URL, title, timestamp, section)",
+      "default": true
+    },
+    "deduplication": {
+      "title": "Enable Deduplication",
+      "type": "boolean",
+      "description": "Remove duplicate or highly similar chunks",
+      "default": true
+    },
+    "similarityThreshold": {
+      "title": "Similarity Threshold",
+      "type": "number",
+      "description": "Threshold for considering chunks as duplicates (0-1)",
+      "default": 0.95,
+      "minimum": 0.8,
+      "maximum": 1.0
+    },
+    "excludeSelectors": {
+      "title": "Exclude CSS Selectors",
+      "type": "array",
+      "description": "CSS selectors for elements to exclude (nav, footer, etc.)",
+      "editor": "stringList",
+      "default": ["nav", "header", "footer", ".sidebar", ".advertisement"],
+      "prefill": ["nav", "header", "footer", ".sidebar", ".advertisement"]
+    },
+    "includeSelectors": {
+      "title": "Include CSS Selectors",
+      "type": "array",
+      "description": "CSS selectors for elements to include (leave empty to include all)",
+      "editor": "stringList",
+      "default": []
+    },
+    "metadata": {
+      "title": "Custom Metadata",
+      "type": "object",
+      "description": "Additional metadata to attach to all chunks",
+      "editor": "json",
+      "default": {}
+    }
+  },
+  "required": ["urls"]
+}

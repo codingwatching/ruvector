@@ -1,0 +1,69 @@
+{
+  "actorSpecification": 1,
+  "name": "market-research-swarm",
+  "title": "Market Research Swarm - AI-Powered Competitive Intelligence & Analysis",
+  "description": "Orchestrate multi-agent AI swarms to conduct comprehensive market research, competitor analysis, trend detection, and business intelligence. Analyze competitors, track pricing, detect market trends, compare products, and generate actionable insights with automated recommendations. Perfect for SaaS, e-commerce, fintech, and any competitive industry.",
+  "version": "1.0",
+  "meta": {
+    "templateId": "market-research-swarm"
+  },
+  "input": "./input_schema.json",
+  "dockerfile": "./Dockerfile",
+  "readme": "./README.md",
+  "categories": [
+    "AI",
+    "AUTOMATION",
+    "DATA_PROCESSING"
+  ],
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Market Research Results",
+      "description": "Comprehensive market research data including competitor analysis, trends, and recommendations",
+      "views": {
+        "overview": {
+          "title": "Research Overview",
+          "transformation": {
+            "fields": [
+              "researchType",
+              "industry",
+              "executiveSummary",
+              "keyFindings",
+              "recommendations",
+              "analyzedAt"
+            ]
+          },
+          "display": {
+            "component": "table"
+          }
+        }
+      }
+    }
+  },
+  "stats": {
+    "timeout": 3600,
+    "minMemoryMbytes": 512,
+    "maxMemoryMbytes": 8192
+  },
+  "environmentVariables": {},
+  "isPublic": true,
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "website": "https://ruv.io"
+  },
+  "keywords": [
+    "market research",
+    "competitive intelligence",
+    "competitor analysis",
+    "market trends",
+    "AI swarm",
+    "business intelligence",
+    "pricing intelligence",
+    "sentiment analysis",
+    "product comparison",
+    "market share",
+    "automation",
+    "data analysis"
+  ]
+}

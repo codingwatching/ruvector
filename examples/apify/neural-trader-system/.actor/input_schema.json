@@ -1,0 +1,312 @@
+{
+  "title": "Neural Trader System Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "mode": {
+      "title": "Trading Mode",
+      "type": "string",
+      "description": "Select the trading operation mode",
+      "enum": [
+        "signals",
+        "optimize",
+        "analyze",
+        "train",
+        "live"
+      ],
+      "enumTitles": [
+        "Generate Trading Signals",
+        "Optimize Portfolio",
+        "Market Analysis",
+        "Train Neural Model",
+        "Live Trading"
+      ],
+      "default": "signals",
+      "editor": "select"
+    },
+    "symbols": {
+      "title": "Trading Symbols",
+      "type": "array",
+      "description": "List of trading symbols (e.g., BTC/USD, AAPL, EUR/USD)",
+      "editor": "stringList",
+      "default": ["BTC/USD", "ETH/USD", "AAPL", "TSLA"],
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "strategy": {
+      "title": "Neural Strategy",
+      "type": "string",
+      "description": "Select the neural network trading strategy",
+      "enum": [
+        "neural_momentum",
+        "lstm_prediction",
+        "transformer_attention",
+        "ensemble",
+        "reinforcement"
+      ],
+      "enumTitles": [
+        "Neural Momentum - Fast pattern recognition",
+        "LSTM Prediction - Time series forecasting",
+        "Transformer Attention - Multi-head analysis",
+        "Ensemble - Combined predictions",
+        "Reinforcement Learning - Adaptive strategy"
+      ],
+      "default": "ensemble",
+      "editor": "select"
+    },
+    "riskProfile": {
+      "title": "Risk Profile",
+      "type": "string",
+      "description": "Risk tolerance level for position sizing and stop-loss",
+      "enum": [
+        "conservative",
+        "moderate",
+        "aggressive",
+        "custom"
+      ],
+      "enumTitles": [
+        "Conservative - Low risk, tight stops",
+        "Moderate - Balanced risk/reward",
+        "Aggressive - Higher risk, wider stops",
+        "Custom - Manual configuration"
+      ],
+      "default": "moderate",
+      "editor": "select"
+    },
+    "maxPositionSize": {
+      "title": "Max Position Size (%)",
+      "type": "number",
+      "description": "Maximum position size as percentage of portfolio",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 10,
+      "unit": "%"
+    },
+    "stopLoss": {
+      "title": "Stop Loss (%)",
+      "type": "number",
+      "description": "Stop loss percentage from entry price",
+      "minimum": 0.1,
+      "maximum": 50,
+      "default": 2.5,
+      "unit": "%"
+    },
+    "takeProfit": {
+      "title": "Take Profit (%)",
+      "type": "number",
+      "description": "Take profit percentage from entry price",
+      "minimum": 0.1,
+      "maximum": 200,
+      "default": 5,
+      "unit": "%"
+    },
+    "timeframe": {
+      "title": "Timeframe",
+      "type": "string",
+      "description": "Candle timeframe for analysis",
+      "enum": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d"
+      ],
+      "enumTitles": [
+        "1 Minute - Scalping",
+        "5 Minutes - Day trading",
+        "15 Minutes - Intraday",
+        "1 Hour - Swing trading",
+        "4 Hours - Position trading",
+        "1 Day - Long-term"
+      ],
+      "default": "1h",
+      "editor": "select"
+    },
+    "lookbackPeriod": {
+      "title": "Lookback Period",
+      "type": "integer",
+      "description": "Number of historical candles for analysis",
+      "minimum": 10,
+      "maximum": 1000,
+      "default": 100
+    },
+    "neuralConfig": {
+      "title": "Neural Network Configuration",
+      "type": "object",
+      "description": "Advanced neural network settings",
+      "editor": "json",
+      "properties": {
+        "layers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "neurons": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "default": [128, 64, 32]
+        },
+        "activation": {
+          "type": "string",
+          "enum": ["relu", "tanh", "sigmoid", "leaky_relu"],
+          "default": "relu"
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.9,
+          "default": 0.2
+        },
+        "learningRate": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 0.1,
+          "default": 0.001
+        }
+      },
+      "default": {
+        "layers": 3,
+        "neurons": [128, 64, 32],
+        "activation": "relu",
+        "dropout": 0.2,
+        "learningRate": 0.001
+      }
+    },
+    "enableSwarm": {
+      "title": "Enable Multi-Agent Swarm",
+      "type": "boolean",
+      "description": "Use multiple neural agents with consensus voting for better accuracy",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "swarmAgents": {
+      "title": "Number of Swarm Agents",
+      "type": "integer",
+      "description": "Number of agents in the swarm (3-10 recommended)",
+      "minimum": 2,
+      "maximum": 20,
+      "default": 5
+    },
+    "outputFormat": {
+      "title": "Output Format",
+      "type": "string",
+      "description": "Format for trading signals and analysis",
+      "enum": [
+        "signals",
+        "full_analysis",
+        "portfolio",
+        "webhook"
+      ],
+      "enumTitles": [
+        "Signals Only - Buy/Sell/Hold",
+        "Full Analysis - Detailed breakdown",
+        "Portfolio Report - Allocation & risk",
+        "Webhook - JSON for automation"
+      ],
+      "default": "full_analysis",
+      "editor": "select"
+    },
+    "webhookUrl": {
+      "title": "Webhook URL",
+      "type": "string",
+      "description": "HTTP endpoint for sending trading signals (optional)",
+      "editor": "textfield",
+      "pattern": "^https?://.*",
+      "nullable": true
+    },
+    "backtestDays": {
+      "title": "Backtest Period (Days)",
+      "type": "integer",
+      "description": "Number of days to backtest the strategy (0 = no backtest)",
+      "minimum": 0,
+      "maximum": 365,
+      "default": 30
+    },
+    "enableGpu": {
+      "title": "Enable GPU Acceleration",
+      "type": "boolean",
+      "description": "Use GPU/WASM SIMD for faster computations",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "confidenceThreshold": {
+      "title": "Minimum Confidence (%)",
+      "type": "number",
+      "description": "Minimum confidence level to generate signals",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 70,
+      "unit": "%"
+    },
+    "patterns": {
+      "title": "Chart Patterns",
+      "type": "array",
+      "description": "Enable specific chart pattern recognition",
+      "editor": "stringList",
+      "items": {
+        "type": "string",
+        "enum": [
+          "head_shoulders",
+          "double_top",
+          "double_bottom",
+          "triangle",
+          "wedge",
+          "flag",
+          "pennant",
+          "cup_handle",
+          "all"
+        ]
+      },
+      "default": ["all"]
+    },
+    "indicators": {
+      "title": "Technical Indicators",
+      "type": "object",
+      "description": "Technical indicators to include in analysis",
+      "editor": "json",
+      "properties": {
+        "rsi": {
+          "type": "boolean",
+          "default": true
+        },
+        "macd": {
+          "type": "boolean",
+          "default": true
+        },
+        "bollinger": {
+          "type": "boolean",
+          "default": true
+        },
+        "ema": {
+          "type": "boolean",
+          "default": true
+        },
+        "stochastic": {
+          "type": "boolean",
+          "default": true
+        },
+        "atr": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "default": {
+        "rsi": true,
+        "macd": true,
+        "bollinger": true,
+        "ema": true,
+        "stochastic": true,
+        "atr": true
+      }
+    }
+  },
+  "required": [
+    "mode",
+    "symbols",
+    "strategy"
+  ]
+}

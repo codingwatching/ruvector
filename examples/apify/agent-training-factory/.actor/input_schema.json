@@ -1,0 +1,158 @@
+{
+  "title": "Agent Training Data Factory Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "datasetType": {
+      "title": "Dataset Type",
+      "type": "string",
+      "description": "Type of training data to generate",
+      "editor": "select",
+      "default": "conversations",
+      "enum": [
+        "conversations",
+        "qa_pairs",
+        "tool_calls",
+        "reasoning_chains",
+        "memory_patterns",
+        "embeddings"
+      ],
+      "enumTitles": [
+        "Conversations - Multi-turn dialogue datasets",
+        "Q&A Pairs - Question-answer pairs for training",
+        "Tool Calls - Function calling sequences",
+        "Reasoning Chains - Chain/Tree-of-Thought patterns",
+        "Memory Patterns - Short/long-term memory examples",
+        "Embeddings - Vector embeddings for RAG"
+      ]
+    },
+    "domain": {
+      "title": "Domain",
+      "type": "string",
+      "description": "Domain or subject area for the generated data",
+      "editor": "textfield",
+      "default": "customer_support",
+      "example": "customer_support, coding, research, sales, healthcare, education"
+    },
+    "count": {
+      "title": "Number of Examples",
+      "type": "integer",
+      "description": "How many training examples to generate",
+      "editor": "number",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "complexity": {
+      "title": "Complexity Level",
+      "type": "string",
+      "description": "Complexity level of generated examples",
+      "editor": "select",
+      "default": "moderate",
+      "enum": [
+        "simple",
+        "moderate",
+        "complex",
+        "expert"
+      ],
+      "enumTitles": [
+        "Simple - Basic single-step examples",
+        "Moderate - Multi-step with some reasoning",
+        "Complex - Advanced multi-step with context",
+        "Expert - Sophisticated reasoning and edge cases"
+      ]
+    },
+    "includeMetadata": {
+      "title": "Include Metadata",
+      "type": "boolean",
+      "description": "Include metadata fields (timestamps, IDs, confidence scores)",
+      "editor": "checkbox",
+      "default": true
+    },
+    "groundingActorId": {
+      "title": "Grounding Actor ID (Optional)",
+      "type": "string",
+      "description": "Apify actor ID to fetch real data patterns from (e.g., 'apify/web-scraper'). Synthetic data will be grounded in real scraped patterns.",
+      "editor": "textfield",
+      "example": "apify/web-scraper",
+      "nullable": true
+    },
+    "groundingDatasetId": {
+      "title": "Grounding Dataset ID (Optional)",
+      "type": "string",
+      "description": "Use existing Apify dataset ID as grounding data",
+      "editor": "textfield",
+      "nullable": true
+    },
+    "outputFormat": {
+      "title": "Output Format",
+      "type": "string",
+      "description": "Format for the generated dataset",
+      "editor": "select",
+      "default": "jsonl",
+      "enum": [
+        "jsonl",
+        "parquet",
+        "huggingface"
+      ],
+      "enumTitles": [
+        "JSONL - JSON Lines format",
+        "Parquet - Columnar storage format",
+        "HuggingFace - HF datasets compatible format"
+      ]
+    },
+    "generateEmbeddings": {
+      "title": "Generate Embeddings",
+      "type": "boolean",
+      "description": "Generate vector embeddings for RAG systems (requires more memory)",
+      "editor": "checkbox",
+      "default": false
+    },
+    "embeddingModel": {
+      "title": "Embedding Model",
+      "type": "string",
+      "description": "Model to use for generating embeddings",
+      "editor": "select",
+      "default": "text-embedding-3-small",
+      "enum": [
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+        "text-embedding-ada-002"
+      ],
+      "sectionCaption": "Only used if 'Generate Embeddings' is enabled"
+    },
+    "openaiApiKey": {
+      "title": "OpenAI API Key (Optional)",
+      "type": "string",
+      "description": "OpenAI API key for generating embeddings (if not provided, will use local model)",
+      "editor": "textfield",
+      "isSecret": true,
+      "nullable": true
+    },
+    "customPrompts": {
+      "title": "Custom Prompts (Optional)",
+      "type": "array",
+      "description": "Custom prompts to guide data generation",
+      "editor": "json",
+      "nullable": true,
+      "prefill": [
+        {
+          "role": "system",
+          "content": "Generate realistic customer support conversations"
+        }
+      ]
+    },
+    "seed": {
+      "title": "Random Seed",
+      "type": "integer",
+      "description": "Random seed for reproducible generation",
+      "editor": "number",
+      "nullable": true
+    }
+  },
+  "required": [
+    "datasetType",
+    "domain",
+    "count"
+  ]
+}

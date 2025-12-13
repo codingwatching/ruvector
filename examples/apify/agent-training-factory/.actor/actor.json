@@ -1,0 +1,74 @@
+{
+  "actorSpecification": 1,
+  "name": "agent-training-factory",
+  "title": "Agent Training Data Factory - AI Agent Memory & RAG Dataset Generator",
+  "description": "Generate high-quality training datasets for AI agents including conversations, Q&A pairs, tool calls, reasoning chains, memory patterns, and embeddings. Perfect for RAG systems, LLM fine-tuning, and agent development. Ground synthetic data in real scraped patterns from Apify actors.",
+  "version": "1.0",
+  "build": {
+    "dockerfile": "./Dockerfile"
+  },
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Training Data Output",
+      "description": "Generated training dataset in selected format (JSONL, Parquet, or HuggingFace)",
+      "views": {
+        "overview": {
+          "title": "Overview",
+          "transformation": {
+            "fields": [
+              "type",
+              "domain",
+              "complexity",
+              "metadata"
+            ]
+          },
+          "display": {
+            "component": "table"
+          }
+        }
+      }
+    }
+  },
+  "input": "./input_schema.json",
+  "minMemoryMbytes": 256,
+  "maxMemoryMbytes": 4096,
+  "dockerfile": "./Dockerfile",
+  "readme": "./README.md",
+  "categories": [
+    "AI",
+    "DEVELOPMENT",
+    "AUTOMATION"
+  ],
+  "meta": {
+    "templateId": "js-start"
+  },
+  "stats": {
+    "timeout": 3600,
+    "memoryMbytes": 1024
+  },
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  },
+  "isPublic": true,
+  "seoTitle": "AI Agent Training Data Generator - RAG Datasets & Conversation Synthesis",
+  "seoDescription": "Generate training datasets for AI agents: conversations, Q&A pairs, tool calls, reasoning chains, memory patterns & embeddings. Ground synthetic data in real patterns. Perfect for RAG, fine-tuning & agent development.",
+  "keywords": [
+    "AI agent training",
+    "RAG dataset",
+    "agent memory",
+    "conversation synthesis",
+    "LLM training",
+    "fine-tuning",
+    "tool calls",
+    "reasoning chains",
+    "embeddings",
+    "vector database",
+    "synthetic data",
+    "training data",
+    "agentic-flow",
+    "AI automation"
+  ]
+}

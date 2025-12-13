@@ -1,0 +1,255 @@
+{
+  "title": "Financial Stress Test Input",
+  "description": "Configure stress testing parameters, portfolio composition, scenarios, and risk metrics",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "testType": {
+      "title": "Stress Test Type",
+      "type": "string",
+      "description": "Select the type of stress test to perform",
+      "default": "var_calculation",
+      "enum": [
+        "var_calculation",
+        "scenario_analysis",
+        "monte_carlo",
+        "historical_replay",
+        "custom_shock"
+      ],
+      "enumTitles": [
+        "VaR Calculation (Parametric, Historical, Monte Carlo)",
+        "Scenario Analysis (Pre-defined Crisis Events)",
+        "Monte Carlo Simulation (Correlation-based)",
+        "Historical Replay (Actual Market Crashes)",
+        "Custom Shock Scenarios (User-defined)"
+      ],
+      "editor": "select"
+    },
+    "portfolio": {
+      "title": "Portfolio Composition",
+      "type": "array",
+      "description": "Define portfolio holdings with symbols, weights, and quantities",
+      "editor": "json",
+      "prefill": [
+        {
+          "symbol": "SPY",
+          "weight": 0.4,
+          "quantity": 100,
+          "currentPrice": 450.0
+        },
+        {
+          "symbol": "TLT",
+          "weight": 0.3,
+          "quantity": 150,
+          "currentPrice": 95.0
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.3,
+          "quantity": 80,
+          "currentPrice": 185.0
+        }
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Asset ticker symbol"
+          },
+          "weight": {
+            "type": "number",
+            "description": "Portfolio weight (0-1)"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Number of shares/units"
+          },
+          "currentPrice": {
+            "type": "number",
+            "description": "Current market price"
+          }
+        },
+        "required": ["symbol", "weight", "quantity", "currentPrice"]
+      }
+    },
+    "scenarios": {
+      "title": "Crisis Scenarios",
+      "type": "array",
+      "description": "Select historical crisis scenarios to replay",
+      "editor": "select",
+      "default": ["2008_crisis", "covid_crash"],
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "2008_crisis",
+          "covid_crash",
+          "flash_crash",
+          "rate_hike",
+          "currency_crisis",
+          "dot_com_bubble",
+          "black_monday_1987",
+          "european_debt_crisis",
+          "oil_shock",
+          "stagflation"
+        ],
+        "enumTitles": [
+          "2008 Financial Crisis (-55% equity, credit crunch)",
+          "COVID-19 Crash 2020 (-35% equity, volatility spike)",
+          "Flash Crash 2010 (-10% intraday, liquidity shock)",
+          "Rapid Rate Hike (+500bps rates, bond crash)",
+          "Currency Crisis (-30% FX, EM contagion)",
+          "Dot-com Bubble 2000 (-78% tech, valuation collapse)",
+          "Black Monday 1987 (-22% single day crash)",
+          "European Debt Crisis 2011 (sovereign default fears)",
+          "Oil Shock 1973 (+400% oil, stagflation)",
+          "Stagflation Scenario (high inflation + recession)"
+        ]
+      }
+    },
+    "confidenceLevel": {
+      "title": "Confidence Level",
+      "type": "number",
+      "description": "Statistical confidence level for VaR calculation",
+      "default": 0.95,
+      "enum": [0.90, 0.95, 0.99, 0.995],
+      "enumTitles": ["90%", "95%", "99%", "99.5%"],
+      "editor": "select"
+    },
+    "timeHorizon": {
+      "title": "Time Horizon",
+      "type": "string",
+      "description": "Risk measurement time horizon",
+      "default": "10d",
+      "enum": ["1d", "10d", "30d", "252d"],
+      "enumTitles": [
+        "1 Day (Daily VaR)",
+        "10 Days (Regulatory Standard)",
+        "30 Days (Monthly Risk)",
+        "252 Days (Annual Risk)"
+      ],
+      "editor": "select"
+    },
+    "simulations": {
+      "title": "Monte Carlo Simulations",
+      "type": "integer",
+      "description": "Number of Monte Carlo simulation paths",
+      "default": 10000,
+      "minimum": 1000,
+      "maximum": 100000,
+      "editor": "number"
+    },
+    "includeCorrelations": {
+      "title": "Include Asset Correlations",
+      "type": "boolean",
+      "description": "Model correlations between assets in Monte Carlo simulation",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "outputMetrics": {
+      "title": "Output Risk Metrics",
+      "type": "array",
+      "description": "Select risk metrics to calculate and report",
+      "editor": "select",
+      "default": ["var", "cvar", "max_drawdown", "stress_pnl"],
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "var",
+          "cvar",
+          "max_drawdown",
+          "stress_pnl",
+          "recovery_time",
+          "sharpe_ratio",
+          "sortino_ratio",
+          "tail_risk",
+          "skewness",
+          "kurtosis"
+        ],
+        "enumTitles": [
+          "Value at Risk (VaR)",
+          "Conditional VaR / Expected Shortfall (CVaR)",
+          "Maximum Drawdown",
+          "Stress Scenario P&L",
+          "Recovery Time Analysis",
+          "Sharpe Ratio",
+          "Sortino Ratio",
+          "Tail Risk Metrics",
+          "Return Skewness",
+          "Excess Kurtosis"
+        ]
+      }
+    },
+    "historicalDataPeriod": {
+      "title": "Historical Data Period",
+      "type": "string",
+      "description": "Lookback period for historical VaR and correlation estimation",
+      "default": "1y",
+      "enum": ["3m", "6m", "1y", "3y", "5y"],
+      "enumTitles": [
+        "3 Months",
+        "6 Months",
+        "1 Year",
+        "3 Years",
+        "5 Years"
+      ],
+      "editor": "select"
+    },
+    "customShocks": {
+      "title": "Custom Shock Scenarios",
+      "type": "array",
+      "description": "Define custom market shocks (only for custom_shock test type)",
+      "editor": "json",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Scenario name"
+          },
+          "equityShock": {
+            "type": "number",
+            "description": "Equity market change (%)"
+          },
+          "rateShock": {
+            "type": "number",
+            "description": "Interest rate change (bps)"
+          },
+          "fxShock": {
+            "type": "number",
+            "description": "FX rate change (%)"
+          },
+          "volatilityMultiplier": {
+            "type": "number",
+            "description": "Volatility scaling factor"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    "generateRegulatoryReport": {
+      "title": "Generate Regulatory Report",
+      "type": "boolean",
+      "description": "Generate Basel III / regulatory compliance report",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "exportFormat": {
+      "title": "Export Format",
+      "type": "string",
+      "description": "Output format for results",
+      "default": "json",
+      "enum": ["json", "csv", "excel", "pdf_report"],
+      "enumTitles": [
+        "JSON (API-friendly)",
+        "CSV (Spreadsheet)",
+        "Excel (Multi-sheet)",
+        "PDF Report (Executive Summary)"
+      ],
+      "editor": "select"
+    }
+  },
+  "required": ["testType", "portfolio"]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "financial-stress-test",
+  "version": "1.0.0",
+  "description": "Enterprise-grade financial stress testing platform with VaR, scenario analysis, and Monte Carlo simulation",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "stress-testing",
+    "var",
+    "value-at-risk",
+    "risk-management",
+    "scenario-analysis",
+    "portfolio-risk",
+    "monte-carlo",
+    "regulatory-compliance",
+    "basel-iii",
+    "financial-risk"
+  ],
+  "author": "rUv <info@ruv.io> (https://ruv.io)",
+  "license": "MIT",
+  "dependencies": {
+    "apify": "^3.1.0",
+    "crawlee": "^3.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector.git"
+  }
+}

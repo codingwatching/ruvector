@@ -1,0 +1,35 @@
+{
+  "name": "rag-knowledge-builder",
+  "version": "1.0.0",
+  "description": "Build comprehensive knowledge bases for RAG systems by crawling, chunking, embedding, and indexing content from multiple sources",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "rag",
+    "knowledge-base",
+    "embeddings",
+    "semantic-search",
+    "vector-database",
+    "llm",
+    "chatbot",
+    "ai-assistant",
+    "crawling",
+    "chunking"
+  ],
+  "author": "rUv <info@ruv.io>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "apify": "^3.1.0",
+    "crawlee": "^3.5.0",
+    "cheerio": "^1.0.0-rc.12",
+    "tiktoken": "^1.0.10",
+    "crypto": "^1.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "actorSpecification": 1,
+  "name": "neural-trader-system",
+  "title": "Neural Trader System - AI Trading Signals, Portfolio Optimization & Risk Management",
+  "description": "Professional-grade AI trading system with 5 neural network strategies, GPU acceleration, and multi-agent coordination. Generate real-time trading signals with confidence scores, optimize portfolio allocation using Markowitz and Kelly criterion, manage risk with VaR and position sizing, recognize 40+ chart patterns, and integrate with trading bots via webhooks. Supports stocks, crypto, forex with backtesting and ensemble predictions.",
+  "version": "1.0",
+  "meta": {
+    "templateId": "neural-trader-system"
+  },
+  "input": "./.actor/input_schema.json",
+  "dockerfile": "./.actor/Dockerfile",
+  "readme": "./README.md",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Trading Signals and Analysis",
+      "views": {
+        "signals": {
+          "title": "Trading Signals",
+          "transformation": {
+            "fields": [
+              "timestamp",
+              "symbol",
+              "signal",
+              "confidence",
+              "price",
+              "target",
+              "stopLoss"
+            ]
+          },
+          "display": {
+            "component": "table"
+          }
+        }
+      }
+    }
+  },
+  "stats": {
+    "minMemoryMbytes": 1024,
+    "maxMemoryMbytes": 16384
+  },
+  "categories": [
+    "AI",
+    "DATA_PROCESSING",
+    "AUTOMATION"
+  ],
+  "isPublic": true,
+  "seoTitle": "Neural Trader System - AI Trading Signals & Portfolio Optimization",
+  "seoDescription": "Advanced AI trading system with neural networks, real-time signals, portfolio optimization, risk management, GPU acceleration, and multi-agent swarm coordination for stocks, crypto, and forex.",
+  "keywords": [
+    "neural trading",
+    "AI trading signals",
+    "portfolio optimization",
+    "risk management",
+    "algorithmic trading",
+    "quantitative trading",
+    "machine learning trading",
+    "GPU acceleration",
+    "multi-agent trading",
+    "cryptocurrency trading",
+    "stock signals",
+    "forex trading",
+    "LSTM trading",
+    "transformer models",
+    "ensemble predictions",
+    "backtesting",
+    "technical analysis",
+    "chart patterns",
+    "trading bot",
+    "automated trading"
+  ],
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "website": "https://ruv.io"
+  }
+}

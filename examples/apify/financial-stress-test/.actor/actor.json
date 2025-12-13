@@ -1,0 +1,44 @@
+{
+  "actorSpecification": 1,
+  "name": "financial-stress-test",
+  "title": "Financial Stress Testing Platform - VaR, Scenario Analysis & Risk Simulation",
+  "version": "1.0",
+  "description": "Enterprise-grade financial stress testing platform for portfolio risk management. Calculate Value at Risk (VaR), perform scenario analysis with historical crisis replays (2008, COVID, flash crashes), run Monte Carlo simulations with up to 100,000 iterations, and generate Basel III compliant regulatory reports. Supports parametric, historical, and Monte Carlo VaR methods, conditional VaR/CVaR, correlation matrices, maximum drawdown analysis, and custom shock scenarios. Essential tool for quantitative risk managers, portfolio managers, compliance officers, and financial institutions requiring comprehensive stress testing and regulatory reporting capabilities.",
+  "minMemoryMbytes": 512,
+  "maxMemoryMbytes": 8192,
+  "categories": [
+    "AI",
+    "DATA_PROCESSING",
+    "DEVELOPMENT"
+  ],
+  "dockerfile": "./Dockerfile",
+  "input": "./input_schema.json",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Financial Stress Test Results",
+      "description": "Comprehensive stress test results including VaR metrics, scenario P&L, risk measures, and regulatory reports",
+      "views": {
+        "overview": {
+          "title": "Risk Metrics Overview",
+          "transformation": {
+            "fields": [
+              "testType",
+              "var95",
+              "var99",
+              "cvar",
+              "maxDrawdown",
+              "portfolioValue"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  },
+  "readme": "./README.md"
+}

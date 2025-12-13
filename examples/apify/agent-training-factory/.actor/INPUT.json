@@ -1,0 +1,15 @@
+{
+  "datasetType": "conversations",
+  "domain": "customer_support",
+  "count": 100,
+  "complexity": "moderate",
+  "includeMetadata": true,
+  "groundingActorId": null,
+  "groundingDatasetId": null,
+  "outputFormat": "jsonl",
+  "generateEmbeddings": false,
+  "embeddingModel": "text-embedding-3-small",
+  "openaiApiKey": null,
+  "customPrompts": null,
+  "seed": null
+}

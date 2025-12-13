@@ -1,0 +1,44 @@
+{
+  "name": "agent-training-factory",
+  "version": "1.0.0",
+  "description": "AI Agent Training Data Factory - Generate RAG datasets, conversation patterns, and training data for AI agents",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai-agent-training",
+    "rag-dataset",
+    "llm-training",
+    "conversation-synthesis",
+    "agent-memory",
+    "tool-calls",
+    "embeddings",
+    "fine-tuning",
+    "apify",
+    "crawlee"
+  ],
+  "author": "rUv <info@ruv.io> (https://ruv.io)",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "apify": "^3.0.0",
+    "crawlee": "^3.0.0",
+    "@huggingface/transformers": "^2.0.0",
+    "openai": "^4.0.0",
+    "axios": "^1.6.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector.git"
+  },
+  "homepage": "https://ruv.io"
+}

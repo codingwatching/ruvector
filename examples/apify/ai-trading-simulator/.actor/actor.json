@@ -1,0 +1,66 @@
+{
+  "actorSpecification": 1,
+  "name": "ai-trading-simulator",
+  "title": "AI Trading Simulator - Neural Market Data & Strategy Backtesting",
+  "description": "Generate unlimited realistic market data with GPU-accelerated neural price models. Backtest algorithmic trading strategies with comprehensive metrics (Sharpe, Sortino, drawdown). Simulate OHLCV data, order books, and market news with configurable volatility and trends. Perfect for quant development, ML model training, and fintech applications.",
+  "version": "1.0",
+  "meta": {
+    "templateId": "ai-trading-simulator"
+  },
+  "input": "./.actor/input_schema.json",
+  "dockerfile": "./.actor/Dockerfile",
+  "readme": "./README.md",
+  "categories": [
+    "AI",
+    "DEVELOPMENT",
+    "DATA_PROCESSING"
+  ],
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Trading Data",
+      "views": {
+        "overview": {
+          "title": "Overview",
+          "transformation": {
+            "fields": [
+              "timestamp",
+              "symbol",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ]
+          },
+          "display": {
+            "component": "table"
+          }
+        }
+      }
+    }
+  },
+  "minMemoryMbytes": 512,
+  "maxMemoryMbytes": 8192,
+  "keywords": [
+    "neural-trading",
+    "market-simulation",
+    "backtesting",
+    "ohlcv",
+    "algorithmic-trading",
+    "quantitative-finance",
+    "fintech",
+    "ml-trading",
+    "gpu-acceleration",
+    "synthetic-data",
+    "order-book",
+    "technical-indicators",
+    "strategy-testing",
+    "quant-development"
+  ],
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  }
+}

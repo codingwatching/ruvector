@@ -1,0 +1,128 @@
+{
+  "title": "Market Research Swarm Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "researchType": {
+      "title": "Research Type",
+      "type": "string",
+      "description": "Type of market research to conduct",
+      "enum": [
+        "competitor_analysis",
+        "market_trends",
+        "product_comparison",
+        "pricing_intelligence",
+        "sentiment_analysis"
+      ],
+      "default": "competitor_analysis",
+      "editor": "select"
+    },
+    "industry": {
+      "title": "Industry",
+      "type": "string",
+      "description": "Industry or market segment (e.g., 'saas', 'ecommerce', 'fintech', 'healthcare')",
+      "editor": "textfield",
+      "example": "saas"
+    },
+    "competitors": {
+      "title": "Competitors",
+      "type": "array",
+      "description": "List of competitor company names or domains to analyze",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "example": [
+        "competitor1.com",
+        "competitor2.com",
+        "competitor3.com"
+      ]
+    },
+    "dataSourceActors": {
+      "title": "Data Source Actors",
+      "type": "array",
+      "description": "Apify actor IDs to pull data from (e.g., Google scraper, Amazon scraper, social media scrapers)",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "example": [
+        "apify/google-search-scraper",
+        "apify/website-content-crawler"
+      ]
+    },
+    "timeRange": {
+      "title": "Time Range",
+      "type": "string",
+      "description": "Historical time range for trend analysis",
+      "enum": [
+        "7d",
+        "30d",
+        "90d",
+        "1y"
+      ],
+      "default": "30d",
+      "editor": "select"
+    },
+    "outputFormat": {
+      "title": "Output Format",
+      "type": "string",
+      "description": "Format for research output",
+      "enum": [
+        "report",
+        "json",
+        "dashboard"
+      ],
+      "default": "report",
+      "editor": "select"
+    },
+    "includeRecommendations": {
+      "title": "Include Recommendations",
+      "type": "boolean",
+      "description": "Generate actionable recommendations based on findings",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "swarmSize": {
+      "title": "Swarm Size",
+      "type": "integer",
+      "description": "Number of AI agents to deploy (1-10)",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "editor": "number"
+    },
+    "keywords": {
+      "title": "Keywords",
+      "type": "array",
+      "description": "Specific keywords or topics to track (optional)",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "includeMarketShare": {
+      "title": "Include Market Share Estimation",
+      "type": "boolean",
+      "description": "Estimate relative market share of competitors",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "maxDepth": {
+      "title": "Analysis Depth",
+      "type": "integer",
+      "description": "Depth of analysis (1=basic, 3=comprehensive)",
+      "minimum": 1,
+      "maximum": 3,
+      "default": 2,
+      "editor": "number"
+    }
+  },
+  "required": [
+    "researchType",
+    "industry"
+  ]
+}

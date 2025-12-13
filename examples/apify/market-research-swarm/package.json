@@ -1,0 +1,36 @@
+{
+  "name": "market-research-swarm",
+  "version": "1.0.0",
+  "description": "AI-powered multi-agent swarm for comprehensive market research, competitor analysis, and business intelligence",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "market-research",
+    "competitive-intelligence",
+    "competitor-analysis",
+    "market-trends",
+    "ai-swarm",
+    "business-intelligence",
+    "apify",
+    "automation"
+  ],
+  "author": "rUv <info@ruv.io> (https://ruv.io)",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "apify": "^3.1.0",
+    "crawlee": "^3.5.0",
+    "cheerio": "^1.0.0-rc.12",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector"
+  }
+}

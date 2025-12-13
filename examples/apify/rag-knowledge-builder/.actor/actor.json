@@ -1,0 +1,102 @@
+{
+  "actorSpecification": 1,
+  "name": "rag-knowledge-builder",
+  "title": "RAG Knowledge Base Builder - Crawl, Chunk, Embed & Index for AI",
+  "description": "Build production-ready knowledge bases for RAG (Retrieval Augmented Generation) systems. Crawls websites, intelligently chunks content, generates embeddings, and exports to popular vector databases. Perfect for building AI chatbots, semantic search engines, and LLM-powered assistants. Supports multiple chunking strategies, embedding models, and vector DB formats (Pinecone, Weaviate, Qdrant, Chroma). Features smart deduplication, metadata preservation, and configurable crawl depth. Optimized for documentation sites, support articles, product catalogs, and knowledge bases.",
+  "version": "1.0",
+  "meta": {
+    "templateId": "js-crawlee-cheerio"
+  },
+  "input": "./.actor/input_schema.json",
+  "dockerfile": "./.actor/Dockerfile",
+  "readme": "./README.md",
+  "categories": [
+    "AI",
+    "DEVELOPMENT",
+    "DATA_PROCESSING"
+  ],
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "RAG Knowledge Base Chunks",
+      "description": "Processed chunks with embeddings ready for vector database ingestion",
+      "views": {
+        "overview": {
+          "title": "Overview",
+          "transformation": {
+            "fields": [
+              "id",
+              "text",
+              "metadata.source",
+              "metadata.title",
+              "chunkIndex",
+              "tokenCount"
+            ]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "id": {
+                "label": "Chunk ID",
+                "format": "text"
+              },
+              "text": {
+                "label": "Text Content",
+                "format": "text"
+              },
+              "metadata.source": {
+                "label": "Source URL",
+                "format": "link"
+              },
+              "metadata.title": {
+                "label": "Title",
+                "format": "text"
+              },
+              "chunkIndex": {
+                "label": "Chunk #",
+                "format": "number"
+              },
+              "tokenCount": {
+                "label": "Tokens",
+                "format": "number"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "stats": {
+    "minMemoryMbytes": 512,
+    "maxMemoryMbytes": 8192
+  },
+  "author": {
+    "name": "rUv",
+    "email": "info@ruv.io",
+    "url": "https://ruv.io"
+  },
+  "support": {
+    "email": "info@ruv.io",
+    "url": "https://github.com/ruvnet/ruvector"
+  },
+  "keywords": [
+    "rag",
+    "knowledge base",
+    "embeddings",
+    "semantic search",
+    "vector database",
+    "llm",
+    "chatbot",
+    "ai assistant",
+    "retrieval augmented generation",
+    "chunking",
+    "pinecone",
+    "weaviate",
+    "qdrant",
+    "chroma",
+    "openai",
+    "cohere",
+    "documentation",
+    "indexing"
+  ]
+}
