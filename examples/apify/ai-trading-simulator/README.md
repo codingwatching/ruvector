@@ -2,9 +2,29 @@
 
 **Generate unlimited realistic market data with GPU-accelerated neural price models. Backtest algorithmic trading strategies with comprehensive metrics.**
 
-[![Apify Actor](https://img.shields.io/badge/Apify-Actor-blue)](https://apify.com)
-[![Node.js](https://img.shields.io/badge/Node.js-20-green)](https://nodejs.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<div align="center">
+
+[![Apify Actor](https://img.shields.io/badge/Apify-Actor-00D4AA?style=for-the-badge&logo=apify&logoColor=white)](https://apify.com/ruv/ai-trading-simulator)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Node.js 20+](https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Made with ❤️ by rUv](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F%20by-rUv-FF6B6B?style=for-the-badge)](https://ruv.io)
+
+[Quick Start](#-quick-start) • [Features](#-features-grid) • [Documentation](#-api-reference) • [MCP Integration](#-mcp-integration-with-claude-code) • [Examples](#-use-cases)
+
+</div>
+
+---
+
+## 📊 At a Glance
+
+| Metric | Value |
+|--------|-------|
+| **Data Generation Speed** | 10,000 candles/second |
+| **Supported Timeframes** | 1m, 5m, 15m, 1h, 4h, 1d |
+| **Trading Strategies** | 4 built-in (extensible) |
+| **Technical Indicators** | 9+ (SMA, EMA, RSI, MACD, BB) |
+| **Max Data Points** | Unlimited (streaming mode) |
+| **Export Formats** | JSON, CSV, Parquet |
 
 ## 🚀 Introduction
 

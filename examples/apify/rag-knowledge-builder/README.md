@@ -1,8 +1,22 @@
-# RAG Knowledge Base Builder - Crawl, Chunk, Embed & Index for AI
+<div align="center">
+
+# RAG Knowledge Base Builder
+### Crawl, Chunk, Embed & Index for AI
+
+[![Apify Actor](https://img.shields.io/badge/Apify-Actor-06f?style=flat-square&logo=apify)](https://apify.com/ruv/rag-knowledge-builder)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![RAG Ready](https://img.shields.io/badge/RAG-Ready-orange?style=flat-square)](https://ruv.io)
+[![Vector DB Compatible](https://img.shields.io/badge/Vector_DB-Compatible-blue?style=flat-square)](#vector-database-integration)
 
 **Build production-ready knowledge bases for RAG (Retrieval Augmented Generation) systems in minutes.**
 
-This Apify actor crawls websites, intelligently chunks content, generates embeddings, and exports to popular vector databases. Perfect for building AI chatbots, semantic search engines, and LLM-powered assistants with accurate, up-to-date knowledge.
+Transform any website into a searchable, AI-ready knowledge base. This Apify actor crawls content, intelligently chunks it, generates embeddings, and exports to popular vector databases. Perfect for AI chatbots, semantic search engines, and LLM-powered assistants.
+
+[Quick Start](#-quick-start) • [Features](#-features-grid) • [Documentation](#-api-reference) • [Examples](#-use-cases)
+
+</div>
+
+---
 
 ## 🌟 Features
 

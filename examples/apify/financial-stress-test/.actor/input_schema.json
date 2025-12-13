@@ -54,18 +54,22 @@
         "type": "object",
         "properties": {
           "symbol": {
+            "title": "Symbol",
             "type": "string",
             "description": "Asset ticker symbol"
           },
           "weight": {
+            "title": "Weight",
             "type": "number",
             "description": "Portfolio weight (0-1)"
           },
           "quantity": {
+            "title": "Quantity",
             "type": "number",
             "description": "Number of shares/units"
           },
           "currentPrice": {
+            "title": "Current Price",
             "type": "number",
             "description": "Current market price"
           }
@@ -110,11 +114,11 @@
     },
     "confidenceLevel": {
       "title": "Confidence Level",
-      "type": "number",
+      "type": "string",
       "description": "Statistical confidence level for VaR calculation",
-      "default": 0.95,
-      "enum": [0.90, 0.95, 0.99, 0.995],
-      "enumTitles": ["90%", "95%", "99%", "99.5%"],
+      "default": "95",
+      "enum": ["90", "95", "99", "99.5"],
+      "enumTitles": ["90% Confidence", "95% Confidence (Standard)", "99% Confidence", "99.5% Confidence (Conservative)"],
       "editor": "select"
     },
     "timeHorizon": {
@@ -206,22 +210,27 @@
         "type": "object",
         "properties": {
           "name": {
+            "title": "Scenario Name",
             "type": "string",
             "description": "Scenario name"
           },
           "equityShock": {
+            "title": "Equity Shock",
             "type": "number",
             "description": "Equity market change (%)"
           },
           "rateShock": {
+            "title": "Rate Shock",
             "type": "number",
             "description": "Interest rate change (bps)"
           },
           "fxShock": {
+            "title": "FX Shock",
             "type": "number",
             "description": "FX rate change (%)"
           },
           "volatilityMultiplier": {
+            "title": "Volatility Multiplier",
             "type": "number",
             "description": "Volatility scaling factor"
           }

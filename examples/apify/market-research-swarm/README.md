@@ -1,8 +1,20 @@
-# Market Research Swarm - AI-Powered Competitive Intelligence & Analysis
+<div align="center">
 
-**Orchestrate multi-agent AI swarms to conduct comprehensive market research, competitor analysis, and business intelligence.**
+# Market Research Swarm
+### AI-Powered Competitive Intelligence & Analysis
+
+[![Apify Actor](https://img.shields.io/badge/Apify-Actor-06C?style=for-the-badge&logo=apify&logoColor=white)](https://apify.com/ruv/market-research-swarm)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Multi-Agent AI](https://img.shields.io/badge/AI-Multi--Agent-purple?style=for-the-badge&logo=artificial-intelligence)](https://github.com/ruvnet/ruvector)
+[![Enterprise Ready](https://img.shields.io/badge/Enterprise-Ready-blue?style=for-the-badge&logo=enterprise)](https://ruv.io)
+
+**Orchestrate 10 specialized AI agents to conduct comprehensive market research, competitor analysis, and business intelligence in minutes, not weeks.**
 
 Built by [rUv](https://ruv.io) | Part of the [ruvector](https://github.com/ruvnet/ruvector) AI agent ecosystem
+
+[Get Started](#quick-start) · [Documentation](#documentation) · [Examples](#example-use-cases) · [API Reference](#api-reference)
+
+</div>
 
 ---
 

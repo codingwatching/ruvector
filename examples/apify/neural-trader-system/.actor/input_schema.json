@@ -138,31 +138,41 @@
       "editor": "json",
       "properties": {
         "layers": {
+          "title": "Hidden Layers",
           "type": "integer",
+          "description": "Number of hidden layers in the neural network",
           "minimum": 1,
           "maximum": 10,
           "default": 3
         },
         "neurons": {
+          "title": "Neurons Per Layer",
           "type": "array",
+          "description": "Array of neuron counts for each layer",
           "items": {
             "type": "integer"
           },
           "default": [128, 64, 32]
         },
         "activation": {
+          "title": "Activation Function",
           "type": "string",
+          "description": "Neural network activation function",
           "enum": ["relu", "tanh", "sigmoid", "leaky_relu"],
           "default": "relu"
         },
         "dropout": {
+          "title": "Dropout Rate",
           "type": "number",
+          "description": "Dropout rate for regularization (0-0.9)",
           "minimum": 0,
           "maximum": 0.9,
           "default": 0.2
         },
         "learningRate": {
+          "title": "Learning Rate",
           "type": "number",
+          "description": "Training learning rate",
           "minimum": 0.0001,
           "maximum": 0.1,
           "default": 0.001
@@ -246,7 +256,8 @@
       "title": "Chart Patterns",
       "type": "array",
       "description": "Enable specific chart pattern recognition",
-      "editor": "stringList",
+      "editor": "select",
+      "uniqueItems": true,
       "items": {
         "type": "string",
         "enum": [
@@ -259,6 +270,17 @@
           "pennant",
           "cup_handle",
           "all"
+        ],
+        "enumTitles": [
+          "Head & Shoulders",
+          "Double Top",
+          "Double Bottom",
+          "Triangle (Ascending/Descending)",
+          "Wedge",
+          "Flag",
+          "Pennant",
+          "Cup & Handle",
+          "All Patterns"
         ]
       },
       "default": ["all"]
@@ -270,27 +292,39 @@
       "editor": "json",
       "properties": {
         "rsi": {
+          "title": "RSI (Relative Strength Index)",
           "type": "boolean",
+          "description": "Enable RSI indicator",
           "default": true
         },
         "macd": {
+          "title": "MACD",
           "type": "boolean",
+          "description": "Enable MACD indicator",
           "default": true
         },
         "bollinger": {
+          "title": "Bollinger Bands",
           "type": "boolean",
+          "description": "Enable Bollinger Bands indicator",
           "default": true
         },
         "ema": {
+          "title": "EMA (Exponential Moving Average)",
           "type": "boolean",
+          "description": "Enable EMA indicator",
           "default": true
         },
         "stochastic": {
+          "title": "Stochastic Oscillator",
           "type": "boolean",
+          "description": "Enable Stochastic Oscillator",
           "default": true
         },
         "atr": {
+          "title": "ATR (Average True Range)",
           "type": "boolean",
+          "description": "Enable ATR indicator",
           "default": true
         }
       },

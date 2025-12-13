@@ -1,8 +1,21 @@
 # Agent Training Data Factory - AI Agent Memory & RAG Dataset Generator
 
-**Generate high-quality training datasets for AI agents** including conversations, Q&A pairs, tool calls, reasoning chains, memory patterns, and embeddings. Perfect for RAG systems, LLM fine-tuning, and agent development.
+<div align="center">
+
+[![Apify Actor](https://img.shields.io/badge/Apify-Actor-00D4AA?style=for-the-badge&logo=apify)](https://apify.com/ruv/agent-training-factory)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![HuggingFace Compatible](https://img.shields.io/badge/HuggingFace-Compatible-FFD21E?style=for-the-badge&logo=huggingface)](https://huggingface.co)
+[![AI Training](https://img.shields.io/badge/AI-Training%20Data-blueviolet?style=for-the-badge)](https://ruv.io)
+
+**Generate production-ready training datasets for AI agents, RAG systems, and LLM fine-tuning**
 
 Built by [rUv](https://ruv.io) | Part of the [ruvector](https://github.com/ruvnet/ruvector) ecosystem
+
+[Quick Start](#quick-start) • [Features](#features-at-a-glance) • [Tutorials](#dataset-types-detailed-guide) • [API Reference](#api-reference) • [HuggingFace Integration](#huggingface-integration)
+
+</div>
+
+---
 
 ## Introduction
 
