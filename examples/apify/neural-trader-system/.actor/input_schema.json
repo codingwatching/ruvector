@@ -84,29 +84,29 @@
     "maxPositionSize": {
       "title": "Max Position Size (%)",
       "type": "number",
-      "description": "Maximum position size as percentage of portfolio",
+      "description": "Maximum position size as percentage of portfolio (1-100%)",
       "minimum": 1,
       "maximum": 100,
       "default": 10,
-      "unit": "%"
+      "editor": "number"
     },
     "stopLoss": {
       "title": "Stop Loss (%)",
       "type": "number",
-      "description": "Stop loss percentage from entry price",
+      "description": "Stop loss percentage from entry price (0.1-50%)",
       "minimum": 0.1,
       "maximum": 50,
       "default": 2.5,
-      "unit": "%"
+      "editor": "number"
     },
     "takeProfit": {
       "title": "Take Profit (%)",
       "type": "number",
-      "description": "Take profit percentage from entry price",
+      "description": "Take profit percentage from entry price (0.1-200%)",
       "minimum": 0.1,
       "maximum": 200,
       "default": 5,
-      "unit": "%"
+      "editor": "number"
     },
     "timeframe": {
       "title": "Timeframe",
@@ -254,11 +254,11 @@
     "confidenceThreshold": {
       "title": "Minimum Confidence (%)",
       "type": "number",
-      "description": "Minimum confidence level to generate signals",
+      "description": "Minimum confidence level to generate signals (0-100%)",
       "minimum": 0,
       "maximum": 100,
       "default": 70,
-      "unit": "%"
+      "editor": "number"
     },
     "patterns": {
       "title": "Chart Patterns",
@@ -380,10 +380,11 @@
     "initialCapital": {
       "title": "Initial Capital ($)",
       "type": "number",
-      "description": "Starting capital for backtest simulation",
+      "description": "Starting capital for backtest simulation ($1,000 - $10,000,000)",
       "minimum": 1000,
       "maximum": 10000000,
       "default": 100000,
+      "editor": "number",
       "sectionCaption": "Backtest Settings",
       "sectionDescription": "Configuration for Monte Carlo backtesting mode"
     },
@@ -398,21 +399,22 @@
     "bankroll": {
       "title": "Bankroll ($)",
       "type": "number",
-      "description": "Starting bankroll for sports betting",
+      "description": "Starting bankroll for sports betting ($100 - $1,000,000)",
       "minimum": 100,
       "maximum": 1000000,
       "default": 10000,
+      "editor": "number",
       "sectionCaption": "Sports Betting Settings",
       "sectionDescription": "Configuration for sports betting with Kelly Criterion"
     },
     "minEdge": {
       "title": "Minimum Edge (%)",
       "type": "number",
-      "description": "Minimum edge percentage required to place a bet",
+      "description": "Minimum edge percentage required to place a bet (1-50%)",
       "minimum": 1,
       "maximum": 50,
       "default": 5,
-      "unit": "%"
+      "editor": "number"
     },
     "sportsLeagues": {
       "title": "Sports Leagues",
@@ -458,10 +460,11 @@
     "minLiquidity": {
       "title": "Minimum Liquidity ($)",
       "type": "number",
-      "description": "Minimum market liquidity to consider",
+      "description": "Minimum market liquidity to consider ($1,000 - $10,000,000)",
       "minimum": 1000,
       "maximum": 10000000,
       "default": 10000,
+      "editor": "number",
       "sectionCaption": "Prediction Markets Settings",
       "sectionDescription": "Configuration for Polymarket analysis"
     },
@@ -530,11 +533,11 @@
     "minSpread": {
       "title": "Minimum Spread (%)",
       "type": "number",
-      "description": "Minimum price spread percentage to report",
+      "description": "Minimum price spread percentage to report (0.1-10%)",
       "minimum": 0.1,
       "maximum": 10,
       "default": 0.5,
-      "unit": "%"
+      "editor": "number"
     },
     "includeDeFi": {
       "title": "Include DeFi",
