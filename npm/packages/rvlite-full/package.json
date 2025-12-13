@@ -1,0 +1,55 @@
+{
+  "name": "@ruvector/rvlite",
+  "version": "0.2.4",
+  "description": "Standalone vector database with SQL, SPARQL, and Cypher - powered by RuVector WASM",
+  "type": "module",
+  "main": "./wasm/rvlite.js",
+  "types": "./wasm/rvlite.d.ts",
+  "bin": {
+    "rvlite": "./bin/rvlite.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./wasm/rvlite.js",
+      "types": "./wasm/rvlite.d.ts"
+    },
+    "./wasm": {
+      "import": "./wasm/rvlite.js",
+      "types": "./wasm/rvlite.d.ts"
+    }
+  },
+  "files": [
+    "bin/",
+    "wasm/",
+    "dashboard/",
+    "README.md"
+  ],
+  "keywords": [
+    "vector-database",
+    "embeddings",
+    "sql",
+    "sparql",
+    "cypher",
+    "graph-database",
+    "wasm",
+    "webassembly",
+    "similarity-search",
+    "semantic-search",
+    "rdf",
+    "knowledge-graph"
+  ],
+  "author": "RuVector Contributors",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector"
+  },
+  "homepage": "https://github.com/ruvnet/ruvector/tree/main/crates/rvlite",
+  "bugs": {
+    "url": "https://github.com/ruvnet/ruvector/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "sideEffects": false
+}
