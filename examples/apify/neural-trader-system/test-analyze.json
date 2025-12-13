@@ -1,0 +1,5 @@
+{
+  "mode": "analyze",
+  "symbols": ["AAPL"],
+  "dataSource": "yahoo"
+}

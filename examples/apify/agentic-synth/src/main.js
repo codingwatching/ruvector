@@ -2,6 +2,7 @@ import { Actor, log } from 'apify';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createRequire } from 'module';
 import { integrateActorData, SUPPORTED_ACTORS, USE_CASE_TEMPLATES, getTemplate, listSupportedActors, listTemplates } from './integrations.js';
+import { addEmbeddingsToRecords, generateRandomEmbedding, EMBEDDING_MODELS } from './embeddings.js';
 
 // CJS import workaround for RuvLLM native extension
 const require = createRequire(import.meta.url);
@@ -58,10 +59,13 @@ try {
     sonaEnabled = true,
     ewcLambda = 2000,
     patternThreshold = 0.7,
-    sonaLearningTiers = ['instant', 'background']
+    sonaLearningTiers = ['instant', 'background'],
+    // ONNX Embedding parameters
+    useOnnxEmbeddings = true,
+    embeddingModel = 'all-MiniLM-L6-v2'
   } = input;
 
-  log.info('AI Synthetic Data Generator v2.2 with TRM/SONA', { mode, dataType, count, provider, model, sonaEnabled });
+  log.info('AI Synthetic Data Generator v2.5 with ONNX Embeddings & TRM/SONA', { mode, dataType, count, provider, model, sonaEnabled, useOnnxEmbeddings, embeddingModel });
 
   // Initialize SONA if available and enabled
   if (ruvllm && sonaEnabled) {
@@ -274,32 +278,41 @@ try {
   // EMBEDDING GENERATION (optional)
   // ============================================
   if (generateEmbeddings && generatedData.length > 0) {
-    log.info(`Generating embeddings with ${embeddingDimensions} dimensions...`);
+    const modelConfig = EMBEDDING_MODELS[embeddingModel] || EMBEDDING_MODELS['all-MiniLM-L6-v2'];
+    const effectiveDimensions = useOnnxEmbeddings ? modelConfig.dimensions : embeddingDimensions;
 
-    const random = createSeededRandom(seed);
-
-    generatedData = generatedData.map((item, idx) => {
-      // Generate normalized random embedding
-      const embedding = [];
-      let norm = 0;
-
-      for (let j = 0; j < embeddingDimensions; j++) {
-        const val = random() * 2 - 1;
-        embedding.push(val);
-        norm += val * val;
-      }
-
-      norm = Math.sqrt(norm);
-      for (let j = 0; j < embeddingDimensions; j++) {
-        embedding[j] = Math.round((embedding[j] / norm) * 1000000) / 1000000;
-      }
-
-      return {
-        ...item,
-        embedding,
-        embeddingDimensions
-      };
+    log.info(`Generating embeddings with ${effectiveDimensions} dimensions...`, {
+      useOnnx: useOnnxEmbeddings,
+      model: useOnnxEmbeddings ? embeddingModel : 'random'
     });
+
+    if (useOnnxEmbeddings) {
+      // Use ONNX-powered semantic embeddings
+      try {
+        generatedData = await addEmbeddingsToRecords(generatedData, { modelName: embeddingModel });
+        log.info(`Added ONNX embeddings using ${embeddingModel} model`);
+        await Actor.charge({ eventName: 'onnx-embedding-generation', count: generatedData.length });
+      } catch (e) {
+        log.warning(`ONNX embedding failed: ${e.message}. Falling back to random embeddings.`);
+        // Fall back to random embeddings
+        const random = createSeededRandom(seed);
+        generatedData = generatedData.map((item) => ({
+          ...item,
+          embedding: generateRandomEmbedding(effectiveDimensions, random),
+          embeddingModel: 'random',
+          embeddingDimensions: effectiveDimensions
+        }));
+      }
+    } else {
+      // Use random embeddings (faster, for testing)
+      const random = createSeededRandom(seed);
+      generatedData = generatedData.map((item) => ({
+        ...item,
+        embedding: generateRandomEmbedding(effectiveDimensions, random),
+        embeddingModel: 'random',
+        embeddingDimensions: effectiveDimensions
+      }));
+    }
 
     // Charge for embedding generation
     await Actor.charge({ eventName: 'embedding-generation', count: generatedData.length });
@@ -476,7 +489,7 @@ try {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Apify-AI-Synthetic-Data-Generator/2.2'
+          'User-Agent': 'Apify-AI-Synthetic-Data-Generator/2.5'
         },
         body: JSON.stringify(webhookPayload)
       });

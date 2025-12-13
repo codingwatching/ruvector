@@ -1,0 +1,7 @@
+{
+  "mode": "backtest",
+  "symbols": ["AAPL"],
+  "initialCapital": 100000,
+  "monteCarloRuns": 100,
+  "strategy": "ensemble"
+}

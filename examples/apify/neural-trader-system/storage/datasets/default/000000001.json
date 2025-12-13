@@ -1,0 +1,32 @@
+{
+	"timestamp": "2025-12-13T19:20:02.211Z",
+	"symbol": "BTC/USD",
+	"price": 245.881612493563,
+	"signal": "SELL",
+	"confidence": 100,
+	"reasons": [
+		"Neural prediction: 1.93%",
+		"Patterns: double_top"
+	],
+	"target": 233.58753186888484,
+	"stopLoss": 252.02865280590206,
+	"patterns": [
+		"double_top"
+	],
+	"technical": {
+		"rsi": null,
+		"macd": null,
+		"bollinger": null,
+		"atr": null
+	},
+	"prediction": 0.01929405266773886,
+	"swarmPredictions": [
+		0.0732855217097578,
+		0,
+		0,
+		0,
+		0.02318474162893649
+	],
+	"timeframe": "1h",
+	"strategy": "ensemble"
+}

@@ -1,6 +1,6 @@
 {
-  "title": "AI Synthetic Data Generator",
-  "description": "Generate unlimited, high-quality synthetic data for testing scrapers, training AI models, and building agentic applications. 18 data types including e-commerce, Bloomberg terminal, medical records, supply chain, and more. Now with one-click Apify actor integration and use case templates. Powered by TRM/SONA self-learning.",
+  "title": "AI Synthetic Data Generator v2.5",
+  "description": "Generate unlimited synthetic data with ONNX-powered semantic embeddings (all-MiniLM-L6-v2, bge-small). 21 actor integrations (Reddit, Yelp, TripAdvisor, Zillow, Booking.com + more). 12 use-case templates. TRM/SONA self-learning. MCP server support.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -58,7 +58,7 @@
     "integrateActorId": {
       "title": "Apify Actor to Integrate",
       "type": "string",
-      "description": "Actor ID to pull data from (e.g., apify/google-maps-scraper). Used in 'integrate' mode.",
+      "description": "Actor ID to pull data from. 21 actors supported. Used in 'integrate' mode.",
       "editor": "select",
       "enum": [
         "apify/google-maps-scraper",
@@ -73,7 +73,15 @@
         "apify/website-content-crawler",
         "apify/cheerio-scraper",
         "apify/news-scraper",
-        "apify/linkedin-scraper"
+        "apify/linkedin-scraper",
+        "trudax/tripadvisor-scraper",
+        "maxcopell/yelp-scraper",
+        "trudax/booking-scraper",
+        "petr_cermak/zillow-scraper",
+        "epctex/craigslist-scraper",
+        "apify/reddit-scraper",
+        "apify/facebook-posts-scraper",
+        "compass/google-places-api"
       ],
       "enumTitles": [
         "Google Maps Scraper - Local business data",
@@ -88,10 +96,18 @@
         "Website Content Crawler - Full site content",
         "Cheerio Scraper - Structured extraction",
         "News Scraper - News articles",
-        "LinkedIn Scraper - Jobs, profiles"
+        "LinkedIn Scraper - Jobs, profiles",
+        "TripAdvisor Scraper - Reviews, restaurants, hotels",
+        "Yelp Scraper - Business reviews, ratings",
+        "Booking.com Scraper - Hotels, accommodations",
+        "Zillow Scraper - Real estate listings",
+        "Craigslist Scraper - Classifieds, listings",
+        "Reddit Scraper - Posts, comments, subreddits",
+        "Facebook Posts Scraper - Posts, engagement",
+        "Google Places API - Places, reviews"
       ],
-      "sectionCaption": "Actor Integration",
-      "sectionDescription": "One-click integration with top Apify actors for RAG/memory use cases"
+      "sectionCaption": "Actor Integration (21 Actors)",
+      "sectionDescription": "One-click integration with 21 top Apify actors for RAG/memory use cases"
     },
     "integrateRunId": {
       "title": "Run ID",
@@ -116,18 +132,24 @@
     "useTemplate": {
       "title": "Use Case Template",
       "type": "string",
-      "description": "Pre-built template for common use cases. Used in 'template' mode.",
+      "description": "Pre-built template for common use cases. 12 templates available. Used in 'template' mode.",
       "editor": "select",
-      "enum": ["lead-intelligence", "competitor-monitor", "support-knowledge", "research-assistant", "content-library", "product-catalog"],
+      "enum": ["lead-intelligence", "competitor-monitor", "support-knowledge", "research-assistant", "content-library", "product-catalog", "review-aggregator", "price-tracker", "social-listening", "talent-sourcing", "real-estate-intel", "travel-planner"],
       "enumTitles": [
         "Lead Intelligence - Sales teams memorizing prospect data",
         "Competitor Monitor - Track competitor mentions/changes",
         "Support Knowledge - Customer support RAG system",
         "Research Assistant - Academic/market research",
         "Content Library - Content creators' reference",
-        "Product Catalog - E-commerce product memory"
+        "Product Catalog - E-commerce product memory",
+        "Review Aggregator - Aggregate reviews from multiple platforms",
+        "Price Tracker - Monitor prices for competitive intelligence",
+        "Social Listening - Monitor social conversations and trends",
+        "Talent Sourcing - Recruit candidates from job platforms",
+        "Real Estate Intel - Property market analysis",
+        "Travel Planner - Hotels, restaurants, activities data"
       ],
-      "sectionCaption": "Use Case Templates",
+      "sectionCaption": "Use Case Templates (12 Templates)",
       "sectionDescription": "Pre-configured templates for common data workflows"
     },
     "schema": {
@@ -183,7 +205,30 @@
       "title": "Generate Embeddings",
       "type": "boolean",
       "description": "Generate vector embeddings for all output records (useful for RAG systems)",
-      "default": false
+      "default": false,
+      "sectionCaption": "ONNX Embeddings",
+      "sectionDescription": "Semantic embeddings powered by ONNX Runtime (Hugging Face Transformers.js)"
+    },
+    "useOnnxEmbeddings": {
+      "title": "Use ONNX Semantic Embeddings",
+      "type": "boolean",
+      "description": "Use real semantic embeddings via ONNX (slower but more accurate) vs random vectors (fast for testing)",
+      "default": true
+    },
+    "embeddingModel": {
+      "title": "ONNX Embedding Model",
+      "type": "string",
+      "description": "Choose embedding model. Smaller models are faster, larger models are more accurate.",
+      "editor": "select",
+      "default": "all-MiniLM-L6-v2",
+      "enum": ["all-MiniLM-L6-v2", "bge-small-en-v1.5", "all-mpnet-base-v2", "e5-small-v2", "gte-small"],
+      "enumTitles": [
+        "all-MiniLM-L6-v2 (384d, Fast, Good) - Recommended",
+        "bge-small-en-v1.5 (384d, Fast, Excellent)",
+        "all-mpnet-base-v2 (768d, Medium, Excellent)",
+        "e5-small-v2 (384d, Fast, Very Good)",
+        "gte-small (384d, Fast, Very Good)"
+      ]
     },
     "simulationMode": {
       "title": "Long-Running Simulation",

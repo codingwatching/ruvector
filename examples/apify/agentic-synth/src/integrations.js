@@ -98,6 +98,62 @@ export const SUPPORTED_ACTORS = {
     category: 'professional',
     defaultFields: ['title', 'company', 'location', 'description', 'salary'],
     transform: transformLinkedIn
+  },
+
+  // Reviews & Local
+  'trudax/tripadvisor-scraper': {
+    name: 'TripAdvisor Scraper',
+    category: 'reviews',
+    defaultFields: ['name', 'rating', 'reviewCount', 'address', 'priceLevel', 'cuisine'],
+    transform: transformTripAdvisor
+  },
+  'maxcopell/yelp-scraper': {
+    name: 'Yelp Scraper',
+    category: 'reviews',
+    defaultFields: ['name', 'rating', 'reviewCount', 'address', 'categories', 'phone'],
+    transform: transformYelp
+  },
+  'trudax/booking-scraper': {
+    name: 'Booking.com Scraper',
+    category: 'travel',
+    defaultFields: ['name', 'rating', 'price', 'location', 'amenities', 'reviewScore'],
+    transform: transformBooking
+  },
+
+  // Real Estate
+  'petr_cermak/zillow-scraper': {
+    name: 'Zillow Scraper',
+    category: 'real-estate',
+    defaultFields: ['address', 'price', 'bedrooms', 'bathrooms', 'sqft', 'propertyType'],
+    transform: transformZillow
+  },
+  'epctex/craigslist-scraper': {
+    name: 'Craigslist Scraper',
+    category: 'classifieds',
+    defaultFields: ['title', 'price', 'location', 'description', 'category', 'postedAt'],
+    transform: transformCraigslist
+  },
+
+  // Social Platforms
+  'apify/reddit-scraper': {
+    name: 'Reddit Scraper',
+    category: 'social-media',
+    defaultFields: ['title', 'text', 'subreddit', 'score', 'comments', 'author'],
+    transform: transformReddit
+  },
+  'apify/facebook-posts-scraper': {
+    name: 'Facebook Posts Scraper',
+    category: 'social-media',
+    defaultFields: ['text', 'likes', 'comments', 'shares', 'author', 'timestamp'],
+    transform: transformFacebook
+  },
+
+  // Places & Maps
+  'compass/google-places-api': {
+    name: 'Google Places API',
+    category: 'local-business',
+    defaultFields: ['name', 'rating', 'address', 'phone', 'website', 'types', 'priceLevel'],
+    transform: transformGooglePlaces
   }
 };
 
@@ -215,6 +271,128 @@ export const USE_CASE_TEMPLATES = {
       brand: 'string',
       competitorPrices: 'array<object>',
       recommendedAlternatives: 'array<string>',
+      embedding: 'array<number>'
+    }
+  },
+
+  'review-aggregator': {
+    name: 'Review Aggregator',
+    description: 'Aggregate and analyze reviews from multiple platforms',
+    targetUsers: ['Product Managers', 'Brand Managers', 'Customer Experience'],
+    suggestedActors: ['trudax/tripadvisor-scraper', 'maxcopell/yelp-scraper', 'apify/google-maps-scraper'],
+    memorizeFields: ['name', 'rating', 'reviewCount', 'text', 'sentiment', 'categories'],
+    enrichWith: ['sentiment_score', 'common_themes', 'rating_trend'],
+    outputFormat: {
+      entityId: 'string',
+      name: 'string',
+      averageRating: 'number',
+      totalReviews: 'number',
+      platforms: 'array<object>',
+      sentimentAnalysis: 'object',
+      topPraises: 'array<string>',
+      topComplaints: 'array<string>',
+      embedding: 'array<number>'
+    }
+  },
+
+  'price-tracker': {
+    name: 'Price Tracker',
+    description: 'Monitor prices across platforms for competitive intelligence',
+    targetUsers: ['Pricing Teams', 'Buyers', 'Resellers'],
+    suggestedActors: ['apify/amazon-scraper', 'petr_cermak/zillow-scraper', 'trudax/booking-scraper'],
+    memorizeFields: ['title', 'price', 'currency', 'availability', 'seller', 'timestamp'],
+    enrichWith: ['price_history', 'price_alerts', 'competitor_comparison'],
+    outputFormat: {
+      productId: 'string',
+      title: 'string',
+      currentPrice: 'number',
+      priceHistory: 'array<object>',
+      lowestPrice: 'number',
+      highestPrice: 'number',
+      priceChange: 'number',
+      competitors: 'array<object>',
+      embedding: 'array<number>'
+    }
+  },
+
+  'social-listening': {
+    name: 'Social Listening',
+    description: 'Monitor social conversations about brands, topics, and trends',
+    targetUsers: ['Social Media Managers', 'PR Teams', 'Brand Managers'],
+    suggestedActors: ['apify/reddit-scraper', 'apify/twitter-scraper', 'apify/facebook-posts-scraper'],
+    memorizeFields: ['text', 'author', 'engagement', 'sentiment', 'platform', 'timestamp'],
+    enrichWith: ['sentiment_analysis', 'influencer_score', 'viral_potential'],
+    outputFormat: {
+      postId: 'string',
+      platform: 'string',
+      content: 'string',
+      author: 'object',
+      engagement: 'object',
+      sentiment: 'number (-1 to 1)',
+      mentions: 'array<string>',
+      hashtags: 'array<string>',
+      viralScore: 'number (1-100)',
+      embedding: 'array<number>'
+    }
+  },
+
+  'talent-sourcing': {
+    name: 'Talent Sourcing',
+    description: 'Recruit and source candidates from job platforms',
+    targetUsers: ['Recruiters', 'HR Teams', 'Talent Acquisition'],
+    suggestedActors: ['apify/linkedin-scraper', 'epctex/craigslist-scraper'],
+    memorizeFields: ['title', 'company', 'location', 'skills', 'experience', 'salary'],
+    enrichWith: ['skill_match', 'culture_fit', 'availability'],
+    outputFormat: {
+      candidateId: 'string',
+      name: 'string',
+      currentRole: 'string',
+      company: 'string',
+      skills: 'array<string>',
+      experience: 'number',
+      location: 'string',
+      matchScore: 'number (1-100)',
+      embedding: 'array<number>'
+    }
+  },
+
+  'real-estate-intel': {
+    name: 'Real Estate Intelligence',
+    description: 'Market analysis and property intelligence for real estate',
+    targetUsers: ['Real Estate Agents', 'Investors', 'Property Managers'],
+    suggestedActors: ['petr_cermak/zillow-scraper', 'apify/google-maps-scraper', 'epctex/craigslist-scraper'],
+    memorizeFields: ['address', 'price', 'sqft', 'bedrooms', 'bathrooms', 'propertyType'],
+    enrichWith: ['market_trends', 'comparable_sales', 'neighborhood_score'],
+    outputFormat: {
+      propertyId: 'string',
+      address: 'string',
+      price: 'number',
+      pricePerSqft: 'number',
+      propertyType: 'string',
+      specs: 'object',
+      marketAnalysis: 'object',
+      comparables: 'array<object>',
+      investmentScore: 'number (1-100)',
+      embedding: 'array<number>'
+    }
+  },
+
+  'travel-planner': {
+    name: 'Travel Planner',
+    description: 'Plan trips with aggregated hotel, restaurant, and activity data',
+    targetUsers: ['Travel Agents', 'Travelers', 'Tourism Boards'],
+    suggestedActors: ['trudax/tripadvisor-scraper', 'trudax/booking-scraper', 'apify/google-maps-scraper'],
+    memorizeFields: ['name', 'rating', 'price', 'location', 'amenities', 'reviews'],
+    enrichWith: ['booking_availability', 'best_time_to_visit', 'local_tips'],
+    outputFormat: {
+      placeId: 'string',
+      name: 'string',
+      type: 'string (hotel, restaurant, attraction)',
+      rating: 'number',
+      priceRange: 'string',
+      location: 'object',
+      highlights: 'array<string>',
+      reviews: 'array<object>',
       embedding: 'array<number>'
     }
   }
@@ -511,6 +689,225 @@ function transformLinkedIn(item) {
     postedAt: item.postedAt || item.listDate,
     applicants: item.applicants || item.applicantCount,
     url: item.url || item.jobUrl,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformTripAdvisor(item) {
+  return {
+    id: item.id || item.locationId || generateId(),
+    source: 'tripadvisor',
+    name: item.name || item.title,
+    type: item.type || item.category,
+    rating: item.rating || item.overallRating,
+    reviewCount: item.reviewCount || item.numberOfReviews,
+    priceLevel: item.priceLevel || item.priceRange,
+    address: {
+      full: item.address || item.addressObj?.street1,
+      city: item.city || item.addressObj?.city,
+      country: item.country || item.addressObj?.country
+    },
+    cuisine: item.cuisine || item.cuisines || [],
+    features: item.features || item.amenities || [],
+    awards: item.awards || [],
+    photos: (item.photos || []).slice(0, 5).map(p => p.url || p),
+    url: item.url || item.webUrl,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformYelp(item) {
+  return {
+    id: item.id || item.businessId || generateId(),
+    source: 'yelp',
+    name: item.name || item.businessName,
+    rating: item.rating,
+    reviewCount: item.reviewCount || item.review_count,
+    priceLevel: item.price || item.priceRange,
+    address: {
+      full: item.address || item.location?.display_address?.join(', '),
+      street: item.location?.address1,
+      city: item.location?.city,
+      state: item.location?.state,
+      zip: item.location?.zip_code
+    },
+    phone: item.phone || item.display_phone,
+    categories: (item.categories || []).map(c => c.title || c),
+    hours: item.hours || item.businessHours,
+    photos: (item.photos || []).slice(0, 5),
+    isClaimed: item.is_claimed,
+    url: item.url,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformBooking(item) {
+  return {
+    id: item.id || item.hotelId || generateId(),
+    source: 'booking',
+    name: item.name || item.hotelName,
+    type: item.type || item.accommodationType || 'hotel',
+    rating: item.rating || item.reviewScore,
+    reviewScore: item.reviewScore || item.score,
+    reviewCount: item.reviewCount || item.numberOfReviews,
+    stars: item.stars || item.starRating,
+    price: {
+      amount: item.price || item.priceAmount,
+      currency: item.currency || 'USD',
+      perNight: item.pricePerNight || item.price
+    },
+    location: {
+      address: item.address,
+      city: item.city,
+      country: item.country,
+      lat: item.latitude || item.location?.lat,
+      lng: item.longitude || item.location?.lng
+    },
+    amenities: item.amenities || item.facilities || [],
+    photos: (item.photos || []).slice(0, 5).map(p => p.url || p),
+    url: item.url,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformZillow(item) {
+  return {
+    id: item.zpid || item.id || generateId(),
+    source: 'zillow',
+    address: {
+      full: item.address || item.streetAddress,
+      street: item.streetAddress,
+      city: item.city,
+      state: item.state,
+      zip: item.zipcode
+    },
+    price: item.price || item.zestimate,
+    zestimate: item.zestimate,
+    rentZestimate: item.rentZestimate,
+    propertyType: item.homeType || item.propertyType,
+    status: item.homeStatus || item.status,
+    specs: {
+      bedrooms: item.bedrooms || item.beds,
+      bathrooms: item.bathrooms || item.baths,
+      sqft: item.livingArea || item.sqft,
+      lotSize: item.lotSize || item.lotAreaValue,
+      yearBuilt: item.yearBuilt
+    },
+    features: item.resoFacts?.atAGlanceFacts || [],
+    priceHistory: item.priceHistory || [],
+    taxHistory: item.taxHistory || [],
+    photos: (item.photos || item.hiResImageLink || []).slice(0, 5),
+    url: item.url || item.hdpUrl,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformCraigslist(item) {
+  return {
+    id: item.id || item.postId || generateId(),
+    source: 'craigslist',
+    title: item.title || item.postTitle,
+    price: item.price,
+    category: item.category || item.section,
+    subcategory: item.subcategory,
+    location: {
+      area: item.location || item.hood,
+      city: item.city,
+      region: item.region
+    },
+    description: item.description || item.body,
+    attributes: item.attributes || {},
+    images: (item.images || item.pics || []).slice(0, 5),
+    postedAt: item.datetime || item.postedAt,
+    updatedAt: item.updated,
+    url: item.url || item.postUrl,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformReddit(item) {
+  return {
+    id: item.id || item.postId || generateId(),
+    source: 'reddit',
+    type: item.type || (item.isSelf ? 'text' : 'link'),
+    title: item.title,
+    text: item.selftext || item.body || item.text,
+    subreddit: item.subreddit || item.subredditName,
+    author: {
+      username: item.author || item.authorName,
+      id: item.authorId
+    },
+    engagement: {
+      score: item.score || item.ups - (item.downs || 0),
+      upvotes: item.ups,
+      downvotes: item.downs,
+      comments: item.numComments || item.num_comments,
+      awards: item.totalAwards || item.total_awards_received
+    },
+    flair: item.linkFlair || item.link_flair_text,
+    nsfw: item.over18 || item.over_18 || false,
+    spoiler: item.spoiler || false,
+    url: item.url || `https://reddit.com${item.permalink}`,
+    mediaUrl: item.mediaUrl || item.url_overridden_by_dest,
+    createdAt: item.created || item.createdUtc,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformFacebook(item) {
+  return {
+    id: item.id || item.postId || generateId(),
+    source: 'facebook',
+    type: item.type || 'post',
+    text: item.text || item.message || item.content,
+    author: {
+      name: item.authorName || item.user?.name,
+      id: item.authorId || item.user?.id,
+      url: item.authorUrl || item.user?.url
+    },
+    engagement: {
+      likes: item.likes || item.likesCount,
+      comments: item.comments || item.commentsCount,
+      shares: item.shares || item.sharesCount,
+      reactions: item.reactions || {}
+    },
+    media: {
+      images: item.images || [],
+      videos: item.videos || [],
+      links: item.links || []
+    },
+    hashtags: extractHashtags(item.text || item.message),
+    mentions: extractMentions(item.text || item.message),
+    timestamp: item.time || item.timestamp || item.createdAt,
+    url: item.url || item.postUrl,
+    scrapedAt: item.scrapedAt || new Date().toISOString()
+  };
+}
+
+function transformGooglePlaces(item) {
+  return {
+    id: item.place_id || item.placeId || generateId(),
+    source: 'google-places',
+    name: item.name,
+    rating: item.rating,
+    reviewCount: item.user_ratings_total || item.reviewCount,
+    priceLevel: item.price_level || item.priceLevel,
+    address: item.formatted_address || item.address,
+    phone: item.formatted_phone_number || item.phone,
+    website: item.website,
+    types: item.types || [],
+    location: {
+      lat: item.geometry?.location?.lat || item.lat,
+      lng: item.geometry?.location?.lng || item.lng
+    },
+    hours: item.opening_hours || item.hours,
+    photos: (item.photos || []).slice(0, 5).map(p => p.photo_reference || p),
+    reviews: (item.reviews || []).slice(0, 5).map(r => ({
+      text: r.text,
+      rating: r.rating,
+      author: r.author_name
+    })),
+    url: item.url,
     scrapedAt: item.scrapedAt || new Date().toISOString()
   };
 }

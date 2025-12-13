@@ -1,24 +1,24 @@
-# AI Synthetic Data Generator - MCP Server & Actor Integration
+# AI Synthetic Data Generator - ONNX Embeddings, MCP & 21 Actor Integrations
 
-**Generate unlimited synthetic data** grounded in real-world patterns. **One-click integration** with 13 popular Apify web scrapers (Google Maps, Instagram, TikTok, Amazon, LinkedIn) lets you transform real scraped data into AI-ready formats for RAG systems, agent memory, and model training.
+**Generate unlimited synthetic data** with **ONNX-powered semantic embeddings** (all-MiniLM-L6-v2, bge-small). **One-click integration** with 21 popular Apify web scrapers (Google Maps, Instagram, TikTok, Amazon, LinkedIn, Reddit, Yelp, TripAdvisor, Zillow, Booking.com + more). 12 use-case templates. TRM/SONA self-learning. MCP server support.
 
 **Why grounding matters:** Pure synthetic data can drift from reality. By integrating with live Apify scrapers, your synthetic data inherits real naming conventions, price distributions, engagement patterns, and business characteristics - making your AI models and tests far more realistic.
 
 [![Apify Actor](https://img.shields.io/badge/Apify-Actor-blue)](https://apify.com/ruv/ai-synthetic-data-generator)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-purple)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.2-green)](https://github.com/ruvnet/ruvector)
+[![Version](https://img.shields.io/badge/version-2.5-green)](https://github.com/ruvnet/ruvector)
 
-## What's New in v2.2
+## What's New in v2.5
 
 | Feature | Description |
 |---------|-------------|
-| **One-Click Scraper Integration** | Ground synthetic data with real patterns from Google Maps, Instagram, TikTok, YouTube, Amazon, LinkedIn, and 7 more scrapers |
+| **ONNX Semantic Embeddings** | Real semantic embeddings via Hugging Face Transformers.js (all-MiniLM-L6-v2, bge-small, all-mpnet-base-v2, e5-small, gte-small) |
+| **21 Actor Integrations** | Added Reddit, Yelp, TripAdvisor, Zillow, Booking.com, Craigslist, Facebook, Google Places |
+| **12 Use Case Templates** | Added Review Aggregator, Price Tracker, Social Listening, Talent Sourcing, Real Estate Intel, Travel Planner |
 | **MCP Server** | Use as AI agent tool (Claude, GPT) via Model Context Protocol |
-| **6 Use Case Templates** | Lead Intelligence, Competitor Monitor, Support RAG, and more |
-| **Enhanced Grounding** | Transform scraped data into AI-ready formats that preserve real-world distributions |
-| **Webhook Support** | POST results to your endpoint for async workflows |
-| **Output Formats** | JSON, JSONL, CSV export options |
+| **TRM/SONA Self-Learning** | 7M parameter recursive reasoning with 3-tier learning |
+| **Output Formats** | JSON, JSONL, CSV export with webhook support |
 
 ---
 
@@ -26,9 +26,10 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Scraper Integration** | One-click grounding with 13 popular Apify scrapers for realistic data |
+| **ONNX Embeddings** | 5 semantic embedding models via Transformers.js for RAG-ready vectors |
+| **21 Actor Integrations** | One-click grounding with 21 popular Apify scrapers |
+| **12 Templates** | Pre-built workflows for common use cases |
 | **MCP Server** | Integrate with Claude Code, GPT, and AI agents |
-| **6 Templates** | Pre-built workflows for common use cases |
 | **TRM** | 7M parameter recursive reasoning (83% on GSM8K) |
 | **SONA** | 3-tier self-learning (Instant/Background/Deep) |
 | **EWC++** | Pattern preservation across generations (lambda=2000) |
@@ -92,7 +93,35 @@ Once connected, you get these tools in your AI agent:
 
 ---
 
-## One-Click Actor Integration
+## ONNX Semantic Embeddings
+
+Generate real semantic embeddings for RAG systems using ONNX Runtime and Hugging Face Transformers.js.
+
+### Available Models
+
+| Model | Dimensions | Speed | Quality | Use Case |
+|-------|------------|-------|---------|----------|
+| **all-MiniLM-L6-v2** | 384 | Fast | Good | General purpose (recommended) |
+| **bge-small-en-v1.5** | 384 | Fast | Excellent | High-quality retrieval |
+| **all-mpnet-base-v2** | 768 | Medium | Excellent | Maximum accuracy |
+| **e5-small-v2** | 384 | Fast | Very Good | Balanced performance |
+| **gte-small** | 384 | Fast | Very Good | Efficient retrieval |
+
+### Example: Generate with ONNX Embeddings
+
+```json
+{
+  "dataType": "ecommerce",
+  "count": 100,
+  "generateEmbeddings": true,
+  "useOnnxEmbeddings": true,
+  "embeddingModel": "all-MiniLM-L6-v2"
+}
+```
+
+---
+
+## One-Click Actor Integration (21 Actors)
 
 Transform data from popular Apify scrapers into AI-ready format.
 
@@ -113,6 +142,14 @@ Transform data from popular Apify scrapers into AI-ready format.
 | **apify/web-scraper** | General | Any web page data |
 | **apify/cheerio-scraper** | General | Structured extraction |
 | **apify/news-scraper** | News | Articles, authors, sources |
+| **trudax/tripadvisor-scraper** | Reviews | Hotels, restaurants, reviews |
+| **maxcopell/yelp-scraper** | Reviews | Business reviews, ratings |
+| **trudax/booking-scraper** | Travel | Hotels, accommodations, prices |
+| **petr_cermak/zillow-scraper** | Real Estate | Property listings, prices |
+| **epctex/craigslist-scraper** | Classifieds | Listings, local posts |
+| **apify/reddit-scraper** | Social Media | Posts, comments, subreddits |
+| **apify/facebook-posts-scraper** | Social Media | Posts, engagement |
+| **compass/google-places-api** | Local Business | Places, reviews, details |
 
 ### Example: Integrate Google Maps Data
 
@@ -128,7 +165,7 @@ Transform data from popular Apify scrapers into AI-ready format.
 
 ---
 
-## Use Case Templates
+## Use Case Templates (12 Templates)
 
 One-click deployment for common AI/RAG scenarios.
 
@@ -140,6 +177,12 @@ One-click deployment for common AI/RAG scenarios.
 | **research-assistant** | Academic/market research | Researchers | Google Search, News, Content |
 | **content-library** | Content creators' reference | Creators | Instagram, TikTok, YouTube |
 | **product-catalog** | E-commerce product memory | E-commerce | Amazon, Shopify, Google Maps |
+| **review-aggregator** | Aggregate reviews from platforms | Product Managers | TripAdvisor, Yelp, Google Maps |
+| **price-tracker** | Monitor prices across sites | Pricing Teams | Amazon, Zillow, Booking.com |
+| **social-listening** | Monitor social conversations | Social Media, PR | Reddit, Twitter, Facebook |
+| **talent-sourcing** | Recruit from job platforms | Recruiters, HR | LinkedIn, Craigslist |
+| **real-estate-intel** | Property market analysis | Real Estate, Investors | Zillow, Google Maps, Craigslist |
+| **travel-planner** | Hotels, restaurants, activities | Travel Agents | TripAdvisor, Booking.com, Google Maps |
 
 ### Example: Lead Intelligence Template
 

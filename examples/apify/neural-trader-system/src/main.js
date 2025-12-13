@@ -1371,7 +1371,12 @@ await Actor.main(async () => {
         const signals = [];
         for (const symbol of symbols) {
             const marketData = generateMarketData(symbol, lookbackPeriod, { stopLoss, takeProfit, timeframe });
-            const technicalData = { rsi: TechnicalIndicators.calculateRSI(marketData.prices), macd: TechnicalIndicators.calculateMACD(marketData.prices) };
+            const technicalData = {
+                rsi: TechnicalIndicators.calculateRSI(marketData.prices),
+                macd: TechnicalIndicators.calculateMACD(marketData.prices),
+                bollinger: TechnicalIndicators.calculateBollinger(marketData.prices),
+                atr: TechnicalIndicators.calculateATR(marketData.highs, marketData.lows, marketData.prices)
+            };
             const features = prepareFeatures(marketData, technicalData);
             const output = neuralEngine.forward(features);
             const signal = signalGenerator.generateSignal([output[0]], marketData);
