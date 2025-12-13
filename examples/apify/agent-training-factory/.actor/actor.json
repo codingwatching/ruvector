@@ -34,7 +34,7 @@
   "minMemoryMbytes": 256,
   "maxMemoryMbytes": 4096,
   "dockerfile": "./Dockerfile",
-  "readme": "./README.md",
+  "readme": "../README.md",
   "categories": [
     "AI",
     "DEVELOPMENT",

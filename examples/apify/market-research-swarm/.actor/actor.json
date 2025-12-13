@@ -9,7 +9,7 @@
   },
   "input": "./input_schema.json",
   "dockerfile": "./Dockerfile",
-  "readme": "./README.md",
+  "readme": "../README.md",
   "categories": [
     "AI",
     "AUTOMATION",

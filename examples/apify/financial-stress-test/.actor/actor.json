@@ -40,5 +40,5 @@
     "email": "info@ruv.io",
     "url": "https://ruv.io"
   },
-  "readme": "./README.md"
+  "readme": "../README.md"
 }

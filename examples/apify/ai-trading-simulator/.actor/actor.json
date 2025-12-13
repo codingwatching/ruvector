@@ -7,9 +7,9 @@
   "meta": {
     "templateId": "ai-trading-simulator"
   },
-  "input": "./.actor/input_schema.json",
-  "dockerfile": "./.actor/Dockerfile",
-  "readme": "./README.md",
+  "input": "./input_schema.json",
+  "dockerfile": "./Dockerfile",
+  "readme": "../README.md",
   "categories": [
     "AI",
     "DEVELOPMENT",

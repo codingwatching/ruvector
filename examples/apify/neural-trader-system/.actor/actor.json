@@ -7,9 +7,9 @@
   "meta": {
     "templateId": "neural-trader-system"
   },
-  "input": "./.actor/input_schema.json",
-  "dockerfile": "./.actor/Dockerfile",
-  "readme": "./README.md",
+  "input": "./input_schema.json",
+  "dockerfile": "./Dockerfile",
+  "readme": "../README.md",
   "storages": {
     "dataset": {
       "actorSpecification": 1,
