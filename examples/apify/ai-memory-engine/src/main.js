@@ -1401,7 +1401,6 @@ try {
       if (!actorId) {
         throw new Error('actorId is required for integrate_actor action. Try "apify/google-maps-scraper", "apify/instagram-scraper", etc.');
       }
-      const apifyToken = process.env.APIFY_TOKEN;
       if (!apifyToken) {
         throw new Error('APIFY_TOKEN environment variable is required for actor integration');
       }
@@ -1464,6 +1463,21 @@ try {
         result = exportToFormat(memoryStore, vectorDbFormat);
         await safeCharge('vectordb-export', 1);
       }
+      break;
+
+    case 'integrate_trading':
+      // Integration with Neural Trader System
+      result = await integrateNeuralTrader(memoryStore, {
+        symbols: input.tradingSymbols || ['BTC', 'ETH'],
+        strategy: input.tradingStrategy || 'ensemble',
+        memorizeSignals: input.memorizeSignals !== false,
+        memorizeMarketData: input.memorizeMarketData || false,
+        signalThreshold: input.signalConfidenceThreshold || 70,
+        actorConfig: input.tradingActorConfig || {},
+        searchHistory: input.searchTradingHistory || false,
+        historyQuery: input.tradingHistoryQuery || ''
+      }, apifyToken);
+      await safeCharge('trading-integration', result.signalsMemorized || 1);
       break;
 
     default:
@@ -2087,4 +2101,321 @@ async function integrateWebScraper(memoryStore, config, apifyToken) {
       error: error.message
     };
   }
+}
+
+// ============================================
+// NEURAL TRADER SYSTEM INTEGRATION
+// ============================================
+
+async function integrateNeuralTrader(memoryStore, config, apifyToken) {
+  log.info('Integrating with Neural Trader System...');
+
+  const {
+    symbols = ['BTC', 'ETH'],
+    strategy = 'neural_ensemble',
+    memorizeSignals = true,
+    memorizeMarketData = false,
+    signalThreshold = 70,
+    actorConfig = {},
+    searchHistory = false,
+    historyQuery = ''
+  } = config;
+
+  // If searching history, perform semantic search on trading memories
+  if (searchHistory && historyQuery) {
+    log.info(`Searching trading history for: "${historyQuery}"`);
+    const results = await memoryStore.search(historyQuery, 20, 0.5);
+    const tradingResults = results.filter(r =>
+      r.metadata?.source === 'neural-trader' ||
+      r.metadata?.type === 'trading-signal' ||
+      r.metadata?.type === 'market-data'
+    );
+
+    return {
+      action: 'search_history',
+      query: historyQuery,
+      resultsFound: tradingResults.length,
+      results: tradingResults.map(r => ({
+        text: r.text,
+        similarity: Math.round(r.similarity * 100) / 100,
+        metadata: r.metadata,
+        id: r.id
+      })),
+      insight: tradingResults.length > 0
+        ? `Found ${tradingResults.length} relevant trading memories`
+        : 'No matching trading history found. Try running analyze action first.'
+    };
+  }
+
+  // Call Neural Trader System actor
+  if (!apifyToken) {
+    // Generate simulated trading signals locally (demo mode)
+    log.info('No Apify token - generating simulated trading signals');
+    const simulatedSignals = generateSimulatedTradingSignals(symbols, strategy);
+
+    // Store signals in memory
+    let signalsMemorized = 0;
+    if (memorizeSignals) {
+      for (const signal of simulatedSignals) {
+        const signalText = `${signal.signal} signal for ${signal.symbol} at $${signal.price.toFixed(2)} - ` +
+          `Confidence: ${signal.confidence}% - Strategy: ${signal.strategy} - ` +
+          `Target: $${signal.target?.toFixed(2) || 'N/A'}, Stop: $${signal.stopLoss?.toFixed(2) || 'N/A'} - ` +
+          `Reasons: ${signal.reasons.join('; ')}`;
+
+        await memoryStore.add(signalText, {
+          source: 'neural-trader',
+          type: 'trading-signal',
+          symbol: signal.symbol,
+          signal: signal.signal,
+          confidence: signal.confidence,
+          strategy: signal.strategy,
+          price: signal.price,
+          target: signal.target,
+          stopLoss: signal.stopLoss,
+          timestamp: signal.timestamp,
+          simulated: true
+        });
+        signalsMemorized++;
+      }
+    }
+
+    return {
+      integrated: true,
+      mode: 'simulated',
+      symbols,
+      strategy,
+      signalsGenerated: simulatedSignals.length,
+      signalsMemorized,
+      signals: simulatedSignals,
+      message: 'Simulated signals generated. Connect to Neural Trader System actor for live signals.',
+      suggestedQueries: [
+        'BUY signals with high confidence',
+        'trading signals for BTC',
+        'recent SELL recommendations',
+        `${strategy} strategy performance`
+      ]
+    };
+  }
+
+  try {
+    const client = new ApifyClient({ token: apifyToken });
+    const neuralTraderActor = actorConfig.actorId || 'ruv/neural-trader-system';
+
+    log.info(`Calling ${neuralTraderActor} for ${symbols.join(', ')}...`);
+
+    // Prepare input for Neural Trader System
+    const traderInput = {
+      action: actorConfig.action || 'analyze',
+      symbols: symbols,
+      strategy: strategy,
+      confidenceThreshold: signalThreshold,
+      riskProfile: actorConfig.riskProfile || 'moderate',
+      ...actorConfig
+    };
+
+    // Run the Neural Trader System
+    const run = await client.actor(neuralTraderActor).call(traderInput, {
+      memory: actorConfig.memory || 2048,
+      timeout: actorConfig.timeout || 300
+    });
+
+    // Get results from the dataset
+    const { items } = await client.dataset(run.defaultDatasetId).listItems();
+    log.info(`Received ${items.length} items from Neural Trader System`);
+
+    // Process and store trading signals
+    let signalsMemorized = 0;
+    let marketDataMemorized = 0;
+    const processedSignals = [];
+
+    for (const item of items) {
+      // Handle signals
+      if (item.signals || item.signal) {
+        const signals = item.signals || [item];
+        for (const signal of signals) {
+          if (memorizeSignals && signal.confidence >= signalThreshold) {
+            const signalText = `${signal.signal} signal for ${signal.symbol} at $${signal.price?.toFixed(2) || 'N/A'} - ` +
+              `Confidence: ${signal.confidence}% - Strategy: ${signal.strategy || strategy} - ` +
+              `Target: $${signal.target?.toFixed(2) || 'N/A'}, Stop: $${signal.stopLoss?.toFixed(2) || 'N/A'} - ` +
+              `Patterns: ${(signal.patterns || []).join(', ')} - ` +
+              `Reasons: ${(signal.reasons || []).join('; ')}`;
+
+            await memoryStore.add(signalText, {
+              source: 'neural-trader',
+              type: 'trading-signal',
+              symbol: signal.symbol,
+              signal: signal.signal,
+              confidence: signal.confidence,
+              strategy: signal.strategy || strategy,
+              price: signal.price,
+              target: signal.target,
+              stopLoss: signal.stopLoss,
+              patterns: signal.patterns,
+              timestamp: signal.timestamp || new Date().toISOString()
+            });
+            signalsMemorized++;
+            processedSignals.push(signal);
+          }
+        }
+      }
+
+      // Handle market data
+      if (memorizeMarketData && item.marketData) {
+        const md = item.marketData;
+        const mdText = `Market data for ${md.symbol}: Price $${md.price?.toFixed(2)} - ` +
+          `24h Change: ${md.change24h?.toFixed(2)}% - Volume: $${(md.volume / 1e6)?.toFixed(2)}M - ` +
+          `RSI: ${md.rsi?.toFixed(1)} - MACD: ${md.macd?.toFixed(4)}`;
+
+        await memoryStore.add(mdText, {
+          source: 'neural-trader',
+          type: 'market-data',
+          symbol: md.symbol,
+          price: md.price,
+          change24h: md.change24h,
+          volume: md.volume,
+          rsi: md.rsi,
+          macd: md.macd,
+          timestamp: new Date().toISOString()
+        });
+        marketDataMemorized++;
+      }
+
+      // Handle portfolio recommendations
+      if (item.portfolio) {
+        const portfolio = item.portfolio;
+        const portfolioText = `Portfolio recommendation: Expected return ${portfolio.expectedReturn?.toFixed(2)}% - ` +
+          `Risk score: ${portfolio.riskScore?.toFixed(2)} - Sharpe ratio: ${portfolio.sharpeRatio?.toFixed(2)} - ` +
+          `Positions: ${portfolio.positions?.map(p => `${p.symbol} ${p.weight}%`).join(', ')}`;
+
+        await memoryStore.add(portfolioText, {
+          source: 'neural-trader',
+          type: 'portfolio-recommendation',
+          expectedReturn: portfolio.expectedReturn,
+          riskScore: portfolio.riskScore,
+          sharpeRatio: portfolio.sharpeRatio,
+          positions: portfolio.positions,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
+    return {
+      integrated: true,
+      mode: 'live',
+      actorId: neuralTraderActor,
+      runId: run.id,
+      symbols,
+      strategy,
+      itemsReceived: items.length,
+      signalsMemorized,
+      marketDataMemorized,
+      signals: processedSignals.slice(0, 10), // Return first 10 signals
+      totalMemories: memoryStore.size(),
+      suggestedQueries: [
+        'high confidence BUY signals',
+        'recent trading recommendations',
+        `${symbols[0]} price targets`,
+        'portfolio risk analysis'
+      ]
+    };
+
+  } catch (error) {
+    log.warning(`Neural Trader integration failed: ${error.message}. Using simulation.`);
+
+    // Fallback to simulated signals
+    const simulatedSignals = generateSimulatedTradingSignals(symbols, strategy);
+
+    let signalsMemorized = 0;
+    if (memorizeSignals) {
+      for (const signal of simulatedSignals) {
+        const signalText = `${signal.signal} signal for ${signal.symbol} - Confidence: ${signal.confidence}% (simulated)`;
+        await memoryStore.add(signalText, {
+          source: 'neural-trader-fallback',
+          type: 'trading-signal',
+          ...signal,
+          simulated: true
+        });
+        signalsMemorized++;
+      }
+    }
+
+    return {
+      integrated: true,
+      mode: 'fallback',
+      error: error.message,
+      symbols,
+      strategy,
+      signalsMemorized,
+      signals: simulatedSignals,
+      message: 'Using simulated signals due to actor error'
+    };
+  }
+}
+
+function generateSimulatedTradingSignals(symbols, strategy) {
+  const signals = [];
+  const strategies = {
+    'ensemble': { weight: 0.9, patterns: ['trend_following', 'mean_reversion', 'multi_model'] },
+    'neural_momentum': { weight: 0.85, patterns: ['momentum', 'breakout', 'trend'] },
+    'lstm_prediction': { weight: 0.87, patterns: ['time_series', 'sequence', 'recurrent'] },
+    'transformer_attention': { weight: 0.88, patterns: ['attention', 'cross_asset', 'context'] },
+    'reinforcement': { weight: 0.82, patterns: ['adaptive', 'reward_optimization', 'policy'] }
+  };
+
+  const strategyConfig = strategies[strategy] || strategies['ensemble'];
+
+  for (const symbol of symbols) {
+    // Simulate market conditions
+    const basePrice = symbol === 'BTC' ? 45000 : symbol === 'ETH' ? 2500 : 100;
+    const volatility = 0.02 + Math.random() * 0.03;
+    const price = basePrice * (1 + (Math.random() - 0.5) * volatility);
+
+    // Neural prediction simulation
+    const prediction = Math.random();
+    const confidence = Math.floor(60 + Math.random() * 35);
+
+    let signalType = 'HOLD';
+    let target = null;
+    let stopLoss = null;
+    const reasons = [];
+
+    if (prediction > 0.65 && confidence >= 70) {
+      signalType = 'BUY';
+      target = price * (1 + 0.05 + Math.random() * 0.1);
+      stopLoss = price * (1 - 0.02 - Math.random() * 0.03);
+      reasons.push(`Neural prediction: ${(prediction * 100).toFixed(1)}% bullish`);
+      reasons.push(`Strategy confidence: ${confidence}%`);
+      if (Math.random() > 0.5) reasons.push('RSI oversold recovery');
+    } else if (prediction < 0.35 && confidence >= 70) {
+      signalType = 'SELL';
+      target = price * (1 - 0.05 - Math.random() * 0.1);
+      stopLoss = price * (1 + 0.02 + Math.random() * 0.03);
+      reasons.push(`Neural prediction: ${((1 - prediction) * 100).toFixed(1)}% bearish`);
+      reasons.push(`Strategy confidence: ${confidence}%`);
+      if (Math.random() > 0.5) reasons.push('Resistance level detected');
+    } else {
+      reasons.push('Insufficient signal strength');
+      reasons.push(`Prediction: ${(prediction * 100).toFixed(1)}%, Confidence: ${confidence}%`);
+    }
+
+    signals.push({
+      timestamp: new Date().toISOString(),
+      symbol,
+      price,
+      signal: signalType,
+      confidence,
+      strategy,
+      target,
+      stopLoss,
+      reasons,
+      patterns: strategyConfig.patterns,
+      metrics: {
+        prediction,
+        volatility: volatility * 100,
+        strategyWeight: strategyConfig.weight
+      }
+    });
+  }
+
+  return signals;
 }

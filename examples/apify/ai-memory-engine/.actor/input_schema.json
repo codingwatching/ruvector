@@ -36,6 +36,7 @@
         "integrate_synthetic",
         "integrate_scraper",
         "integrate_actor",
+        "integrate_trading",
         "template",
         "natural",
         "cluster",
@@ -66,6 +67,7 @@
         "Integrate: Synthetic Data - Generate and store mock data",
         "Integrate: Web Scraper - Scrape and memorize content",
         "Integrate: Actor - One-click memory from any Apify actor",
+        "Integrate: Neural Trading - AI trading signals with memory",
         "Template - Load pre-built memory templates",
         "Natural Language - Execute commands in plain English",
         "Cluster - Group memories by similarity",
@@ -480,6 +482,80 @@
         "urls": ["https://example.com/docs"],
         "selector": "article",
         "maxPages": 10
+      }
+    },
+
+    "tradingSymbols": {
+      "title": "Trading Symbols",
+      "type": "array",
+      "description": "Crypto/stock symbols to analyze and generate trading signals for",
+      "editor": "stringList",
+      "sectionCaption": "Neural Trading Integration",
+      "sectionDescription": "Connect to Neural Trader System for AI-powered trading signals. Signals are stored as searchable memories for pattern analysis and strategy backtesting.",
+      "prefill": ["BTC", "ETH", "SOL"],
+      "example": ["BTC", "ETH", "AAPL", "GOOGL"]
+    },
+    "tradingStrategy": {
+      "title": "Trading Strategy",
+      "type": "string",
+      "description": "Neural network strategy to use for signal generation",
+      "editor": "select",
+      "default": "ensemble",
+      "enum": ["ensemble", "neural_momentum", "lstm_prediction", "transformer_attention", "reinforcement"],
+      "enumTitles": [
+        "Ensemble - Multiple models combined (recommended)",
+        "Neural Momentum - Momentum-based neural strategy",
+        "LSTM Prediction - Time series pattern recognition",
+        "Transformer Attention - Attention-based market analysis",
+        "Reinforcement - RL-based adaptive strategy"
+      ]
+    },
+    "memorizeSignals": {
+      "title": "Store Trading Signals",
+      "type": "boolean",
+      "description": "Save generated trading signals as searchable memories for later analysis",
+      "default": true
+    },
+    "memorizeMarketData": {
+      "title": "Store Market Data",
+      "type": "boolean",
+      "description": "Also store market data (price, volume, indicators) alongside signals",
+      "default": false
+    },
+    "signalConfidenceThreshold": {
+      "title": "Signal Confidence Threshold",
+      "type": "integer",
+      "description": "Minimum confidence level required to store a signal (0-100). Higher = only store high-conviction signals.",
+      "default": 70,
+      "minimum": 0,
+      "maximum": 100,
+      "unit": "%"
+    },
+    "searchTradingHistory": {
+      "title": "Search Trading History",
+      "type": "boolean",
+      "description": "Instead of generating new signals, search existing trading memories",
+      "default": false
+    },
+    "tradingHistoryQuery": {
+      "title": "Trading History Query",
+      "type": "string",
+      "description": "Search query for finding relevant trading signals and market data in memory",
+      "editor": "textfield",
+      "prefill": "high confidence BUY signals for BTC",
+      "example": "recent SELL recommendations"
+    },
+    "tradingActorConfig": {
+      "title": "Neural Trader Actor Settings",
+      "type": "object",
+      "description": "Advanced configuration for the Neural Trader System actor",
+      "editor": "json",
+      "prefill": {
+        "actorId": "ruv/neural-trader-system",
+        "action": "analyze",
+        "riskProfile": "moderate",
+        "memory": 2048,
+        "timeout": 300
       }
     },
 
