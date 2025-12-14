@@ -1,45 +1,88 @@
 {
 	"id": 2,
-	"type": "ecommerce",
+	"type": "supply_chain",
 	"data": {
-		"url": "https://example-store.com/products/amazing-article-365-1",
-		"title": "KidsFun Advanced Sweater",
-		"price": 529.11,
-		"originalPrice": null,
-		"currency": "USD",
-		"category": "Clothing",
-		"brand": "KidsFun",
-		"rating": 4,
-		"reviewCount": 4618,
-		"inStock": true,
-		"stockCount": 497,
-		"condition": "Used - Good",
-		"seller": {
-			"name": "Seller354",
-			"rating": 4.4,
-			"totalSales": 46686
+		"shipmentId": "SHP17656806779581",
+		"order": {
+			"orderId": "ORD533515",
+			"orderDate": "2025-10-07T01:58:20.963Z",
+			"priority": "critical",
+			"status": "delivered"
 		},
-		"shipping": {
-			"free": true,
-			"estimatedDays": 4,
-			"price": 0
+		"product": {
+			"sku": "SKU-961330",
+			"name": "Machinery Item 262",
+			"category": "Packaging",
+			"quantity": 4321,
+			"unitPrice": 162.43,
+			"totalValue": 701860.03,
+			"weight": 99.1,
+			"dimensions": {
+				"length": 51,
+				"width": 15,
+				"height": 26
+			}
 		},
-		"images": [
-			"https://example-store.com/images/product-1-0.jpg",
-			"https://example-store.com/images/product-1-1.jpg",
-			"https://example-store.com/images/product-1-2.jpg"
-		],
-		"specifications": {
-			"material": "Polyester",
-			"size": "L"
+		"supplier": {
+			"id": "SUP8274",
+			"name": "Brown Supply Co",
+			"country": "Mexico",
+			"leadTime": 43,
+			"rating": 3.2,
+			"onTimeDelivery": 92.7
 		},
-		"scrapedAt": "2025-12-13T15:12:31.914Z"
+		"logistics": {
+			"carrier": "UPS",
+			"mode": "air",
+			"trackingNumber": "TRK342094597986",
+			"origin": {
+				"facility": "WH-CHI-03",
+				"country": "Japan",
+				"departureDate": "2025-10-07T01:58:20.963Z"
+			},
+			"destination": {
+				"facility": "WH-MIA-06",
+				"country": "India",
+				"eta": "2025-11-09T06:09:04.771Z"
+			},
+			"currentLocation": {
+				"lat": 25.553626094913216,
+				"lng": -110.93245278332147,
+				"lastUpdate": "2025-10-08T12:58:42.262Z"
+			}
+		},
+		"inventory": {
+			"warehouse": "WH-HOU-04",
+			"stockLevel": 1822,
+			"reorderPoint": 599,
+			"safetyStock": 145,
+			"daysOfSupply": 72
+		},
+		"costs": {
+			"productCost": 701860.03,
+			"shippingCost": 105390.11,
+			"tariffs": 15327.61,
+			"insurance": 14037.2,
+			"totalLandedCost": 773688.1
+		},
+		"compliance": {
+			"hsCode": "4943.27",
+			"countryOfOrigin": "India",
+			"certificates": "CE",
+			"customsCleared": false
+		},
+		"scrapedAt": "2025-12-14T02:51:17.958Z"
 	},
 	"metadata": {
-		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"generatedAt": "2025-12-14T02:51:17.958Z",
+		"mode": "generate",
+		"dataType": "supply_chain",
+		"actorId": null,
+		"template": null,
 		"provider": "gemini",
 		"model": "gemini-2.0-flash-exp",
 		"quality": 0.8,
-		"seed": "random"
+		"seed": "random",
+		"hasEmbedding": false
 	}
 }

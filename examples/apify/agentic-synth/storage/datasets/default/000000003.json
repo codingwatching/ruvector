@@ -1,42 +1,88 @@
 {
 	"id": 3,
-	"type": "ecommerce",
+	"type": "supply_chain",
 	"data": {
-		"url": "https://example-store.com/products/new-item-2748-2",
-		"title": "HomeEssentials Advanced Biography",
-		"price": 48.35,
-		"originalPrice": null,
-		"currency": "USD",
-		"category": "Books",
-		"brand": "HomeEssentials",
-		"rating": 3.4,
-		"reviewCount": 863,
-		"inStock": true,
-		"stockCount": 318,
-		"condition": "Used - Good",
-		"seller": {
-			"name": "Seller887",
-			"rating": 4.6,
-			"totalSales": 6677
+		"shipmentId": "SHP17656806779582",
+		"order": {
+			"orderId": "ORD5293533",
+			"orderDate": "2025-10-09T08:25:08.030Z",
+			"priority": "standard",
+			"status": "delayed"
 		},
-		"shipping": {
-			"free": false,
-			"estimatedDays": 3,
-			"price": 10.77
+		"product": {
+			"sku": "SKU-678165",
+			"name": "Components Item 378",
+			"category": "Finished Goods",
+			"quantity": 2149,
+			"unitPrice": 452.64,
+			"totalValue": 972723.36,
+			"weight": 51.2,
+			"dimensions": {
+				"length": 85,
+				"width": 57,
+				"height": 23
+			}
 		},
-		"images": [
-			"https://example-store.com/images/product-2-0.jpg"
-		],
-		"specifications": {
-			"general": "Standard specifications"
+		"supplier": {
+			"id": "SUP4972",
+			"name": "Garcia Supply Co",
+			"country": "Germany",
+			"leadTime": 60,
+			"rating": 4.7,
+			"onTimeDelivery": 95.7
 		},
-		"scrapedAt": "2025-12-13T15:12:31.914Z"
+		"logistics": {
+			"carrier": "DB Schenker",
+			"mode": "truck",
+			"trackingNumber": "TRK242302903199",
+			"origin": {
+				"facility": "WH-SEA-05",
+				"country": "Vietnam",
+				"departureDate": "2025-10-09T08:25:08.030Z"
+			},
+			"destination": {
+				"facility": "WH-LAX-02",
+				"country": "USA",
+				"eta": "2025-10-23T07:30:12.389Z"
+			},
+			"currentLocation": {
+				"lat": 45.5790814818707,
+				"lng": -100.33512851091544,
+				"lastUpdate": "2025-10-15T16:34:16.533Z"
+			}
+		},
+		"inventory": {
+			"warehouse": "WH-LAX-02",
+			"stockLevel": 3946,
+			"reorderPoint": 511,
+			"safetyStock": 117,
+			"daysOfSupply": 35
+		},
+		"costs": {
+			"productCost": 972723.36,
+			"shippingCost": 75738.69,
+			"tariffs": 22705.37,
+			"insurance": 19454.47,
+			"totalLandedCost": 1112201.41
+		},
+		"compliance": {
+			"hsCode": "2527.43",
+			"countryOfOrigin": "USA",
+			"certificates": null,
+			"customsCleared": true
+		},
+		"scrapedAt": "2025-12-14T02:51:17.958Z"
 	},
 	"metadata": {
-		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"generatedAt": "2025-12-14T02:51:17.958Z",
+		"mode": "generate",
+		"dataType": "supply_chain",
+		"actorId": null,
+		"template": null,
 		"provider": "gemini",
 		"model": "gemini-2.0-flash-exp",
 		"quality": 0.8,
-		"seed": "random"
+		"seed": "random",
+		"hasEmbedding": false
 	}
 }

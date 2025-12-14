@@ -350,11 +350,14 @@ try {
     }
   }
 
-  // SONA pattern learning from generated data
+  // SONA pattern learning from generated data with data-type specific training
   if (sonaCoordinator && sonaEnabled && generatedData.length > 0) {
     try {
       const sampleSize = Math.min(10, generatedData.length);
       const sample = generatedData.slice(0, sampleSize);
+
+      // Record data-type specific patterns for neural training
+      const dataTypePatterns = extractDataTypePatterns(dataType, sample);
 
       // Use correct SonaCoordinator API: recordSignal for instant learning
       sonaCoordinator.recordSignal({
@@ -363,20 +366,67 @@ try {
         samples: sample,
         quality,
         generationTime,
-        count: generatedData.length
+        count: generatedData.length,
+        patterns: dataTypePatterns
       });
 
-      // Process instant learning tier
+      // Process instant learning tier with data-type optimization
       if (sonaLearningTiers.includes('instant')) {
         await sonaCoordinator.processInstantLearning();
       }
 
+      // Train neural patterns for this data type (use safe method detection)
+      if (trajectoryBuilder && sonaLearningTiers.includes('background')) {
+        const trainingData = {
+          action: `generate_${dataType}`,
+          observation: { quality, count: generatedData.length, time: generationTime },
+          reward: quality * (generationTime < 100 ? 1.0 : 0.8),
+          patterns: dataTypePatterns
+        };
+        // Try available trajectory methods
+        const method = trajectoryBuilder.track || trajectoryBuilder.recordTrajectory || trajectoryBuilder.add;
+        if (typeof method === 'function') {
+          method.call(trajectoryBuilder, trainingData);
+        }
+      }
+
       log.info(`SONA recorded signal from ${sampleSize} samples`, {
-        stats: sonaCoordinator.stats()
+        stats: sonaCoordinator.stats(),
+        patterns: Object.keys(dataTypePatterns).length
       });
     } catch (e) {
       log.warning(`SONA pattern learning failed: ${e.message}`);
     }
+  }
+
+  // Helper function to extract data-type specific patterns for training
+  function extractDataTypePatterns(type, samples) {
+    const patterns = {};
+    if (!samples || samples.length === 0) return patterns;
+
+    switch (type) {
+      case 'ecommerce':
+        patterns.priceRange = { min: Math.min(...samples.map(s => s.price || 0)), max: Math.max(...samples.map(s => s.price || 0)) };
+        patterns.ratingDistribution = samples.reduce((acc, s) => { acc[Math.floor(s.rating || 0)] = (acc[Math.floor(s.rating || 0)] || 0) + 1; return acc; }, {});
+        patterns.categoryFreq = samples.reduce((acc, s) => { acc[s.category] = (acc[s.category] || 0) + 1; return acc; }, {});
+        break;
+      case 'bloomberg':
+        patterns.sectorDistribution = samples.reduce((acc, s) => { acc[s.security?.sector] = (acc[s.security?.sector] || 0) + 1; return acc; }, {});
+        patterns.recommendationFreq = samples.reduce((acc, s) => { acc[s.consensus?.recommendation] = (acc[s.consensus?.recommendation] || 0) + 1; return acc; }, {});
+        patterns.avgVolume = samples.reduce((sum, s) => sum + (s.pricing?.volume || 0), 0) / samples.length;
+        break;
+      case 'medical':
+        patterns.severityDistribution = samples.reduce((acc, s) => { acc[s.diagnosis?.severity] = (acc[s.diagnosis?.severity] || 0) + 1; return acc; }, {});
+        patterns.avgAge = samples.reduce((sum, s) => sum + (s.patient?.age || 0), 0) / samples.length;
+        break;
+      case 'supply_chain':
+        patterns.statusDistribution = samples.reduce((acc, s) => { acc[s.order?.status] = (acc[s.order?.status] || 0) + 1; return acc; }, {});
+        patterns.avgLeadTime = samples.reduce((sum, s) => sum + (s.supplier?.leadTime || 0), 0) / samples.length;
+        break;
+      default:
+        patterns.recordCount = samples.length;
+    }
+    return patterns;
   }
 
   log.info(`Generated ${generatedData.length} records in ${generationTime}ms`);
@@ -531,15 +581,34 @@ async function generateEcommerceData(count, seed) {
   const random = createSeededRandom(seed);
   const results = [];
 
-  const categories = ['Electronics', 'Clothing', 'Home & Garden', 'Sports', 'Books', 'Toys', 'Beauty', 'Automotive'];
-  const brands = ['TechPro', 'StyleMax', 'HomeEssentials', 'SportZone', 'BookWorld', 'KidsFun', 'GlowUp', 'AutoParts'];
+  // Category-matched brands for realistic data
+  const categoryBrands = {
+    'Electronics': ['Samsung', 'Sony', 'Apple', 'LG', 'Bose', 'JBL', 'Anker', 'Logitech'],
+    'Clothing': ['Nike', 'Adidas', 'Zara', 'H&M', 'Levi\'s', 'Gap', 'Uniqlo', 'Calvin Klein'],
+    'Home & Garden': ['IKEA', 'Pottery Barn', 'West Elm', 'Crate & Barrel', 'HomeGoods', 'Wayfair'],
+    'Sports': ['Nike', 'Under Armour', 'Adidas', 'Puma', 'Wilson', 'Spalding', 'Callaway'],
+    'Books': ['Penguin', 'HarperCollins', 'Simon & Schuster', 'Random House', 'Scholastic'],
+    'Toys': ['LEGO', 'Hasbro', 'Mattel', 'Fisher-Price', 'Melissa & Doug', 'Nerf'],
+    'Beauty': ['L\'Oreal', 'Maybelline', 'Neutrogena', 'Olay', 'Revlon', 'CeraVe', 'The Ordinary'],
+    'Automotive': ['Bosch', 'Michelin', 'Goodyear', 'Mobil', 'Castrol', 'WeatherTech', 'AutoZone']
+  };
+  const categories = Object.keys(categoryBrands);
   const conditions = ['New', 'Used - Like New', 'Used - Good', 'Refurbished'];
 
   for (let i = 0; i < count; i++) {
     const category = categories[Math.floor(random() * categories.length)];
-    const brand = brands[Math.floor(random() * brands.length)];
+    const brandsForCategory = categoryBrands[category];
+    const brand = brandsForCategory[Math.floor(random() * brandsForCategory.length)];
     const basePrice = 10 + random() * 990;
     const hasDiscount = random() > 0.6;
+
+    // Consistent stock logic: if stockCount is 0, inStock is false
+    const stockCount = Math.floor(random() * 500);
+    const inStock = stockCount > 0 && random() > 0.1;
+
+    // Consistent shipping logic: free shipping means price is 0
+    const isFreeShipping = random() > 0.4;
+    const shippingPrice = isFreeShipping ? 0 : Math.round((5 + random() * 10) * 100) / 100;
 
     results.push({
       url: `https://example-store.com/products/${generateSlug(random)}-${i}`,
@@ -551,8 +620,8 @@ async function generateEcommerceData(count, seed) {
       brand,
       rating: Math.round((3 + random() * 2) * 10) / 10,
       reviewCount: Math.floor(random() * 5000),
-      inStock: random() > 0.15,
-      stockCount: Math.floor(random() * 500),
+      inStock,
+      stockCount: inStock ? stockCount : 0,
       condition: conditions[Math.floor(random() * conditions.length)],
       seller: {
         name: `Seller${Math.floor(random() * 1000)}`,
@@ -560,9 +629,9 @@ async function generateEcommerceData(count, seed) {
         totalSales: Math.floor(random() * 50000)
       },
       shipping: {
-        free: random() > 0.4,
+        free: isFreeShipping,
         estimatedDays: Math.floor(2 + random() * 8),
-        price: random() > 0.4 ? 0 : Math.round(random() * 15 * 100) / 100
+        price: shippingPrice
       },
       images: Array.from({ length: Math.floor(1 + random() * 5) }, (_, j) =>
         `https://example-store.com/images/product-${i}-${j}.jpg`
@@ -1900,14 +1969,34 @@ async function generateBloombergData(count, seed) {
         var95: Math.round((random() * 10) * 100) / 100,
         maxDrawdown: Math.round((5 + random() * 30) * 10) / 10
       },
-      consensus: {
-        recommendation: ['strong_buy', 'buy', 'hold', 'sell', 'strong_sell'][Math.floor(random() * 5)],
-        targetPrice: Math.round(basePrice * (1 + (random() - 0.3) * 0.5) * 100) / 100,
-        numAnalysts: Math.floor(5 + random() * 40),
-        buyRatings: Math.floor(random() * 30),
-        holdRatings: Math.floor(random() * 15),
-        sellRatings: Math.floor(random() * 10)
-      },
+      consensus: (() => {
+        // Generate consistent analyst ratings
+        const numAnalysts = Math.floor(5 + random() * 40);
+        const buyPct = random();
+        const sellPct = random() * (1 - buyPct);
+        const holdPct = 1 - buyPct - sellPct;
+        const buyRatings = Math.floor(numAnalysts * buyPct);
+        const sellRatings = Math.floor(numAnalysts * sellPct);
+        const holdRatings = numAnalysts - buyRatings - sellRatings;
+
+        // Derive recommendation from actual ratings
+        const buyScore = buyRatings / numAnalysts;
+        let recommendation;
+        if (buyScore > 0.7) recommendation = 'strong_buy';
+        else if (buyScore > 0.5) recommendation = 'buy';
+        else if (buyScore > 0.3) recommendation = 'hold';
+        else if (buyScore > 0.15) recommendation = 'sell';
+        else recommendation = 'strong_sell';
+
+        return {
+          recommendation,
+          targetPrice: Math.round(basePrice * (1 + (random() - 0.3) * 0.5) * 100) / 100,
+          numAnalysts,
+          buyRatings,
+          holdRatings,
+          sellRatings
+        };
+      })(),
       news: {
         headline: `${generateName(random).split(' ')[1]} Corp ${newsCategories[Math.floor(random() * newsCategories.length)].replace('_', ' ')} update`,
         source: ['Reuters', 'Bloomberg', 'WSJ', 'FT', 'CNBC'][Math.floor(random() * 5)],

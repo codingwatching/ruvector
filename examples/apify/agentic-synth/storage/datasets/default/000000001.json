@@ -1,42 +1,88 @@
 {
 	"id": 1,
-	"type": "ecommerce",
+	"type": "supply_chain",
 	"data": {
-		"url": "https://example-store.com/products/elite-offer-8705-0",
-		"title": "AutoParts Wireless Manual",
-		"price": 364.58,
-		"originalPrice": null,
-		"currency": "USD",
-		"category": "Books",
-		"brand": "AutoParts",
-		"rating": 3.7,
-		"reviewCount": 1332,
-		"inStock": true,
-		"stockCount": 288,
-		"condition": "Used - Like New",
-		"seller": {
-			"name": "Seller511",
-			"rating": 4.6,
-			"totalSales": 36181
+		"shipmentId": "SHP17656806779570",
+		"order": {
+			"orderId": "ORD5857800",
+			"orderDate": "2025-11-06T17:00:14.882Z",
+			"priority": "standard",
+			"status": "delivered"
 		},
-		"shipping": {
-			"free": true,
-			"estimatedDays": 2,
-			"price": 0
+		"product": {
+			"sku": "SKU-235030",
+			"name": "Electronics Item 632",
+			"category": "Textiles",
+			"quantity": 1167,
+			"unitPrice": 365.39,
+			"totalValue": 426410.13,
+			"weight": 22.4,
+			"dimensions": {
+				"length": 54,
+				"width": 66,
+				"height": 35
+			}
 		},
-		"images": [
-			"https://example-store.com/images/product-0-0.jpg"
-		],
-		"specifications": {
-			"general": "Standard specifications"
+		"supplier": {
+			"id": "SUP8120",
+			"name": "Garcia Supply Co",
+			"country": "USA",
+			"leadTime": 43,
+			"rating": 3.7,
+			"onTimeDelivery": 77.6
 		},
-		"scrapedAt": "2025-12-13T15:12:31.914Z"
+		"logistics": {
+			"carrier": "FedEx",
+			"mode": "air",
+			"trackingNumber": "TRK255174671698",
+			"origin": {
+				"facility": "WH-MIA-06",
+				"country": "Vietnam",
+				"departureDate": "2025-11-06T17:00:14.882Z"
+			},
+			"destination": {
+				"facility": "WH-NYC-01",
+				"country": "Vietnam",
+				"eta": "2025-11-21T11:31:22.071Z"
+			},
+			"currentLocation": {
+				"lat": 47.4516779330176,
+				"lng": -66.78909109691688,
+				"lastUpdate": "2025-11-13T02:57:23.476Z"
+			}
+		},
+		"inventory": {
+			"warehouse": "WH-HOU-04",
+			"stockLevel": 4076,
+			"reorderPoint": 427,
+			"safetyStock": 100,
+			"daysOfSupply": 96
+		},
+		"costs": {
+			"productCost": 426410.13,
+			"shippingCost": 56076.75,
+			"tariffs": 4524.05,
+			"insurance": 8528.2,
+			"totalLandedCost": 515326.61
+		},
+		"compliance": {
+			"hsCode": "7035.70",
+			"countryOfOrigin": "China",
+			"certificates": "RoHS",
+			"customsCleared": true
+		},
+		"scrapedAt": "2025-12-14T02:51:17.958Z"
 	},
 	"metadata": {
-		"generatedAt": "2025-12-13T15:12:31.916Z",
+		"generatedAt": "2025-12-14T02:51:17.958Z",
+		"mode": "generate",
+		"dataType": "supply_chain",
+		"actorId": null,
+		"template": null,
 		"provider": "gemini",
 		"model": "gemini-2.0-flash-exp",
 		"quality": 0.8,
-		"seed": "random"
+		"seed": "random",
+		"hasEmbedding": false
 	}
 }

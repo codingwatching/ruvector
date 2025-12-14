@@ -15,8 +15,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/10,000_records-53ms-brightgreen?style=flat-square" alt="10K in 53ms">
+  <img src="https://img.shields.io/badge/188K_records/sec-purple?style=flat-square" alt="188K/sec">
   <img src="https://img.shields.io/badge/18_data_types-orange?style=flat-square" alt="18 Data Types">
-  <img src="https://img.shields.io/badge/150x_faster-Rust/WASM-blue?style=flat-square" alt="150x Faster">
+  <img src="https://img.shields.io/badge/SONA_Self--Learning-blue?style=flat-square" alt="Self-Learning">
   <img src="https://img.shields.io/badge/version-2.5-green?style=flat-square" alt="Version">
 </p>
 
@@ -24,17 +25,30 @@
 
 ## Overview
 
-Agentic Synth is a high-performance simulation engine that generates realistic synthetic data at scale. Whether you need 100 records for a quick test or 10,000 records for load testing, the engine produces structured, realistic data across 18 different domains—from e-commerce products and social media posts to Bloomberg-style financial terminals and HIPAA-format medical records.
+Agentic Synth is a self-learning simulation engine that generates realistic synthetic data at scale. Unlike static generators that produce random values, this engine learns from every run—extracting patterns from your data to improve quality over time. Generate 100 records in 1ms or 10,000 records in 53ms across 18 different domains.
 
-The engine is powered by RuVector, a native Rust/WASM neural system that delivers 150x faster operations than traditional JavaScript implementations. At its core is SONA (Self-Optimizing Neural Architecture), a three-tier learning system that continuously improves data quality. Unlike static generators that produce random values, SONA learns patterns from each generation run: price distributions correlate with product categories, medical diagnosis codes map to appropriate procedures, and financial metrics follow realistic sector-specific relationships.
+**Self-Learning Neural Architecture (SONA)** powers the engine with three learning tiers:
 
-For developers building scrapers, the engine eliminates the pain of rate limits, captchas, and anti-bot detection. For enterprises, it provides compliant test data without the legal risks of using real customer information. For AI teams, it generates unlimited training data with semantic embeddings using five pre-trained models (all-MiniLM-L6-v2, bge-small, all-mpnet, e5-small, gte-small).
+| Tier | What It Does | Example |
+|------|--------------|---------|
+| **Instant** | Learns patterns during generation | "Electronics products cluster around $200-500" |
+| **Background** | Trains on batch completion | "Bloomberg buy ratings correlate with sector performance" |
+| **Deep** | Cross-session pattern retention | "Medical diagnoses improve ICD-10 code accuracy over time" |
 
-The simulation mode enables long-running data streams—push 50 records every 2 seconds to test real-time processing pipelines. Batch mode processes thousands of records with configurable chunking. Seeds ensure reproducible results for CI/CD integration. The pay-per-event model means you only pay for what you generate, starting at $0.0001 per record.
+The engine extracts data-type specific patterns: price distributions correlate with product categories, analyst recommendations match rating distributions, medical billing codes align with procedures, and supply chain lead times reflect regional logistics.
 
-Every data type includes realistic relationships: stock prices follow market dynamics, supply chain shipments have appropriate lead times by region, and medical billing codes match procedures. The self-learning engine gets smarter with use—after 100,000 records, data quality approaches production-level realism.
+**Key Capabilities:**
+- **150x faster** than JavaScript generators (Rust/WASM powered by RuVector)
+- **5 embedding models** for semantic search (all-MiniLM-L6-v2, bge-small, all-mpnet, e5-small, gte-small)
+- **Real brand matching** per category (Samsung for Electronics, Nike for Sports, LEGO for Toys)
+- **Consistent data logic** (stock counts match availability, shipping prices match free flags)
+- **Neural pattern training** per data type with EWC++ memory protection
 
-The actor integrates with 21 other Apify actors for data enrichment and supports MCP server mode for direct Claude Code integration. It pairs seamlessly with [AI Memory Engine](https://apify.com/ruv/ai-memory-engine)—use Agentic Synth to generate training data, then store it in Memory Engine for semantic search and RAG applications. Performance benchmarks show 100 records generated in under 2 seconds, scaling linearly to 10,000 records in under 30 seconds.
+For developers, it eliminates rate limits and captchas. For enterprises, it provides compliant test data without legal risks. For AI teams, it generates unlimited training data with semantic embeddings.
+
+The simulation mode streams data in batches—push 50 records every 2 seconds for real-time pipeline testing. Seeds ensure reproducible results for CI/CD. Pairs with [AI Memory Engine](https://apify.com/ruv/ai-memory-engine) for semantic search and RAG applications.
+
+**Benchmarks:** 100 records in 1ms | 1,000 in 7ms | 5,000 in 34ms | 10,000 in 53ms (188,679 records/sec)
 
 ---
 
