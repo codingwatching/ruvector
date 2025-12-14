@@ -2568,7 +2568,18 @@ try {
     // NEW: Clustering parameters
     numClusters = 5,        // Number of clusters for clustering action
     // NEW: Export format for vector DBs
-    vectorDbFormat = null   // pinecone, weaviate, chromadb, qdrant, langchain, openai
+    vectorDbFormat = null,   // pinecone, weaviate, chromadb, qdrant, langchain, openai
+    // NEW: Storage backend options
+    storageBackend = 'apify-binary',
+    postgresUrl = null,
+    qdrantUrl = null,
+    qdrantApiKey = null,
+    pineconeApiKey = null,
+    pineconeIndex = 'ai-memories',
+    weaviateHost = null,
+    weaviateApiKey = null,
+    curvature = 1.0,
+    hyperbolicClustering = false
   } = input;
 
   // Determine dimensions based on embedding model
@@ -2594,9 +2605,40 @@ try {
     patternThreshold
   });
 
+  // Initialize persistence backend
+  let persistence = null;
+  try {
+    persistence = await createPersistence({
+      storageBackend,
+      postgresUrl,
+      qdrantUrl,
+      qdrantApiKey,
+      pineconeApiKey,
+      pineconeIndex,
+      weaviateHost,
+      weaviateApiKey,
+      curvature,
+      dimensions
+    });
+    log.info(`Persistence backend initialized: ${storageBackend}`);
+  } catch (e) {
+    log.warning(`Could not initialize ${storageBackend} backend: ${e.message}, falling back to legacy`);
+    persistence = null;
+  }
+
   // Load existing session if provided
   if (sessionId) {
-    await loadSession(memoryStore, sessionId);
+    if (persistence) {
+      try {
+        const loadResult = await persistence.load(memoryStore, sessionId);
+        log.info(`Session loaded via ${storageBackend}`, loadResult);
+      } catch (e) {
+        log.warning(`Persistence load failed, trying legacy: ${e.message}`);
+        await loadSession(memoryStore, sessionId);
+      }
+    } else {
+      await loadSession(memoryStore, sessionId);
+    }
   }
 
   // Get API keys
@@ -2905,8 +2947,28 @@ try {
   }
 
   // Save session if provided
+  let saveResult = null;
   if (sessionId) {
-    await saveSession(memoryStore, sessionId);
+    if (persistence) {
+      try {
+        saveResult = await persistence.save(memoryStore, sessionId);
+        log.info(`Session saved via ${storageBackend}`, saveResult);
+      } catch (e) {
+        log.warning(`Persistence save failed, using legacy: ${e.message}`);
+        await saveSession(memoryStore, sessionId);
+      }
+    } else {
+      await saveSession(memoryStore, sessionId);
+    }
+  }
+
+  // Close persistence connection if needed
+  if (persistence) {
+    try {
+      await persistence.close();
+    } catch (e) {
+      // Ignore close errors
+    }
   }
 
   // Push results
@@ -2918,6 +2980,8 @@ try {
       namespace,
       memoryCount: memoryStore.size(),
       sessionId,
+      storageBackend,
+      persistenceResult: saveResult,
       timestamp: new Date().toISOString(),
       engine: {
         ruvllmLoaded,
