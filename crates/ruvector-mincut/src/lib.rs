@@ -44,6 +44,7 @@
 //! - [`linkcut`]: Link-cut trees for dynamic connectivity
 //! - [`euler`]: Euler tour trees for tree operations
 //! - [`sparsify`]: Graph sparsification for approximate cuts
+//! - [`expander`]: Expander decomposition for subpolynomial updates
 //! - [`monitoring`]: Real-time event monitoring (feature-gated)
 //!
 //! ## Feature Flags
@@ -125,8 +126,10 @@ pub mod graph;
 pub mod linkcut;
 pub mod euler;
 pub mod tree;
+pub mod witness;
 pub mod algorithm;
 pub mod sparsify;
+pub mod expander;
 
 // Internal modules
 mod core;
@@ -140,9 +143,11 @@ pub use error::{MinCutError, Result};
 pub use graph::{DynamicGraph, Edge, GraphStats, VertexId, EdgeId, Weight};
 pub use algorithm::{DynamicMinCut, MinCutBuilder, MinCutConfig, MinCutResult, AlgorithmStats};
 pub use tree::{HierarchicalDecomposition, DecompositionNode, LevelInfo};
+pub use witness::{WitnessTree, LazyWitnessTree, EdgeWitness};
 pub use linkcut::LinkCutTree;
 pub use euler::EulerTourTree;
 pub use sparsify::{SparseGraph, SparsifyConfig};
+pub use expander::{ExpanderDecomposition, ExpanderComponent, Conductance};
 
 #[cfg(feature = "monitoring")]
 pub use monitoring::{
@@ -176,6 +181,7 @@ pub mod prelude {
         DynamicGraph, Edge, VertexId, EdgeId, Weight,
         MinCutError, Result,
         AlgorithmStats,
+        ExpanderDecomposition, ExpanderComponent, Conductance,
     };
 
     #[cfg(feature = "monitoring")]
