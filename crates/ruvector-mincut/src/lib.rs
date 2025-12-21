@@ -130,6 +130,7 @@ pub mod witness;
 pub mod algorithm;
 pub mod sparsify;
 pub mod expander;
+pub mod localkcut;
 
 // Internal modules
 mod core;
@@ -148,6 +149,7 @@ pub use linkcut::LinkCutTree;
 pub use euler::EulerTourTree;
 pub use sparsify::{SparseGraph, SparsifyConfig};
 pub use expander::{ExpanderDecomposition, ExpanderComponent, Conductance};
+pub use localkcut::{LocalKCut, LocalCutResult, EdgeColor, ColorMask, ForestPacking};
 
 #[cfg(feature = "monitoring")]
 pub use monitoring::{
@@ -182,6 +184,7 @@ pub mod prelude {
         MinCutError, Result,
         AlgorithmStats,
         ExpanderDecomposition, ExpanderComponent, Conductance,
+        LocalKCut, LocalCutResult, EdgeColor, ColorMask, ForestPacking,
     };
 
     #[cfg(feature = "monitoring")]
