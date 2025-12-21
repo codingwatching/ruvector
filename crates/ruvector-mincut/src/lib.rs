@@ -113,7 +113,7 @@
 //! ```
 
 #![deny(missing_docs)]
-#![deny(unsafe_code)]
+#![cfg_attr(not(feature = "wasm"), deny(unsafe_code))]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -137,6 +137,9 @@ pub mod wrapper;
 pub mod certificate;
 pub mod fragment;
 pub mod cluster;
+pub mod compact;
+pub mod parallel;
+pub mod integration;
 
 // Internal modules
 mod core;
@@ -144,6 +147,9 @@ mod core;
 // Optional feature-gated modules
 #[cfg(feature = "monitoring")]
 pub mod monitoring;
+
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 // Re-exports for convenient access
 pub use error::{MinCutError, Result};
@@ -170,6 +176,22 @@ pub use certificate::{
 };
 pub use cluster::{ClusterHierarchy, Cluster};
 pub use fragment::{Fragment, FragmentResult, FragmentingAlgorithm};
+pub use compact::{
+    BitSet256, CompactEdge, CompactWitness, CompactAdjacency, CompactCoreState,
+    CoreResult, CompactVertexId, CompactEdgeId, MAX_VERTICES_PER_CORE, MAX_EDGES_PER_CORE,
+};
+pub use parallel::{
+    NUM_CORES, RANGES_PER_CORE, TOTAL_RANGES, RANGE_FACTOR,
+    CoreStrategy, CoreMessage, WorkItem, SharedCoordinator,
+    CoreDistributor, CoreExecutor, ResultAggregator,
+    compute_core_range,
+};
+pub use integration::{
+    RuVectorGraphAnalyzer, CommunityDetector, GraphPartitioner,
+};
+
+#[cfg(feature = "agentic")]
+pub use integration::AgenticAnalyzer;
 
 #[cfg(feature = "monitoring")]
 pub use monitoring::{
@@ -213,7 +235,15 @@ pub mod prelude {
         MinCutWrapper,
         ClusterHierarchy, Cluster,
         Fragment, FragmentResult, FragmentingAlgorithm,
+        BitSet256, CompactEdge, CompactWitness, CompactAdjacency, CompactCoreState,
+        CoreResult, CompactVertexId, CompactEdgeId, MAX_VERTICES_PER_CORE, MAX_EDGES_PER_CORE,
+        NUM_CORES, RANGES_PER_CORE, CoreStrategy, SharedCoordinator,
+        CoreDistributor, CoreExecutor, ResultAggregator, compute_core_range,
+        RuVectorGraphAnalyzer, CommunityDetector, GraphPartitioner,
     };
+
+    #[cfg(feature = "agentic")]
+    pub use crate::AgenticAnalyzer;
 
     #[cfg(feature = "monitoring")]
     pub use crate::{MinCutMonitor, MonitorBuilder, MinCutEvent, EventType};
