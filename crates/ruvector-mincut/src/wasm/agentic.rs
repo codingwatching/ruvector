@@ -196,7 +196,7 @@ pub mod ruvector {
 
         // Create executor
         let coord = SharedCoordinator::new();
-        let mut exec = CoreExecutor::init(0, &coord);
+        let mut exec = CoreExecutor::init(0, Some(&coord));
 
         // Add edges
         for (src, tgt, weight) in compact_e {

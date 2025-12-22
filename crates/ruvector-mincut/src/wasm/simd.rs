@@ -76,6 +76,7 @@ pub fn simd_xor(a: &BitSet256, b: &BitSet256) -> BitSet256 {
     }
 }
 
+/// Compute XOR of two bitsets (fallback for non-WASM targets)
 #[cfg(not(target_arch = "wasm32"))]
 #[inline]
 pub fn simd_xor(a: &BitSet256, b: &BitSet256) -> BitSet256 {
@@ -118,6 +119,8 @@ pub fn simd_batch_contains(set: &BitSet256, vertices: &[CompactVertexId; 8]) -> 
     result
 }
 
+/// Batch membership check (fallback for non-WASM targets)
+/// Returns a bitmask where bit i is set if vertices[i] is in set
 #[cfg(not(target_arch = "wasm32"))]
 #[inline]
 pub fn simd_batch_contains(set: &BitSet256, vertices: &[CompactVertexId; 8]) -> u8 {

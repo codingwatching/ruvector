@@ -22,7 +22,7 @@
 //! ```
 
 use wasm_bindgen::prelude::*;
-use ruvector_mincut::{DynamicMinCut, MinCutBuilder};
+use ruvector_mincut::{DynamicMinCut, MinCutBuilder, MinCutConfig};
 use serde::{Serialize, Deserialize};
 
 /// WASM wrapper for DynamicMinCut
@@ -68,7 +68,7 @@ impl WasmMinCut {
         console_error_panic_hook::set_once();
 
         Ok(WasmMinCut {
-            inner: DynamicMinCut::new(),
+            inner: DynamicMinCut::new(MinCutConfig::default()),
         })
     }
 
@@ -90,7 +90,8 @@ impl WasmMinCut {
         let edges_vec: Vec<Vec<f64>> = serde_wasm_bindgen::from_value(edges)
             .map_err(|e| JsError::new(&format!("Failed to parse edges: {}", e)))?;
 
-        let mut builder = MinCutBuilder::new();
+        // Convert to tuple format expected by with_edges
+        let mut edge_tuples = Vec::with_capacity(edges_vec.len());
 
         for edge in edges_vec {
             if edge.len() != 3 {
@@ -101,10 +102,12 @@ impl WasmMinCut {
             let v = edge[1] as u64;
             let weight = edge[2];
 
-            builder = builder.add_edge(u, v, weight);
+            edge_tuples.push((u, v, weight));
         }
 
-        let inner = builder.build()
+        let inner = MinCutBuilder::new()
+            .with_edges(edge_tuples)
+            .build()
             .map_err(|e| JsError::new(&format!("Failed to build mincut: {}", e)))?;
 
         Ok(WasmMinCut { inner })
@@ -187,7 +190,7 @@ impl WasmMinCut {
 
         let edge_list: Vec<Edge> = edges
             .into_iter()
-            .map(|(u, v, weight)| Edge { u, v, weight })
+            .map(|e| Edge { u: e.source, v: e.target, weight: e.weight })
             .collect();
 
         serde_wasm_bindgen::to_value(&edge_list).unwrap_or(JsValue::NULL)
@@ -232,12 +235,13 @@ impl WasmMinCut {
     /// ```
     #[wasm_bindgen]
     pub fn stats(&self) -> JsValue {
+        let algo_stats = self.inner.stats();
         let stats = Stats {
             num_vertices: self.inner.num_vertices(),
             num_edges: self.inner.num_edges(),
             min_cut_value: self.inner.min_cut_value(),
             is_connected: self.inner.is_connected(),
-            num_operations: self.inner.stats().total_operations(),
+            num_operations: (algo_stats.insertions + algo_stats.deletions + algo_stats.queries) as usize,
         };
 
         serde_wasm_bindgen::to_value(&stats).unwrap_or(JsValue::NULL)
@@ -332,15 +336,7 @@ impl WasmMinCut {
     /// Clear all edges from the graph
     #[wasm_bindgen]
     pub fn clear(&mut self) {
-        self.inner = DynamicMinCut::new();
-    }
-
-    /// Clone the minimum cut structure
-    #[wasm_bindgen]
-    pub fn clone(&self) -> WasmMinCut {
-        WasmMinCut {
-            inner: self.inner.clone(),
-        }
+        self.inner = DynamicMinCut::new(MinCutConfig::default());
     }
 }
 

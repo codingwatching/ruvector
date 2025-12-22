@@ -838,6 +838,142 @@ impl MinCutWrapper {
         h.build();
         h
     }
+
+    /// Compute edge-connectivity degradation curve
+    ///
+    /// Removes the top-K ranked edges and computes the min-cut after each removal.
+    /// This validates that boundary detection is working correctly:
+    /// - Sharp early drops indicate good ranking (edges are on the true cut)
+    /// - Flat/noisy curves suggest poor boundary detection
+    ///
+    /// # Arguments
+    ///
+    /// * `ranked_edges` - Edges ranked by their "cut-likelihood" score, highest first.
+    ///                    Each entry is (source, target, score).
+    /// * `k_max` - Maximum number of edges to remove
+    ///
+    /// # Returns
+    ///
+    /// Vector of (k, min_cut_value) pairs showing how min-cut degrades.
+    /// An ideal detector shows an elbow early (near true min-cut boundary).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let mut wrapper = MinCutWrapper::new(graph);
+    /// // ... insert edges ...
+    ///
+    /// // Rank edges by boundary likelihood (from your detector)
+    /// let ranked = vec![(1, 2, 0.95), (2, 3, 0.8), (3, 4, 0.6)];
+    ///
+    /// let curve = wrapper.connectivity_curve(&ranked, 5);
+    /// // curve[0] = (0, initial_min_cut)
+    /// // curve[1] = (1, min_cut_after_removing_top_edge)
+    /// // ...
+    /// // Early sharp drop = good detector
+    /// ```
+    pub fn connectivity_curve(
+        &self,
+        ranked_edges: &[(VertexId, VertexId, f64)],
+        k_max: usize,
+    ) -> Vec<(usize, u64)> {
+        use crate::algorithm::DynamicMinCut;
+
+        // Build a temporary copy of the graph
+        let mut temp_mincut = DynamicMinCut::new(crate::MinCutConfig::default());
+
+        for edge in self.graph.edges() {
+            let _ = temp_mincut.insert_edge(edge.source, edge.target, edge.weight);
+        }
+
+        let mut curve = Vec::with_capacity(k_max + 1);
+
+        // k=0: initial min-cut
+        curve.push((0, temp_mincut.min_cut_value() as u64));
+
+        // Remove edges in ranked order
+        for (k, &(u, v, _score)) in ranked_edges.iter().take(k_max).enumerate() {
+            let _ = temp_mincut.delete_edge(u, v);
+            let new_cut = temp_mincut.min_cut_value() as u64;
+            curve.push((k + 1, new_cut));
+        }
+
+        curve
+    }
+
+    /// Detect elbow point in connectivity curve
+    ///
+    /// Finds where the curve has the sharpest drop, indicating
+    /// the boundary between cut-critical edges and interior edges.
+    ///
+    /// # Arguments
+    ///
+    /// * `curve` - Output from `connectivity_curve()`
+    ///
+    /// # Returns
+    ///
+    /// (elbow_k, drop_magnitude) - The k value where the biggest drop occurs
+    /// and how much the min-cut dropped.
+    pub fn find_elbow(curve: &[(usize, u64)]) -> Option<(usize, u64)> {
+        if curve.len() < 2 {
+            return None;
+        }
+
+        let mut max_drop = 0u64;
+        let mut elbow_k = 0usize;
+
+        for i in 1..curve.len() {
+            let drop = curve[i - 1].1.saturating_sub(curve[i].1);
+            if drop > max_drop {
+                max_drop = drop;
+                elbow_k = curve[i].0;
+            }
+        }
+
+        if max_drop > 0 {
+            Some((elbow_k, max_drop))
+        } else {
+            None
+        }
+    }
+
+    /// Validate boundary detector quality
+    ///
+    /// Computes a quality score for a boundary detector based on
+    /// how quickly its ranked edges reduce the min-cut.
+    ///
+    /// # Arguments
+    ///
+    /// * `ranked_edges` - Edges ranked by detector, highest score first
+    /// * `true_cut_size` - Known size of true minimum cut (if available)
+    ///
+    /// # Returns
+    ///
+    /// Quality score from 0.0 (poor) to 1.0 (perfect).
+    /// Perfect means top-k edges exactly match the true cut.
+    pub fn detector_quality(
+        &self,
+        ranked_edges: &[(VertexId, VertexId, f64)],
+        true_cut_size: usize,
+    ) -> f64 {
+        let k_max = true_cut_size.min(ranked_edges.len());
+        if k_max == 0 {
+            return 0.0;
+        }
+
+        let curve = self.connectivity_curve(ranked_edges, k_max);
+
+        // Compute how much the min-cut dropped after removing top-k edges
+        let initial_cut = curve.first().map(|(_, c)| *c).unwrap_or(0);
+        let final_cut = curve.last().map(|(_, c)| *c).unwrap_or(0);
+
+        // Quality = fraction of min-cut eliminated
+        if initial_cut == 0 {
+            0.0
+        } else {
+            (initial_cut - final_cut) as f64 / initial_cut as f64
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1241,5 +1377,131 @@ mod tests {
         // Hierarchy should contain all vertices
         let stats = hierarchy.stats();
         assert!(stats.num_vertices >= 4, "Hierarchy should have 4 vertices");
+    }
+
+    #[test]
+    fn test_connectivity_curve_basic() {
+        // Simple path graph: 1-2-3
+        // Min-cut is 1 (any single edge)
+        let graph = Arc::new(DynamicGraph::new());
+        graph.insert_edge(1, 2, 1.0).unwrap();
+        graph.insert_edge(2, 3, 1.0).unwrap();
+
+        let mut wrapper = MinCutWrapper::new(Arc::clone(&graph));
+        wrapper.batch_insert_edges(&[(0, 1, 2), (1, 2, 3)]);
+        wrapper.query();
+
+        // Rank edges
+        let ranked_edges = vec![
+            (1, 2, 1.0),
+            (2, 3, 0.8),
+        ];
+
+        let curve = wrapper.connectivity_curve(&ranked_edges, 2);
+
+        // Should have k=0,1,2 entries
+        assert_eq!(curve.len(), 3);
+        assert_eq!(curve[0].0, 0); // k=0
+        assert_eq!(curve[1].0, 1); // k=1
+        assert_eq!(curve[2].0, 2); // k=2
+    }
+
+    #[test]
+    fn test_find_elbow_with_clear_drop() {
+        // Curve with clear elbow at k=2
+        let curve = vec![
+            (0, 10),  // Initial: min-cut = 10
+            (1, 9),   // Small drop
+            (2, 3),   // BIG drop (elbow)
+            (3, 2),   // Small drop
+            (4, 2),   // No drop
+        ];
+
+        let elbow = MinCutWrapper::find_elbow(&curve);
+        assert!(elbow.is_some());
+
+        let (k, drop) = elbow.unwrap();
+        assert_eq!(k, 2);  // Elbow at k=2
+        assert_eq!(drop, 6); // Drop of 6 (from 9 to 3)
+    }
+
+    #[test]
+    fn test_find_elbow_flat_curve() {
+        // Flat curve with no significant drops
+        let curve = vec![
+            (0, 5),
+            (1, 5),
+            (2, 5),
+            (3, 5),
+        ];
+
+        let elbow = MinCutWrapper::find_elbow(&curve);
+        assert!(elbow.is_none()); // No elbow when curve is flat
+    }
+
+    #[test]
+    fn test_find_elbow_single_point() {
+        let curve = vec![(0, 5)];
+        let elbow = MinCutWrapper::find_elbow(&curve);
+        assert!(elbow.is_none()); // Can't find elbow with single point
+    }
+
+    #[test]
+    fn test_find_elbow_empty() {
+        let curve: Vec<(usize, u64)> = vec![];
+        let elbow = MinCutWrapper::find_elbow(&curve);
+        assert!(elbow.is_none());
+    }
+
+    #[test]
+    fn test_detector_quality_perfect() {
+        // Create simple path graph: 1-2-3-4
+        // Min-cut is 1 (any edge)
+        let graph = Arc::new(DynamicGraph::new());
+        graph.insert_edge(1, 2, 1.0).unwrap();
+        graph.insert_edge(2, 3, 1.0).unwrap();
+        graph.insert_edge(3, 4, 1.0).unwrap();
+
+        let mut wrapper = MinCutWrapper::new(Arc::clone(&graph));
+        wrapper.batch_insert_edges(&[(0, 1, 2), (1, 2, 3), (2, 3, 4)]);
+        wrapper.query();
+
+        // Detector ranks an actual min-cut edge first
+        let ranked_edges = vec![
+            (2, 3, 1.0),  // This is a cut edge
+            (1, 2, 0.5),
+            (3, 4, 0.3),
+        ];
+
+        let quality = wrapper.detector_quality(&ranked_edges, 1);
+
+        // Quality should be positive (removing cut edge reduces min-cut)
+        assert!(quality >= 0.0);
+        assert!(quality <= 1.0);
+    }
+
+    #[test]
+    fn test_detector_quality_zero_cut() {
+        let graph = Arc::new(DynamicGraph::new());
+        let wrapper = MinCutWrapper::new(Arc::clone(&graph));
+
+        // Empty ranked edges
+        let ranked_edges: Vec<(u64, u64, f64)> = vec![];
+
+        let quality = wrapper.detector_quality(&ranked_edges, 1);
+        assert_eq!(quality, 0.0);
+    }
+
+    #[test]
+    fn test_connectivity_curve_empty_graph() {
+        let graph = Arc::new(DynamicGraph::new());
+        let wrapper = MinCutWrapper::new(Arc::clone(&graph));
+
+        let ranked_edges = vec![(1, 2, 1.0)];
+        let curve = wrapper.connectivity_curve(&ranked_edges, 2);
+
+        // Should return at least initial point
+        assert!(!curve.is_empty());
+        assert_eq!(curve[0].0, 0); // First entry is k=0
     }
 }

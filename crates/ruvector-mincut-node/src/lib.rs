@@ -38,7 +38,14 @@ pub struct JsMinCutResult {
 pub struct JsMinCutConfig {
     pub approximate: Option<bool>,
     pub epsilon: Option<f64>,
-    pub max_cut_size: Option<u32>,
+    pub max_exact_cut_size: Option<u32>,
+}
+
+/// Partition result
+#[napi(object)]
+pub struct JsPartition {
+    pub s: Vec<u32>,
+    pub t: Vec<u32>,
 }
 
 /// Node.js wrapper for DynamicMinCut
@@ -52,19 +59,18 @@ impl MinCut {
     /// Create a new empty minimum cut structure
     #[napi(constructor)]
     pub fn new(config: Option<JsMinCutConfig>) -> Result<Self> {
-        let rust_config = if let Some(cfg) = config {
-            MinCutConfig {
-                approximate: cfg.approximate.unwrap_or(false),
-                epsilon: cfg.epsilon.unwrap_or(0.1),
-                max_cut_size: cfg.max_cut_size,
-            }
-        } else {
-            MinCutConfig::default()
-        };
+        let mut builder = MinCutBuilder::new();
 
-        let mincut = MinCutBuilder::new()
-            .with_config(rust_config)
-            .build()
+        if let Some(cfg) = config {
+            if cfg.approximate.unwrap_or(false) {
+                builder = builder.approximate(cfg.epsilon.unwrap_or(0.1));
+            }
+            if let Some(max_size) = cfg.max_exact_cut_size {
+                builder = builder.max_cut_size(max_size as usize);
+            }
+        }
+
+        let mincut = builder.build()
             .map_err(|e| Error::from_reason(format!("Failed to create MinCut: {}", e)))?;
 
         Ok(Self {
@@ -75,19 +81,26 @@ impl MinCut {
     /// Create from edges array
     #[napi(factory)]
     pub fn from_edges(edges: Vec<(u32, u32, f64)>, config: Option<JsMinCutConfig>) -> Result<Self> {
-        let rust_config = if let Some(cfg) = config {
-            MinCutConfig {
-                approximate: cfg.approximate.unwrap_or(false),
-                epsilon: cfg.epsilon.unwrap_or(0.1),
-                max_cut_size: cfg.max_cut_size,
-            }
-        } else {
-            MinCutConfig::default()
-        };
+        let mut builder = MinCutBuilder::new();
 
-        let mincut = MinCutBuilder::new()
-            .with_config(rust_config)
-            .from_edges(edges)
+        if let Some(cfg) = config {
+            if cfg.approximate.unwrap_or(false) {
+                builder = builder.approximate(cfg.epsilon.unwrap_or(0.1));
+            }
+            if let Some(max_size) = cfg.max_exact_cut_size {
+                builder = builder.max_cut_size(max_size as usize);
+            }
+        }
+
+        // Convert edges to the expected format
+        let edge_tuples: Vec<(u64, u64, f64)> = edges
+            .into_iter()
+            .map(|(u, v, w)| (u as u64, v as u64, w))
+            .collect();
+
+        let mincut = builder
+            .with_edges(edge_tuples)
+            .build()
             .map_err(|e| Error::from_reason(format!("Failed to create MinCut from edges: {}", e)))?;
 
         Ok(Self {
@@ -104,7 +117,7 @@ impl MinCut {
             .map_err(|e| Error::from_reason(format!("Lock error: {}", e)))?;
 
         mincut
-            .insert_edge(u, v, weight)
+            .insert_edge(u as u64, v as u64, weight)
             .map_err(|e| Error::from_reason(format!("Failed to insert edge: {}", e)))
     }
 
@@ -117,7 +130,7 @@ impl MinCut {
             .map_err(|e| Error::from_reason(format!("Lock error: {}", e)))?;
 
         mincut
-            .delete_edge(u, v)
+            .delete_edge(u as u64, v as u64)
             .map_err(|e| Error::from_reason(format!("Failed to delete edge: {}", e)))
     }
 
@@ -143,7 +156,7 @@ impl MinCut {
 
     /// Get partition: returns { s: number[], t: number[] }
     #[napi]
-    pub fn partition(&self) -> Result<serde_json::Value> {
+    pub fn partition(&self) -> Result<JsPartition> {
         let mincut = self
             .inner
             .lock()
@@ -151,12 +164,10 @@ impl MinCut {
 
         let (s, t) = mincut.partition();
 
-        let result = serde_json::json!({
-            "s": s,
-            "t": t
-        });
-
-        Ok(result)
+        Ok(JsPartition {
+            s: s.into_iter().map(|v| v as u32).collect(),
+            t: t.into_iter().map(|v| v as u32).collect(),
+        })
     }
 
     /// Get cut edges
@@ -168,9 +179,9 @@ impl MinCut {
         edges
             .into_iter()
             .map(|e| JsEdge {
-                id: e.id,
-                source: e.source,
-                target: e.target,
+                id: e.id as u32,
+                source: e.source as u32,
+                target: e.target as u32,
                 weight: e.weight,
             })
             .collect()
@@ -180,14 +191,14 @@ impl MinCut {
     #[napi(getter)]
     pub fn num_vertices(&self) -> u32 {
         let mincut = self.inner.lock().unwrap();
-        mincut.num_vertices()
+        mincut.num_vertices() as u32
     }
 
     /// Get number of edges
     #[napi(getter)]
     pub fn num_edges(&self) -> u32 {
         let mincut = self.inner.lock().unwrap();
-        mincut.num_edges()
+        mincut.num_edges() as u32
     }
 
     /// Check if graph is connected
@@ -204,9 +215,9 @@ impl MinCut {
         let stats = mincut.stats();
 
         JsStats {
-            insertions: stats.insertions,
-            deletions: stats.deletions,
-            queries: stats.queries,
+            insertions: stats.insertions as u32,
+            deletions: stats.deletions as u32,
+            queries: stats.queries as u32,
             avg_update_time_us: stats.avg_update_time_us,
         }
     }
