@@ -136,6 +136,7 @@ pub mod instance;
 pub mod wrapper;
 pub mod certificate;
 pub mod fragment;
+pub mod fragmentation;
 pub mod cluster;
 pub mod compact;
 pub mod parallel;
