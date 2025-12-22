@@ -58,3 +58,7 @@ harness = false
 [[bench]]
 name = "bounded_bench"
 harness = false
+
+[[bench]]
+name = "sota_bench"
+harness = false
