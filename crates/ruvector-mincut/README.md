@@ -6,10 +6,33 @@
 [![GitHub](https://img.shields.io/badge/GitHub-ruvnet%2Fruvector-blue?logo=github)](https://github.com/ruvnet/ruvector)
 [![ruv.io](https://img.shields.io/badge/ruv.io-AI%20Infrastructure-orange)](https://ruv.io)
 
-**The fastest dynamic minimum cut algorithm in Rust** — implementing breakthrough December 2025 research for real-time graph connectivity analysis.
+**Find the weakest link in any network — instantly, even as it changes.**
 
-> *"First deterministic exact fully-dynamic minimum cut algorithm with subpolynomial update time"*
-> — [arxiv:2512.13105](https://arxiv.org/abs/2512.13105)
+---
+
+## 🎯 What is Minimum Cut?
+
+Imagine a network of roads between cities. The **minimum cut** is the smallest number of roads you'd need to block to completely disconnect part of the network. This simple concept powers critical applications:
+
+- **Network Security**: Which servers, if compromised, would split your infrastructure?
+- **Social Networks**: What's the weakest connection between two communities?
+- **Supply Chain**: Which suppliers are single points of failure?
+- **Image Processing**: Where should we cut to separate foreground from background?
+
+### The Challenge
+
+Traditional algorithms must reanalyze the **entire graph** whenever a single connection changes. For a million-node network, that could mean billions of operations per update — far too slow for real-time monitoring.
+
+### The Breakthrough
+
+RuVector MinCut implements the **December 2025 breakthrough** ([arxiv:2512.13105](https://arxiv.org/abs/2512.13105)) — the first algorithm that:
+
+1. **Updates in subpolynomial time** — vastly faster than re-running from scratch
+2. **Handles both additions AND deletions** — not just one or the other
+3. **Guarantees exact results** — no approximations or probabilistic errors
+4. **Works deterministically** — same input always gives same output
+
+> *This is the world's first production implementation of this algorithm.*
 
 ---
 
@@ -53,11 +76,12 @@ We extend the paper with:
 
 ## 📑 Table of Contents
 
+- [What is Minimum Cut?](#-what-is-minimum-cut)
 - [Why RuVector MinCut?](#-why-ruvector-mincut)
 - [What Makes This Different](#-what-makes-this-different-novelty)
 - [Quick Start](#-quick-start)
 - [Key Features & Benefits](#-key-features--benefits)
-- [Performance](#performance-characteristics)
+- [Performance](#-performance-characteristics)
 - [Use Cases](#use-cases)
 - [Architecture](#architecture)
 - [API Reference](#api-reference)
