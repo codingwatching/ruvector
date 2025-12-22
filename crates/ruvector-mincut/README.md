@@ -80,6 +80,7 @@ We extend the paper with:
 - [Why RuVector MinCut?](#-why-ruvector-mincut)
 - [What Makes This Different](#-what-makes-this-different-novelty)
 - [Quick Start](#-quick-start)
+- [📖 User Guide](#-user-guide) ← NEW!
 - [Key Features & Benefits](#-key-features--benefits)
 - [Performance](#-performance-characteristics)
 - [Use Cases](#use-cases)
@@ -151,6 +152,23 @@ mincut.batch_delete_edges(&[(5, 50, 51)]);
 // Query triggers lazy evaluation
 let current_cut = mincut.min_cut_value();
 ```
+
+---
+
+## 📖 User Guide
+
+**New to ruvector-mincut?** Check out our comprehensive [**User Guide**](docs/guide/README.md) with:
+
+| Chapter | Description |
+|---------|-------------|
+| [Getting Started](docs/guide/01-getting-started.md) | Installation, first min-cut, feature selection |
+| [Core Concepts](docs/guide/02-core-concepts.md) | Graph basics, algorithm selection, data structures |
+| [Practical Applications](docs/guide/03-practical-applications.md) | Network security, social graphs, image segmentation |
+| [Integration Guide](docs/guide/04-integration-guide.md) | Rust, WASM, Node.js, Python, GraphQL |
+| [Advanced Examples](docs/guide/05-advanced-examples.md) | Monitoring, 256-core agentic, paper algorithms |
+| [Ecosystem](docs/guide/06-ecosystem.md) | RuVector family, midstream, ruv.io platform |
+| [API Reference](docs/guide/07-api-reference.md) | Complete type and method reference |
+| [Troubleshooting](docs/guide/08-troubleshooting.md) | Common issues, debugging, error codes |
 
 ---
 
