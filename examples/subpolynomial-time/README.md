@@ -1,225 +1,206 @@
-# Subpolynomial-Time Dynamic Minimum Cut Demo
+# Dynamic Minimum Cut Demo
 
-This example demonstrates the **ruvector-mincut** crate, which implements a state-of-the-art subpolynomial-time algorithm for maintaining minimum cuts in dynamic graphs.
+**Find the weakest link in any network — instantly, even as it changes.**
 
-## What This Example Demonstrates
+[![GitHub](https://img.shields.io/badge/GitHub-ruvnet%2Fruvector-blue?logo=github)](https://github.com/ruvnet/ruvector)
+[![ruv.io](https://img.shields.io/badge/ruv.io-AI%20Infrastructure-orange)](https://ruv.io)
 
-### 1. **Basic Minimum Cut Computation**
-- Creating graphs with the builder pattern
-- Computing minimum cut values
-- Extracting cut partitions and edges
-- Analyzing graph statistics
+---
 
-### 2. **Dynamic Updates**
-- Inserting edges with `O(n^{o(1)})` amortized time
-- Deleting edges while maintaining the minimum cut
-- Tracking algorithm performance metrics
-- Building graphs incrementally from empty
+## What Is This?
 
-### 3. **Exact vs Approximate Modes**
-- **Exact algorithm**: Perfect minimum cut computation
-- **Approximate algorithm**: (1+ε)-approximation with faster updates
-- Performance trade-offs between accuracy and speed
-- Configurable approximation ratio
+This demo shows how to use the `ruvector-mincut` library to analyze network connectivity in real-time. It answers questions like:
 
-### 4. **Real-Time Monitoring**
-- Event-driven notifications when cuts change
-- Threshold-based alerts (above/below)
-- Multiple callback types:
-  - `CutIncreased` / `CutDecreased`
-  - `ThresholdCrossedBelow` / `ThresholdCrossedAbove`
-  - `Connected` / `Disconnected`
-  - `EdgeInserted` / `EdgeDeleted`
-- Comprehensive metrics collection
+- **"How many connections must fail before my network splits?"**
+- **"Which links are critical to keep my system connected?"**
+- **"How does adding/removing a connection affect network strength?"**
 
-### 5. **Network Resilience Analysis**
-- Identifying critical edges (cut set)
-- Measuring network robustness
-- Failure analysis and partitioning
-- Real-world application to infrastructure networks
+## The Simple Explanation
 
-### 6. **Performance Scaling**
-- Benchmarking at different graph sizes
-- Demonstrating subpolynomial scaling
-- Constant-time queries
-- Update time analysis
+Imagine you have a network of computers, roads, or social connections. The **minimum cut** is the smallest number of connections you'd need to remove to split the network in two.
 
-## How to Run
+```
+Before: A connected network          After: Network split by removing 1 edge
 
-### From the Example Directory
+    [A]---[B]                              [A]   [B]
+     |     |                                |     |
+    [C]---[D]                              [C]   [D]
 
-```bash
-cd examples/subpolynomial-time
-cargo run --release
+    Min cut = 1 (one weak link)            Now disconnected!
 ```
 
-### From the Repository Root
+The lower the minimum cut, the more vulnerable your network.
+
+## Why This Matters
+
+| Application | Question Answered |
+|-------------|-------------------|
+| **Server Infrastructure** | Which servers are single points of failure? |
+| **Social Networks** | What's the weakest link between communities? |
+| **Supply Chain** | Which suppliers would cripple operations if lost? |
+| **Road Networks** | Which roads would divide the city if closed? |
+
+## What Makes This Special
+
+Traditional algorithms must **reanalyze the entire network** whenever something changes. For large networks, that's too slow for real-time use.
+
+This implementation uses the [December 2025 breakthrough algorithm](https://arxiv.org/abs/2512.13105):
+- **Updates in subpolynomial time** — much faster than starting over
+- **Handles changes instantly** — add or remove connections without delay
+- **Exact results** — no approximations or guesses
+
+## Quick Start
+
+### Run the Demo
 
 ```bash
+# From this directory
+cargo run --release
+
+# Or from repository root
 cargo run --release --example subpolynomial-time-mincut-demo
 ```
 
-**Note**: Use `--release` for accurate performance measurements!
-
-## Expected Output
-
-The demo produces detailed output for each section:
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║  Subpolynomial-Time Dynamic Minimum Cut Algorithm Demo      ║
-║  ruvector-mincut v0.1.0                                      ║
-╚══════════════════════════════════════════════════════════════╝
-
-📊 DEMO 1: Basic Minimum Cut Computation
-Creating a triangle graph with vertices 1, 2, 3...
-
-Graph created:
-  • Vertices: 3
-  • Edges: 3
-  • Connected: true
-
-Minimum cut result:
-  • Value: 2.0
-  • Is exact: true
-  • Approximation ratio: 1.0
-  ...
-```
-
-Each demo section includes:
-- Clear visual output with emoji indicators
-- Detailed statistics and metrics
-- Explanatory text about what's happening
-- Performance measurements where relevant
-
-## Key Concepts Illustrated
-
-### Minimum Cut
-The **minimum cut** of a graph is the smallest set of edges whose removal disconnects the graph. It's a fundamental measure of graph connectivity and has applications in:
-- Network reliability analysis
-- Clustering and community detection
-- Image segmentation
-- VLSI circuit design
-
-### Subpolynomial Time
-This implementation achieves `O(n^{o(1)})` amortized update time, which is faster than polynomial but slower than polylogarithmic. This is the current state-of-the-art for exact dynamic minimum cut.
-
-### Dynamic Graphs
-Unlike static algorithms that recompute from scratch, this maintains the minimum cut incrementally as edges are inserted and deleted, making it suitable for:
-- Streaming graph data
-- Real-time network monitoring
-- Interactive graph editing
-- Time-evolving networks
-
-### Monitoring System
-The event-driven monitoring system enables:
-- Proactive alerting when connectivity degrades
-- Historical tracking of network stability
-- Integration with external monitoring tools
-- Custom business logic based on cut values
-
-## Code Structure
+### Basic Code Example
 
 ```rust
-// Basic usage
-let mincut = MinCutBuilder::new()
+use ruvector_mincut::prelude::*;
+
+// Create a simple network
+let mut network = MinCutBuilder::new()
     .exact()
-    .with_edges(vec![(1, 2, 1.0), (2, 3, 1.0)])
+    .with_edges(vec![
+        (1, 2, 1.0),  // Connection from node 1 to 2
+        (2, 3, 1.0),  // Connection from node 2 to 3
+        (3, 1, 1.0),  // Connection from node 3 to 1
+    ])
     .build()?;
 
-println!("Min cut: {}", mincut.min_cut_value());
+// How vulnerable is this network?
+println!("Minimum cut: {}", network.min_cut_value());
+// Output: 2 (need to remove 2 connections to split)
 
-// Dynamic updates
-mincut.insert_edge(3, 1, 1.0)?;  // Now a triangle
-mincut.delete_edge(1, 2)?;       // Break one edge
+// Add a new connection
+network.insert_edge(3, 4, 1.0)?;
 
-// Monitoring
-let monitor = MonitorBuilder::new()
-    .threshold_below(2.0, "critical")
-    .on_event_type(EventType::CutDecreased, "alert", |event| {
-        println!("Cut decreased to {}", event.new_value);
-    })
-    .build();
+// Remove a connection
+network.delete_edge(1, 2)?;
 
-monitor.notify(old_cut, new_cut, None);
+// Get the cut instantly (no recomputation needed!)
+println!("New minimum cut: {}", network.min_cut_value());
 ```
 
-## Performance Characteristics
+## What the Demo Shows
 
-| Operation | Time Complexity | Description |
-|-----------|----------------|-------------|
-| Build | `O(m log n)` | Initial construction |
-| Insert Edge | `O(n^{o(1)})` amortized | Subpolynomial |
-| Delete Edge | `O(n^{o(1)})` amortized | Subpolynomial |
-| Query | `O(1)` | Constant time |
-| Get Partition | `O(n)` | Linear in vertices |
+### Demo 1: Basic Usage
+Create a simple graph and query its minimum cut.
 
-where `n` = number of vertices, `m` = number of edges
+### Demo 2: Dynamic Updates
+Add and remove edges while tracking how connectivity changes.
 
-## Use Cases
+### Demo 3: Exact vs Approximate
+Compare perfect accuracy with faster approximate mode.
 
-### 1. Network Infrastructure
-Monitor critical infrastructure (power grids, communication networks) for vulnerability to failures.
+### Demo 4: Real-time Monitoring
+Set up alerts when network strength drops below thresholds.
 
-### 2. Social Networks
-Identify communities and measure social cohesion.
+### Demo 5: Network Resilience
+Analyze which connections are critical and what happens if they fail.
 
-### 3. Distributed Systems
-Analyze partition tolerance in distributed databases and services.
+### Demo 6: Performance Scaling
+See how the algorithm performs on different network sizes.
 
-### 4. Transportation Networks
-Find critical routes and evaluate redundancy in road/rail networks.
+## Integration with RuVector Ecosystem
 
-### 5. Circuit Design
-Optimize chip layouts by minimizing cross-partition connections.
+### With ruvector-graph (Graph Database)
 
-## Advanced Features
+```rust
+use ruvector_graph::GraphDB;
+use ruvector_mincut::integration::RuVectorGraphAnalyzer;
+
+// Analyze connectivity of vectors in a similarity graph
+let graph_db = GraphDB::open("my_vectors.db")?;
+let analyzer = RuVectorGraphAnalyzer::from_graph(&graph_db);
+
+let connectivity = analyzer.min_cut();
+let communities = analyzer.detect_communities();
+```
+
+### With ruvector-postgres (PostgreSQL Extension)
+
+```sql
+-- Install the extension
+CREATE EXTENSION ruvector_mincut;
+
+-- Create a graph from a table
+SELECT ruvector_mincut_build('my_edges_table', 'source', 'target', 'weight');
+
+-- Query minimum cut
+SELECT ruvector_mincut_value();
+
+-- Dynamic update
+SELECT ruvector_mincut_insert_edge(10, 20, 1.0);
+SELECT ruvector_mincut_delete_edge(5, 6);
+
+-- Get critical edges
+SELECT * FROM ruvector_mincut_cut_edges();
+```
+
+## Performance
+
+| Operation | Speed | Notes |
+|-----------|-------|-------|
+| Query minimum cut | **Instant** | O(1) - no matter how big the network |
+| Add connection | **Very fast** | O(n^{o(1)}) - subpolynomial time |
+| Remove connection | **Very fast** | O(n^{o(1)}) - includes finding replacement |
+| Build from scratch | Fast | O(m log n) - one-time setup |
+
+## Configuration Options
+
+### Exact Mode (Default)
+Perfect accuracy, suitable for most use cases:
+```rust
+let network = MinCutBuilder::new()
+    .exact()
+    .build()?;
+```
 
 ### Approximate Mode
-Trade accuracy for speed with the approximate algorithm:
-
+Trade small accuracy loss for speed on very large networks:
 ```rust
-let mincut = MinCutBuilder::new()
-    .approximate(0.1)  // 10% approximation
+let network = MinCutBuilder::new()
+    .approximate(0.1)  // 10% approximation (1.1x at most)
     .build()?;
 ```
 
-### Parallel Processing
-Enable parallel computation for large graphs:
-
-```rust
-let mincut = MinCutBuilder::new()
-    .parallel(true)
-    .build()?;
-```
-
-### Custom Thresholds
-Set multiple monitoring thresholds:
-
+### Real-time Monitoring
+Get alerts when connectivity changes:
 ```rust
 let monitor = MonitorBuilder::new()
-    .threshold_below(1.0, "critical")
-    .threshold_below(2.0, "warning")
-    .threshold_above(10.0, "good")
+    .threshold_below(2.0, "warning")   // Alert when min cut < 2
+    .threshold_below(1.0, "critical")  // Alert when min cut < 1
+    .on_event_type(EventType::Disconnected, "alert", |_| {
+        println!("Network is split!");
+    })
     .build();
 ```
 
-## Dependencies
+## Project Structure
 
-- **ruvector-mincut**: Core minimum cut algorithm
-- **rand**: Random graph generation for demos
+```
+examples/subpolynomial-time/
+├── Cargo.toml          # Dependencies
+├── README.md           # This file
+└── src/
+    └── main.rs         # Demo code (6 demonstrations)
+```
 
 ## Further Reading
 
-- [Dynamic Minimum Cut Algorithm Paper](https://arxiv.org/abs/2011.11264)
-- [Graph Connectivity Algorithms](https://en.wikipedia.org/wiki/Connectivity_(graph_theory))
-- [Network Reliability Theory](https://en.wikipedia.org/wiki/Network_reliability)
+- **Paper**: [Deterministic Exact Subpolynomial-Time Algorithms for Global Minimum Cut](https://arxiv.org/abs/2512.13105) (December 2025)
+- **Crate Docs**: [docs.rs/ruvector-mincut](https://docs.rs/ruvector-mincut)
+- **ruv.io**: [AI Infrastructure Platform](https://ruv.io)
 
 ## License
 
-This example is part of the ruvector project and follows the same license.
-
-## Contributing
-
-Suggestions for additional demos or use cases? Open an issue or PR at:
-https://github.com/ruvnet/ruvector
+Part of the [RuVector project](https://github.com/ruvnet/ruvector). See LICENSE for details.
