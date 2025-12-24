@@ -18,7 +18,12 @@
 //! - Homeostatic plasticity for stable firing rates
 
 use super::{SimTime, Spike};
+use rayon::prelude::*;
 use std::collections::VecDeque;
+
+/// Threshold for using parallel neuron updates (overhead not worth it for small populations)
+/// Set high because neuron.step() is very fast, parallel overhead dominates for smaller sizes.
+const PARALLEL_THRESHOLD: usize = 2000;
 
 /// Configuration for LIF neuron
 #[derive(Debug, Clone)]
@@ -341,10 +346,17 @@ impl SpikeTrain {
         pattern
     }
 
+    /// Check if spike times are sorted (for optimization)
+    #[inline]
+    fn is_sorted(times: &[f64]) -> bool {
+        times.windows(2).all(|w| w[0] <= w[1])
+    }
+
     /// Compute cross-correlation with another spike train
     ///
     /// Uses O(n log n) sliding window algorithm instead of O(n²) pairwise comparison.
-    /// Safely handles potential overflow in bin calculation.
+    /// Optimized to skip sorting when spike trains are already sorted (typical case).
+    /// Uses binary search for initial window position.
     pub fn cross_correlation(&self, other: &SpikeTrain, max_lag: f64, bin_size: f64) -> Vec<f64> {
         // Guard against invalid parameters
         if bin_size <= 0.0 || max_lag <= 0.0 {
@@ -366,38 +378,54 @@ impl SpikeTrain {
             return correlation;
         }
 
-        // Sort both spike trains (usually already sorted, but ensure)
-        let mut t1_sorted: Vec<f64> = self.spike_times.clone();
-        let mut t2_sorted: Vec<f64> = other.spike_times.clone();
-        t1_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        t2_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        // Avoid cloning and sorting if already sorted (typical case for spike trains)
+        let t1_owned: Vec<f64>;
+        let t2_owned: Vec<f64>;
 
-        // Use sliding window: for each spike in t1, find valid range in t2
-        // A spike t2 is valid if: t1 - max_lag <= t2 <= t1 + max_lag
-        let mut window_start = 0usize;
+        let t1: &[f64] = if Self::is_sorted(&self.spike_times) {
+            &self.spike_times
+        } else {
+            t1_owned = {
+                let mut v = self.spike_times.clone();
+                v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                v
+            };
+            &t1_owned
+        };
 
-        for &t1 in &t1_sorted {
-            let lower_bound = t1 - max_lag;
-            let upper_bound = t1 + max_lag;
+        let t2: &[f64] = if Self::is_sorted(&other.spike_times) {
+            &other.spike_times
+        } else {
+            t2_owned = {
+                let mut v = other.spike_times.clone();
+                v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                v
+            };
+            &t2_owned
+        };
+
+        // Use binary search for first spike's window start
+        let first_lower = t1[0] - max_lag;
+        let mut window_start = t2.partition_point(|&x| x < first_lower);
+
+        for &t1_spike in t1 {
+            let lower_bound = t1_spike - max_lag;
+            let upper_bound = t1_spike + max_lag;
 
             // Advance window_start past spikes too early
-            while window_start < t2_sorted.len() && t2_sorted[window_start] < lower_bound {
+            while window_start < t2.len() && t2[window_start] < lower_bound {
                 window_start += 1;
             }
 
             // Count spikes within window
             let mut j = window_start;
-            while j < t2_sorted.len() && t2_sorted[j] <= upper_bound {
-                let t2 = t2_sorted[j];
-                let lag = t1 - t2;
+            while j < t2.len() && t2[j] <= upper_bound {
+                let lag = t1_spike - t2[j];
 
-                // Safe bin calculation
-                let bin_f64 = (lag + max_lag) / bin_size;
-                if bin_f64 >= 0.0 && bin_f64 < num_bins as f64 {
-                    let bin = bin_f64 as usize;
-                    if bin < num_bins {
-                        correlation[bin] += 1.0;
-                    }
+                // Safe bin calculation (inlined for performance)
+                let bin = ((lag + max_lag) / bin_size) as usize;
+                if bin < num_bins {
+                    correlation[bin] += 1.0;
                 }
                 j += 1;
             }
@@ -406,8 +434,9 @@ impl SpikeTrain {
         // Normalize by geometric mean of spike counts
         let norm = ((self.count() * other.count()) as f64).sqrt();
         if norm > 0.0 {
+            let inv_norm = 1.0 / norm;
             for c in &mut correlation {
-                *c /= norm;
+                *c *= inv_norm;
             }
         }
 
@@ -459,20 +488,44 @@ impl NeuronPopulation {
     }
 
     /// Step all neurons with given currents
+    ///
+    /// Uses parallel processing for large populations (>200 neurons).
     pub fn step(&mut self, currents: &[f64], dt: f64) -> Vec<Spike> {
         self.time += dt;
-        let mut spikes = Vec::new();
+        let time = self.time;
 
-        for (i, neuron) in self.neurons.iter_mut().enumerate() {
-            let current = currents.get(i).copied().unwrap_or(0.0);
-            if neuron.step(current, dt, self.time) {
-                let spike = Spike { neuron_id: i, time: self.time };
-                spikes.push(spike);
-                self.spike_trains[i].record_spike(self.time);
+        if self.neurons.len() >= PARALLEL_THRESHOLD {
+            // Parallel path: compute neuron updates in parallel
+            let spike_flags: Vec<bool> = self.neurons
+                .par_iter_mut()
+                .enumerate()
+                .map(|(i, neuron)| {
+                    let current = currents.get(i).copied().unwrap_or(0.0);
+                    neuron.step(current, dt, time)
+                })
+                .collect();
+
+            // Sequential: collect spikes and record to trains
+            let mut spikes = Vec::new();
+            for (i, &spiked) in spike_flags.iter().enumerate() {
+                if spiked {
+                    spikes.push(Spike { neuron_id: i, time });
+                    self.spike_trains[i].record_spike(time);
+                }
             }
+            spikes
+        } else {
+            // Sequential path for small populations (avoid parallel overhead)
+            let mut spikes = Vec::new();
+            for (i, neuron) in self.neurons.iter_mut().enumerate() {
+                let current = currents.get(i).copied().unwrap_or(0.0);
+                if neuron.step(current, dt, time) {
+                    spikes.push(Spike { neuron_id: i, time });
+                    self.spike_trains[i].record_spike(time);
+                }
+            }
+            spikes
         }
-
-        spikes
     }
 
     /// Reset all neurons

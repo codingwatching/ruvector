@@ -14,6 +14,7 @@ use super::{
     SimTime, Spike, Vector,
 };
 use crate::graph::DynamicGraph;
+use rayon::prelude::*;
 use std::collections::VecDeque;
 
 /// Configuration for a single network layer
