@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const SUPPORTED_TARGETS = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6'];
 
 // Colors for terminal output
