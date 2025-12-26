@@ -9,8 +9,6 @@
 use pgrx::prelude::*;
 
 use super::detector::ProblemType;
-use super::engine::HealingConfig;
-use super::learning::OutcomeTracker;
 use super::{get_healing_engine, Problem};
 
 // ============================================================================

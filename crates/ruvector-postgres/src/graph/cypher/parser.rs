@@ -103,19 +103,17 @@ fn parse_pattern(pattern_str: &str) -> Result<Pattern, String> {
 
         // Check for relationship
         let remaining = &pattern_str[end + 1..].trim();
-        if !remaining.is_empty() {
-            if remaining.starts_with('-') {
-                // Parse relationship
-                let (rel_pattern, rest) = parse_relationship_pattern(remaining)?;
-                pattern = pattern.with_element(PatternElement::Relationship(rel_pattern));
+        if !remaining.is_empty() && remaining.starts_with('-') {
+            // Parse relationship
+            let (rel_pattern, rest) = parse_relationship_pattern(remaining)?;
+            pattern = pattern.with_element(PatternElement::Relationship(rel_pattern));
 
-                // Parse target node
-                if rest.starts_with('(') {
-                    let end = rest.find(')').ok_or("Unclosed target node pattern")?;
-                    let node_content = &rest[1..end];
-                    let node_pattern = parse_node_pattern(node_content)?;
-                    pattern = pattern.with_element(PatternElement::Node(node_pattern));
-                }
+            // Parse target node
+            if rest.starts_with('(') {
+                let end = rest.find(')').ok_or("Unclosed target node pattern")?;
+                let node_content = &rest[1..end];
+                let node_pattern = parse_node_pattern(node_content)?;
+                pattern = pattern.with_element(PatternElement::Node(node_pattern));
             }
         }
     }

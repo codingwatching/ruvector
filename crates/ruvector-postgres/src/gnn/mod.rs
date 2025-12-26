@@ -14,7 +14,6 @@ pub use operators::*;
 
 use pgrx::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// GNN model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
