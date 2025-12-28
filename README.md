@@ -525,12 +525,23 @@ See [ruvector-postgres README](./crates/ruvector-postgres/README.md) for full SQ
 
 ### Self-Learning Intelligence Hooks
 
+**Make your AI assistant smarter over time.**
+
+When you use Claude Code (or any AI coding assistant), it starts fresh every session. It doesn't remember which approaches worked, which files you typically edit together, or what errors you've seen before.
+
+**RuVector Hooks fixes this.** It's a lightweight intelligence layer that:
+
+1. **Remembers what works** — Tracks which agent types succeed for different tasks
+2. **Learns from mistakes** — Records error patterns and suggests fixes you've used before
+3. **Predicts your workflow** — Knows that after editing `api.rs`, you usually edit `api_test.rs`
+4. **Coordinates teams** — Manages multi-agent swarms for complex tasks
+
+Think of it as giving your AI assistant a memory and intuition about your codebase.
+
 | Crate/Package | Description | Status |
 |---------------|-------------|--------|
 | [ruvector-cli hooks](./crates/ruvector-cli) | Rust CLI with 29 hooks commands | [![crates.io](https://img.shields.io/crates/v/ruvector-cli.svg)](https://crates.io/crates/ruvector-cli) |
 | [@ruvector/cli hooks](./npm/packages/cli) | npm CLI with 26 hooks commands | [![npm](https://img.shields.io/npm/v/@ruvector/cli.svg)](https://www.npmjs.com/package/@ruvector/cli) |
-
-**Self-learning intelligence layer** for Claude Code integration. Uses Q-learning to route tasks to optimal agents, learns from errors, predicts file sequences, and coordinates multi-agent swarms.
 
 #### Quick Start
 
