@@ -13,6 +13,121 @@ export enum DistanceMetric {
 }
 
 /**
+ * Intent definition for SemanticRouter
+ */
+export interface Intent {
+  /** Intent name */
+  name: string;
+  /** Example utterances for this intent */
+  utterances: string[];
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Route result from SemanticRouter
+ */
+export interface RouteResult {
+  /** Matched intent name */
+  intent: string;
+  /** Similarity score (0-1) */
+  score: number;
+  /** Intent metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Configuration for SemanticRouter
+ */
+export interface RouterConfig {
+  /** Vector dimension (required) */
+  dimension: number;
+  /** Distance metric (optional, default: Cosine) */
+  metric?: DistanceMetric;
+  /** HNSW M parameter (optional, default: 16) */
+  m?: number;
+  /** HNSW ef_construction (optional, default: 200) */
+  efConstruction?: number;
+  /** HNSW ef_search (optional, default: 100) */
+  efSearch?: number;
+}
+
+/**
+ * High-level semantic router for intent matching
+ *
+ * @example
+ * ```typescript
+ * import { SemanticRouter } from '@ruvector/router';
+ *
+ * const router = new SemanticRouter({ dimension: 384 });
+ *
+ * // Add intent with pre-computed embeddings
+ * router.addIntentWithEmbeddings('weather', [embedding1, embedding2], { handler: 'weather_agent' });
+ *
+ * // Route query
+ * const results = router.routeWithEmbedding(queryEmbedding, 5);
+ * console.log(results[0].intent); // 'weather'
+ * ```
+ */
+export class SemanticRouter {
+  /**
+   * Create a new SemanticRouter
+   * @param config Router configuration
+   */
+  constructor(config: RouterConfig);
+
+  /**
+   * Add an intent with utterances (for later embedding)
+   * @param intent Intent definition
+   */
+  addIntent(intent: Intent): void;
+
+  /**
+   * Add an intent with pre-computed embeddings
+   * @param name Intent name
+   * @param embeddings Embeddings for each utterance
+   * @param metadata Optional metadata
+   */
+  addIntentWithEmbeddings(name: string, embeddings: Float32Array[], metadata?: Record<string, unknown>): void;
+
+  /**
+   * Route a query using a pre-computed embedding
+   * @param embedding Query embedding
+   * @param k Number of results (default: 5)
+   * @returns Matched intents with scores
+   */
+  routeWithEmbedding(embedding: Float32Array, k?: number): RouteResult[];
+
+  /**
+   * Remove an intent
+   * @param name Intent name
+   * @returns true if removed
+   */
+  removeIntent(name: string): boolean;
+
+  /**
+   * Get all intent names
+   */
+  getIntents(): string[];
+
+  /**
+   * Get intent details
+   * @param name Intent name
+   */
+  getIntent(name: string): Intent | null;
+
+  /**
+   * Clear all intents
+   */
+  clear(): void;
+
+  /**
+   * Get total vector count
+   */
+  count(): number;
+}
+
+/**
  * Options for creating a VectorDb instance
  */
 export interface DbOptions {

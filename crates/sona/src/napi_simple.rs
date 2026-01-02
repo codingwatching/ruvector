@@ -198,7 +198,8 @@ impl SonaEngine {
     /// @returns Statistics object as JSON string
     #[napi]
     pub fn get_stats(&self) -> String {
-        format!("{:?}", self.inner.stats())
+        serde_json::to_string(&self.inner.stats())
+            .unwrap_or_else(|_| "{}".to_string())
     }
 
     /// Enable or disable the engine

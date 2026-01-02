@@ -53,12 +53,11 @@ function getStunServers() {
     }
     // Default STUN servers (free, reliable)
     return [
+        { urls: 'stun:34.72.154.225:3478' },       // Edge-Net self-hosted (primary)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478' },
         { urls: 'stun:stun.services.mozilla.com:3478' },
-        { urls: 'stun:stun.stunprotocol.org:3478' },
     ];
 }
 
@@ -91,17 +90,23 @@ function getTurnServers() {
         }
     }
 
-    // Add default free TURN servers if no custom ones
+    // Add default TURN servers if no custom ones
     if (servers.length === 0) {
         servers.push(
-            // Metered.ca free tier (limited bandwidth, good for testing)
+            // Edge-Net self-hosted TURN (primary, unlimited bandwidth)
             {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject',
+                urls: 'turn:34.72.154.225:3478',
+                username: 'edgenet',
+                credential: 'ruvector2024turn',
             },
             {
-                urls: 'turn:openrelay.metered.ca:443',
+                urls: 'turn:34.72.154.225:3478?transport=tcp',
+                username: 'edgenet',
+                credential: 'ruvector2024turn',
+            },
+            // Fallback: Metered.ca free tier (limited bandwidth)
+            {
+                urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
                 credential: 'openrelayproject',
             },
@@ -109,12 +114,6 @@ function getTurnServers() {
                 urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject',
-            },
-            // Alternative relay
-            {
-                urls: 'turn:relay.metered.ca:80',
-                username: 'e8a437a4c4d4e5f6a7b8c9d0',
-                credential: 'freePublicTurnServer',
             }
         );
     }
@@ -131,9 +130,9 @@ function getSignalingServers() {
         return envSignaling.split(',').map(url => url.trim());
     }
     return [
-        'ws://localhost:8787',                    // Local signaling server first
+        'wss://edge-net-genesis-875130704813.us-central1.run.app',  // Cloud Run Genesis (production)
+        'ws://localhost:8787',                    // Local signaling server
         'ws://127.0.0.1:8787',                    // Local alternative
-        'wss://edge-net-signal.ruvector.dev',    // Production (when deployed)
     ];
 }
 

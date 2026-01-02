@@ -26,6 +26,7 @@ export * from './learning-engine';
 export * from './adaptive-embedder';
 export * from './neural-embeddings';
 export * from './neural-perf';
+export * from './onnx-llm';
 
 // Analysis module (consolidated security, complexity, patterns)
 export * from '../analysis';
@@ -53,3 +54,4 @@ export { default as TensorCompress } from './tensor-compress';
 export { default as LearningEngine } from './learning-engine';
 export { default as AdaptiveEmbedder } from './adaptive-embedder';
 export { default as NeuralSubstrate } from './neural-embeddings';
+export { default as OnnxLLM } from './onnx-llm';

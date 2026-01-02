@@ -20,15 +20,8 @@ function loadNativeModule() {
   const platformInfo = platformMap[platform]?.[arch];
 
   if (!platformInfo) {
-    throw new Error(
-      `Unsupported platform: ${platform}-${arch}\n` +
-      `@ruvector/router native module is available for:\n` +
-      `- Linux (x64, ARM64)\n` +
-      `- macOS (x64, ARM64)\n` +
-      `- Windows (x64)\n\n` +
-      `Install the package for your platform:\n` +
-      `  npm install @ruvector/router`
-    );
+    // Return null instead of throwing - allows SemanticRouter fallback
+    return null;
   }
 
   // Try local .node file first (for development and bundled packages)
@@ -40,16 +33,24 @@ function loadNativeModule() {
     try {
       return require(platformInfo.package);
     } catch (error) {
-      if (error.code === 'MODULE_NOT_FOUND') {
-        throw new Error(
-          `Native module not found for ${platform}-${arch}\n` +
-          `Please install: npm install ${platformInfo.package}\n` +
-          `Or reinstall @ruvector/router to get optional dependencies`
-        );
-      }
-      throw error;
+      // Return null to allow fallback mode
+      return null;
     }
   }
 }
 
-module.exports = loadNativeModule();
+const SemanticRouter = require('./semantic-router');
+const nativeModule = loadNativeModule();
+
+module.exports = {
+  // Native exports (may be null if not available)
+  VectorDb: nativeModule?.VectorDb,
+  DistanceMetric: nativeModule?.DistanceMetric ?? {
+    Euclidean: 0,
+    Cosine: 1,
+    DotProduct: 2,
+    Manhattan: 3
+  },
+  // High-level SemanticRouter (always available)
+  SemanticRouter,
+};

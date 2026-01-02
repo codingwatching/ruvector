@@ -90,11 +90,15 @@ impl GraphDatabase {
 
         let metric = DistanceMetric::Cosine;
 
+        // Load GraphDB with persisted data using with_storage
+        let graph_db = GraphDB::with_storage(&path)
+            .map_err(|e| Error::from_reason(format!("Failed to load graph from storage: {}", e)))?;
+
         Ok(Self {
             hypergraph: Arc::new(RwLock::new(CoreHypergraphIndex::new(metric))),
             causal_memory: Arc::new(RwLock::new(CoreCausalMemory::new(metric))),
             transaction_manager: Arc::new(RwLock::new(transactions::TransactionManager::new())),
-            graph_db: Arc::new(RwLock::new(GraphDB::new())),
+            graph_db: Arc::new(RwLock::new(graph_db)),
             storage: Some(Arc::new(RwLock::new(storage))),
             storage_path: Some(path),
         })
@@ -273,31 +277,86 @@ impl GraphDatabase {
                     Statement::Match(match_clause) => {
                         // Extract label from match patterns for query
                         for pattern in &match_clause.patterns {
-                            if let ruvector_graph::cypher::ast::Pattern::Node(node_pattern) =
-                                pattern
-                            {
-                                for label in &node_pattern.labels {
-                                    let nodes = gdb.get_nodes_by_label(label);
-                                    for node in nodes {
-                                        result_nodes.push(JsNodeResult {
-                                            id: node.id.clone(),
-                                            labels: node
-                                                .labels
-                                                .iter()
-                                                .map(|l| l.name.clone())
-                                                .collect(),
-                                            properties: node
-                                                .properties
-                                                .iter()
-                                                .map(|(k, v)| (k.clone(), format!("{:?}", v)))
-                                                .collect(),
-                                        });
+                            match pattern {
+                                ruvector_graph::cypher::ast::Pattern::Node(node_pattern) => {
+                                    for label in &node_pattern.labels {
+                                        let nodes = gdb.get_nodes_by_label(label);
+                                        for node in nodes {
+                                            result_nodes.push(JsNodeResult {
+                                                id: node.id.clone(),
+                                                labels: node
+                                                    .labels
+                                                    .iter()
+                                                    .map(|l| l.name.clone())
+                                                    .collect(),
+                                                properties: node
+                                                    .properties
+                                                    .iter()
+                                                    .map(|(k, v)| (k.clone(), format!("{:?}", v)))
+                                                    .collect(),
+                                            });
+                                        }
+                                    }
+                                    // If no labels specified, return all nodes (simplified)
+                                    if node_pattern.labels.is_empty() && node_pattern.variable.is_some()
+                                    {
+                                        // This would need iteration over all nodes - for now just stats
                                     }
                                 }
-                                // If no labels specified, return all nodes (simplified)
-                                if node_pattern.labels.is_empty() && node_pattern.variable.is_some()
-                                {
-                                    // This would need iteration over all nodes - for now just stats
+                                ruvector_graph::cypher::ast::Pattern::Relationship(rel_pattern) => {
+                                    // Handle relationship patterns: (a)-[r:TYPE]->(b)
+                                    if let Some(rel_type) = &rel_pattern.rel_type {
+                                        // Get edges by type
+                                        let edges = gdb.get_edges_by_type(rel_type);
+                                        for edge in edges {
+                                            result_edges.push(JsEdgeResult {
+                                                id: edge.id.clone(),
+                                                from: edge.from.clone(),
+                                                to: edge.to.clone(),
+                                                edge_type: rel_type.clone(),
+                                                properties: edge
+                                                    .properties
+                                                    .iter()
+                                                    .map(|(k, v)| (k.clone(), format!("{:?}", v)))
+                                                    .collect(),
+                                            });
+                                            // Also include the nodes connected by this edge
+                                            if let Some(from_node) = gdb.get_node(&edge.from) {
+                                                result_nodes.push(JsNodeResult {
+                                                    id: from_node.id.clone(),
+                                                    labels: from_node.labels.iter().map(|l| l.name.clone()).collect(),
+                                                    properties: from_node.properties.iter().map(|(k, v)| (k.clone(), format!("{:?}", v))).collect(),
+                                                });
+                                            }
+                                            if let Some(to_node) = gdb.get_node(&edge.to) {
+                                                result_nodes.push(JsNodeResult {
+                                                    id: to_node.id.clone(),
+                                                    labels: to_node.labels.iter().map(|l| l.name.clone()).collect(),
+                                                    properties: to_node.properties.iter().map(|(k, v)| (k.clone(), format!("{:?}", v))).collect(),
+                                                });
+                                            }
+                                        }
+                                    } else {
+                                        // No type filter - get all edges from specified nodes
+                                        for label in &rel_pattern.from.labels {
+                                            let nodes = gdb.get_nodes_by_label(label);
+                                            for node in nodes {
+                                                let outgoing = gdb.get_outgoing_edges(&node.id);
+                                                for edge in outgoing {
+                                                    result_edges.push(JsEdgeResult {
+                                                        id: edge.id.clone(),
+                                                        from: edge.from.clone(),
+                                                        to: edge.to.clone(),
+                                                        edge_type: edge.edge_type.clone(),
+                                                        properties: edge.properties.iter().map(|(k, v)| (k.clone(), format!("{:?}", v))).collect(),
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    // Path and Hyperedge patterns - not yet implemented
                                 }
                             }
                         }
