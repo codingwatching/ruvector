@@ -2,6 +2,8 @@
 
 **The Decentralized AI Compute Network - Private, Modular, Unstoppable**
 
+> *Cogito, Creo, Codex* — I think, I create, I code.
+
 Transform idle browser compute into a globally distributed AI infrastructure. Edge-net combines WebRTC P2P networking, WASM-accelerated cryptography, and a modular plugin architecture to create a self-sustaining collective intelligence network.
 
 > **v0.5.1** - Now with hardened plugin system featuring Ed25519 verification, rate limiting, and HKDF key derivation.
@@ -383,6 +385,8 @@ Plugins operate under explicit failure constraints to prevent ecosystem fragilit
 ---
 
 ## Core Invariants
+
+> *Cogito, Creo, Codex* — The system thinks collectively, creates through contribution, and codifies trust in cryptographic proof.
 
 These rules are not configurable. They define what Edge-net *is*.
 
