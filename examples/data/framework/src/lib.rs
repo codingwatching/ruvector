@@ -44,6 +44,7 @@ pub mod export;
 pub mod forecasting;
 pub mod hnsw;
 pub mod ingester;
+pub mod mcp_server;
 pub mod medical_clients;
 pub mod optimized;
 pub mod patent_clients;
@@ -87,7 +88,8 @@ pub use forecasting::{CoherenceForecaster, CrossDomainForecaster, Forecast, Tren
 pub use ingester::{DataIngester, IngestionConfig, IngestionStats, SourceConfig};
 pub use realtime::{FeedItem, FeedSource, NewsAggregator, NewsSource, RealTimeEngine};
 pub use ruvector_native::{
-    Domain, NativeDiscoveryEngine, NativeEngineConfig, SemanticVector,
+    CoherenceHistoryEntry, CoherenceSnapshot, Domain, DiscoveredPattern,
+    GraphExport, NativeDiscoveryEngine, NativeEngineConfig, SemanticVector,
 };
 pub use streaming::{StreamingConfig, StreamingEngine, StreamingEngineBuilder, StreamingMetrics};
 

@@ -99,6 +99,15 @@ pub struct NativeEngineConfig {
     /// HNSW parameters
     pub hnsw_m: usize,
     pub hnsw_ef_construction: usize,
+    pub hnsw_ef_search: usize,
+    /// Vector dimension
+    pub dimension: usize,
+    /// Batch size for processing
+    pub batch_size: usize,
+    /// Checkpoint interval (records)
+    pub checkpoint_interval: u64,
+    /// Number of parallel workers
+    pub parallel_workers: usize,
 }
 
 impl Default for NativeEngineConfig {
@@ -111,6 +120,11 @@ impl Default for NativeEngineConfig {
             window_seconds: 86400 * 30, // 30 days
             hnsw_m: 16,
             hnsw_ef_construction: 200,
+            hnsw_ef_search: 50,
+            dimension: 384,
+            batch_size: 1000,
+            checkpoint_interval: 10_000,
+            parallel_workers: 4,
         }
     }
 }
@@ -711,6 +725,35 @@ impl NativeDiscoveryEngine {
             history_length: self.coherence_history.len(),
         }
     }
+
+    /// Get all detected patterns from the latest detection run
+    pub fn get_patterns(&self) -> Vec<DiscoveredPattern> {
+        // For now, return an empty vec. In production, this would store
+        // patterns from the last detect_patterns() call
+        vec![]
+    }
+
+    /// Export the current graph structure
+    pub fn export_graph(&self) -> GraphExport {
+        GraphExport {
+            nodes: self.nodes.values().cloned().collect(),
+            edges: self.edges.clone(),
+            domains: self.domain_nodes.clone(),
+        }
+    }
+
+    /// Get the coherence history
+    pub fn get_coherence_history(&self) -> Vec<CoherenceHistoryEntry> {
+        self.coherence_history.iter()
+            .map(|(timestamp, mincut, snapshot)| {
+                CoherenceHistoryEntry {
+                    timestamp: *timestamp,
+                    mincut_value: *mincut,
+                    snapshot: snapshot.clone(),
+                }
+            })
+            .collect()
+    }
 }
 
 /// Engine statistics
@@ -722,6 +765,22 @@ pub struct EngineStats {
     pub domain_counts: HashMap<Domain, usize>,
     pub cross_domain_edges: usize,
     pub history_length: usize,
+}
+
+/// Exported graph structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphExport {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub domains: HashMap<Domain, Vec<u32>>,
+}
+
+/// Coherence history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoherenceHistoryEntry {
+    pub timestamp: DateTime<Utc>,
+    pub mincut_value: f64,
+    pub snapshot: CoherenceSnapshot,
 }
 
 /// Compute cosine similarity between two vectors

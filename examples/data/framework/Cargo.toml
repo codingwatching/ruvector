@@ -26,6 +26,7 @@ chrono.workspace = true
 
 # Logging and errors
 tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror.workspace = true
 
 # Data processing
@@ -41,6 +42,11 @@ quick-xml = { version = "0.36", features = ["serialize"] }
 
 # Compression
 flate2 = "1.1"
+
+# MCP Server dependencies
+clap = { version = "4.5", features = ["derive"] }
+num_cpus = "1.16"
+warp = { version = "0.3", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -88,11 +94,20 @@ path = "examples/wiki_discovery.rs"
 name = "arxiv_discovery"
 path = "examples/arxiv_discovery.rs"
 
+[[example]]
+name = "optimized_runner"
+path = "examples/optimized_runner.rs"
+
 [[bin]]
 name = "discover"
 path = "src/bin/discover.rs"
+
+[[bin]]
+name = "mcp_discovery"
+path = "src/bin/mcp_discovery.rs"
 
 [features]
 default = ["async", "parallel"]
 async = []
 parallel = ["rayon"]
+sse = ["warp"]
