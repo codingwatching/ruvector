@@ -73,7 +73,7 @@ use thiserror::Error;
 pub use network::{SensorNetwork, SensorNetworkBuilder, SensorNode, SensorEdge};
 pub use noaa::{NoaaClient, GhcnStation, GhcnObservation, WeatherVariable};
 pub use nasa::{NasaClient, ModisProduct, SatelliteObservation};
-pub use regime::{RegimeShiftDetector, RegimeShift, ShiftType, ShiftSeverity};
+pub use regime::{RegimeShiftDetector, RegimeShift, ShiftType, ShiftSeverity, ShiftEvidence};
 pub use timeseries::{TimeSeriesVector, TimeSeriesProcessor, SeasonalDecomposition};
 
 use ruvector_data_framework::{DataRecord, DataSource, FrameworkError, Relationship, Result};

@@ -226,33 +226,40 @@ impl CoherenceWatch {
         // Compute coherence score
         let coherence = self.compute_coherence(&fundamental_embedding, &narrative_embedding);
 
-        // Get historical coherence
+        // Get historical coherence to check for significant change
         let cik = &company.cik;
-        let history = self.coherence_history.entry(cik.clone()).or_default();
-
-        // Check for significant change
-        let alert = if !history.is_empty() {
-            let prev_coherence = history.last()?.1;
-            let delta = (coherence - prev_coherence).abs();
-
-            if delta > self.config.divergence_threshold {
-                Some(self.create_alert(
-                    company,
-                    prev_coherence,
-                    coherence,
-                    &fundamental_embedding,
-                    &narrative_embedding,
-                    &analysis,
-                ))
+        let should_alert = {
+            let history = self.coherence_history.entry(cik.clone()).or_default();
+            if !history.is_empty() {
+                let prev_coherence = history.last()?.1;
+                let delta = (coherence - prev_coherence).abs();
+                if delta > self.config.divergence_threshold {
+                    Some(prev_coherence)
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
         };
 
+        // Create alert if needed (outside the mutable borrow scope)
+        let alert = should_alert.map(|prev_coherence| {
+            self.create_alert(
+                company,
+                prev_coherence,
+                coherence,
+                &fundamental_embedding,
+                &narrative_embedding,
+                &analysis,
+            )
+        });
+
         // Update history
-        history.push((Utc::now(), coherence));
+        self.coherence_history
+            .entry(cik.clone())
+            .or_default()
+            .push((Utc::now(), coherence));
 
         alert
     }

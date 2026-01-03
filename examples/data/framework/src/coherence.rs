@@ -410,23 +410,30 @@ impl StreamingCoherence {
             ));
         }
 
-        let window = self.current_window.as_ref().unwrap();
-
         // Check if record falls in current window
-        if window.contains(ts) {
-            self.window_records.push(record);
-            return None;
+        {
+            let window = self.current_window.as_ref().unwrap();
+            if window.contains(ts) {
+                self.window_records.push(record);
+                return None;
+            }
         }
+
+        // Extract values before mutable borrow
+        let (old_start, old_window_id) = {
+            let window = self.current_window.as_ref().unwrap();
+            (window.start, window.window_id)
+        };
 
         // Window complete, compute signal
         let signal = self.finalize_window();
 
         // Start new window
-        let new_start = window.start + chrono::Duration::seconds(self.window_step);
+        let new_start = old_start + chrono::Duration::seconds(self.window_step);
         self.current_window = Some(TemporalWindow::new(
             new_start,
             new_start + chrono::Duration::seconds(self.window_size),
-            window.window_id + 1,
+            old_window_id + 1,
         ));
 
         // Add record to new window
