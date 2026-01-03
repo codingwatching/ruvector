@@ -2,6 +2,33 @@
 
 Comprehensive examples demonstrating RuVector's capabilities for novel discovery across world-scale datasets.
 
+## What's New
+
+- **SIMD-Accelerated Vectors** - 2.9x faster cosine similarity
+- **Parallel Batch Processing** - 8.8x faster vector insertion
+- **Statistical Significance** - P-values, effect sizes, confidence intervals
+- **Temporal Causality** - Granger-style cross-domain prediction
+- **Cross-Domain Bridges** - Automatic detection of hidden connections
+
+## Quick Start
+
+```bash
+# Run the optimized benchmark
+cargo run --example optimized_benchmark -p ruvector-data-framework --features parallel --release
+
+# Run the discovery hunter
+cargo run --example discovery_hunter -p ruvector-data-framework --features parallel --release
+
+# Run cross-domain discovery
+cargo run --example cross_domain_discovery -p ruvector-data-framework --release
+
+# Run climate regime detector
+cargo run --example regime_detector -p ruvector-data-climate
+
+# Run financial coherence watch
+cargo run --example coherence_watch -p ruvector-data-edgar
+```
+
 ## The Discovery Thesis
 
 RuVector's unique combination of **vector memory**, **graph structures**, and **dynamic minimum cut algorithms** enables discoveries that most analysis tools miss:
@@ -11,65 +38,162 @@ RuVector's unique combination of **vector memory**, **graph structures**, and **
 - **Causal leverage maps**: Link funders, labs, venues, and downstream citations to spot high-impact intervention points
 - **Regime shifts in time series**: Use coherence breaks to flag fundamental changes in system behavior
 
-## Recommended Datasets
+## Tutorial
 
-### 1. OpenAlex (Research Intelligence)
-**Best for**: Emerging field detection, cross-discipline bridges, funding-to-output causality
-
-OpenAlex is the cleanest "already a graph" public dataset at world scale:
-- 250M+ works, 90M+ authors, 100K+ institutions
-- Native graph structure (works, authors, institutions, topics, funders)
-- Designed for bulk download + API access
+### 1. Creating the Engine
 
 ```rust
-use ruvector_data::openalex::{OpenAlexIngester, TopicBoundaryDetector};
+use ruvector_data_framework::optimized::{
+    OptimizedDiscoveryEngine, OptimizedConfig,
+};
+use ruvector_data_framework::ruvector_native::{
+    Domain, SemanticVector,
+};
 
-// Detect emerging research frontiers
-let detector = TopicBoundaryDetector::new(mincut_engine, vector_db);
-let frontiers = detector.find_emerging_fields(
-    start_year: 2020,
-    end_year: 2024,
-    min_coherence_shift: 0.3
-).await?;
+let config = OptimizedConfig {
+    similarity_threshold: 0.55,   // Minimum cosine similarity
+    mincut_sensitivity: 0.10,     // Coherence change threshold
+    cross_domain: true,           // Enable cross-domain discovery
+    use_simd: true,               // SIMD acceleration
+    significance_threshold: 0.05, // P-value threshold
+    causality_lookback: 12,       // Temporal lookback periods
+    ..Default::default()
+};
+
+let mut engine = OptimizedDiscoveryEngine::new(config);
 ```
 
-### 2. NOAA + NASA Earthdata (Climate Intelligence)
-**Best for**: Regime shift detection, anomaly prediction, economic risk modeling
-
-Best public source for time series with real economic pull:
-- NOAA: Weather observations, forecasts, historical climate data
-- NASA Earthdata: Satellite imagery, remote sensing, global datasets
+### 2. Adding Data
 
 ```rust
-use ruvector_data::climate::{ClimateIngester, RegimeShiftDetector};
+use std::collections::HashMap;
+use chrono::Utc;
 
-// Detect climate regime shifts
-let detector = RegimeShiftDetector::new(mincut_engine, vector_db);
-let shifts = detector.detect_regime_changes(
-    sensor_network: "noaa_ghcn",
-    window_days: 90,
-    coherence_threshold: 0.7
-).await?;
+// Single vector
+let vector = SemanticVector {
+    id: "climate_drought_2024".to_string(),
+    embedding: generate_embedding(), // 128-dim vector
+    domain: Domain::Climate,
+    timestamp: Utc::now(),
+    metadata: HashMap::from([
+        ("region".to_string(), "sahel".to_string()),
+        ("severity".to_string(), "extreme".to_string()),
+    ]),
+};
+let node_id = engine.add_vector(vector);
+
+// Batch insertion (8.8x faster)
+#[cfg(feature = "parallel")]
+{
+    let vectors: Vec<SemanticVector> = load_vectors();
+    let node_ids = engine.add_vectors_batch(vectors);
+}
+```
+
+### 3. Computing Coherence
+
+```rust
+let snapshot = engine.compute_coherence();
+
+println!("Min-cut value: {:.3}", snapshot.mincut_value);
+println!("Partition sizes: {:?}", snapshot.partition_sizes);
+println!("Boundary nodes: {:?}", snapshot.boundary_nodes);
+```
+
+**Interpretation:**
+| Min-cut Trend | Meaning |
+|---------------|---------|
+| Rising | Network consolidating, stronger connections |
+| Falling | Fragmentation, potential regime change |
+| Stable | Steady state, consistent structure |
+
+### 4. Pattern Detection
+
+```rust
+let patterns = engine.detect_patterns_with_significance();
+
+for pattern in patterns.iter().filter(|p| p.is_significant) {
+    println!("{}", pattern.pattern.description);
+    println!("  P-value: {:.4}", pattern.p_value);
+    println!("  Effect size: {:.3}", pattern.effect_size);
+}
+```
+
+**Pattern Types:**
+| Type | Description | Example |
+|------|-------------|---------|
+| `CoherenceBreak` | Min-cut dropped significantly | Network fragmentation crisis |
+| `Consolidation` | Min-cut increased | Market convergence |
+| `BridgeFormation` | Cross-domain connections | Climate-finance link |
+| `Cascade` | Temporal causality | Climate → Finance lag-3 |
+| `EmergingCluster` | New dense subgraph | Research topic emerging |
+
+### 5. Cross-Domain Analysis
+
+```rust
+// Check coupling strength
+let stats = engine.stats();
+let coupling = stats.cross_domain_edges as f64 / stats.total_edges as f64;
+println!("Cross-domain coupling: {:.1}%", coupling * 100.0);
+
+// Domain coherence scores
+for domain in [Domain::Climate, Domain::Finance, Domain::Research] {
+    if let Some(coh) = engine.domain_coherence(domain) {
+        println!("{:?}: {:.3}", domain, coh);
+    }
+}
+```
+
+## Performance Benchmarks
+
+| Operation | Baseline | Optimized | Speedup |
+|-----------|----------|-----------|---------|
+| Vector Insertion | 133ms | 15ms | **8.84x** |
+| SIMD Cosine | 432ms | 148ms | **2.91x** |
+| Pattern Detection | 524ms | 655ms | - |
+
+## Datasets
+
+### 1. OpenAlex (Research Intelligence)
+**Best for**: Emerging field detection, cross-discipline bridges
+
+- 250M+ works, 90M+ authors
+- Native graph structure
+- Bulk download + API access
+
+```rust
+use ruvector_data_openalex::{OpenAlexConfig, FrontierRadar};
+
+let radar = FrontierRadar::new(OpenAlexConfig::default());
+let frontiers = radar.detect_emerging_topics(papers);
+```
+
+### 2. NOAA + NASA (Climate Intelligence)
+**Best for**: Regime shift detection, anomaly prediction
+
+- Weather observations, satellite imagery
+- Time series → graph transformation
+- Economic risk modeling
+
+```rust
+use ruvector_data_climate::{ClimateConfig, RegimeDetector};
+
+let detector = RegimeDetector::new(config);
+let shifts = detector.detect_shifts();
 ```
 
 ### 3. SEC EDGAR (Financial Intelligence)
-**Best for**: Corporate risk signals, peer divergence detection, narrative drift analysis
+**Best for**: Corporate risk signals, peer divergence
 
-High-value structured financial data:
-- XBRL financial statements (standardized accounting data)
-- 10-K/10-Q filings (narrative + numbers)
-- Peer group relationships
+- XBRL financial statements
+- 10-K/10-Q filings
+- Narrative + fundamental analysis
 
 ```rust
-use ruvector_data::edgar::{EdgarIngester, CoherenceWatch};
+use ruvector_data_edgar::{EdgarConfig, CoherenceMonitor};
 
-// Detect peer group coherence breaks
-let watch = CoherenceWatch::new(mincut_engine, vector_db);
-let alerts = watch.detect_peer_divergence(
-    sector: "technology",
-    peer_group_size: 20,
-    narrative_weight: 0.4
-).await?;
+let monitor = CoherenceMonitor::new(config);
+let alerts = monitor.analyze_filing(filing);
 ```
 
 ## Directory Structure
@@ -77,86 +201,116 @@ let alerts = watch.detect_peer_divergence(
 ```
 examples/data/
 ├── README.md                 # This file
+├── Cargo.toml               # Workspace manifest
 ├── framework/               # Core discovery framework
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs           # Core traits and types
-│       ├── ingester.rs      # Data ingestion pipeline
-│       ├── coherence.rs     # Coherence signal computation
-│       └── discovery.rs     # Novel pattern detection
+│   ├── src/
+│   │   ├── lib.rs              # Framework exports
+│   │   ├── ruvector_native.rs  # Native engine with Stoer-Wagner
+│   │   ├── optimized.rs        # SIMD + parallel optimizations
+│   │   ├── coherence.rs        # Coherence signal computation
+│   │   ├── discovery.rs        # Pattern detection
+│   │   └── ingester.rs         # Data ingestion
+│   └── examples/
+│       ├── cross_domain_discovery.rs  # Cross-domain patterns
+│       ├── optimized_benchmark.rs     # Performance comparison
+│       └── discovery_hunter.rs        # Novel pattern search
 ├── openalex/               # OpenAlex integration
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs           # Main library
-│       ├── schema.rs        # OpenAlex entity schemas
-│       ├── ingester.rs      # Bulk download + streaming
-│       └── frontier.rs      # Research frontier detection
 ├── climate/                # NOAA/NASA integration
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs           # Main library
-│       ├── noaa.rs          # NOAA data ingestion
-│       ├── nasa.rs          # NASA Earthdata ingestion
-│       └── regime.rs        # Regime shift detection
 └── edgar/                  # SEC EDGAR integration
-    ├── Cargo.toml
-    └── src/
-        ├── lib.rs           # Main library
-        ├── xbrl.rs          # XBRL parsing
-        ├── filings.rs       # 10-K/10-Q ingestion
-        └── coherence.rs     # Financial coherence watch
 ```
 
-## Quick Start
+## Configuration Reference
 
-```bash
-# Build all data examples
-cd examples/data
-cargo build --workspace
+### OptimizedConfig
 
-# Run OpenAlex demo
-cargo run --package ruvector-data-openalex --example frontier_radar
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `similarity_threshold` | 0.65 | Minimum cosine similarity for edges |
+| `mincut_sensitivity` | 0.12 | Sensitivity to coherence changes |
+| `cross_domain` | true | Enable cross-domain discovery |
+| `batch_size` | 256 | Parallel batch size |
+| `use_simd` | true | Enable SIMD acceleration |
+| `significance_threshold` | 0.05 | P-value threshold |
+| `causality_lookback` | 10 | Temporal lookback periods |
+| `causality_min_correlation` | 0.6 | Minimum correlation for causality |
 
-# Run Climate demo
-cargo run --package ruvector-data-climate --example regime_detector
+## Discovery Examples
 
-# Run EDGAR demo
-cargo run --package ruvector-data-edgar --example coherence_watch
+### Climate-Finance Bridge
+
+```
+Detected: Climate ↔ Finance bridge
+  Strength: 0.73
+  Connections: 197
+
+Hypothesis: Drought indices may predict
+  utility sector performance with lag-2
 ```
 
-## Scoring Rule for Dataset Selection
+### Regime Shift Detection
 
-When choosing which dataset to prioritize:
+```
+Min-cut trajectory:
+  t=0: 72.5 (baseline)
+  t=1: 73.3 (+1.1%)
+  t=2: 74.5 (+1.6%) ← Consolidation
 
-**Score = Impact × Feasibility × Structural Fit**
+Effect size: 2.99 (large)
+P-value: 0.042 (significant)
+```
 
-| Dataset | Impact | Feasibility | Structural Fit | Total |
-|---------|--------|-------------|----------------|-------|
-| OpenAlex | High (research funding) | High (bulk API) | Very High (native graph) | ★★★★★ |
-| NOAA+NASA | High (insurance/energy) | Medium (format variety) | High (time series → graph) | ★★★★☆ |
-| SEC EDGAR | Very High (finance) | Medium (XBRL parsing) | High (peer networks) | ★★★★☆ |
+### Causality Pattern
 
-## Demo Ideas (Achievable in Weeks)
+```
+Climate → Finance causality detected
+  F-statistic: 4.23
+  Optimal lag: 3 periods
+  Correlation: 0.67
+  P-value: 0.031
+```
 
-1. **Research Frontier Radar** (OpenAlex)
-   - Live map of topics where boundary motion predicts breakout areas
-   - Metric: Min-cut value over topic citation graph
+## Algorithms
 
-2. **Climate Regime Shift Detector** (NOAA+NASA)
-   - Coherence breaks for weather extremes and grid stress
-   - Metric: Spectral gap changes in sensor correlation network
+### Stoer-Wagner Min-Cut
+Computes minimum cut of weighted undirected graph.
+- **Complexity**: O(VE + V² log V)
+- **Use**: Network coherence measurement
 
-3. **Financial Coherence Watch** (EDGAR)
-   - Peer group divergence alerts when fundamentals ≠ narrative
-   - Metric: Cross-embedding distance between XBRL features and filing text
+### SIMD Cosine Similarity
+Processes 8 floats per iteration using AVX2.
+- **Speedup**: 2.9x vs scalar
+- **Fallback**: Chunked scalar (4 floats)
+
+### Granger Causality
+Tests if past values of X predict Y.
+1. Compute cross-correlation at lags 1..k
+2. Find optimal lag with max |correlation|
+3. Calculate F-statistic
+4. Convert to p-value
+
+## Best Practices
+
+1. **Start with low thresholds** - Use `similarity_threshold: 0.45` for exploration
+2. **Use batch insertion** - `add_vectors_batch()` is 8x faster
+3. **Monitor coherence trends** - Min-cut trajectory predicts regime changes
+4. **Filter by significance** - Focus on `p_value < 0.05`
+5. **Validate causality** - Temporal patterns need domain expertise
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| No patterns detected | Lower `mincut_sensitivity` to 0.05 |
+| Too many edges | Raise `similarity_threshold` to 0.70 |
+| Slow performance | Use `--features parallel --release` |
+| Memory issues | Reduce `batch_size` |
 
 ## References
 
 - [OpenAlex Documentation](https://docs.openalex.org/)
-- [NOAA Open Data Dissemination](https://www.noaa.gov/information-technology/open-data-dissemination)
+- [NOAA Open Data](https://www.noaa.gov/information-technology/open-data-dissemination)
 - [NASA Earthdata](https://earthdata.nasa.gov/)
 - [SEC EDGAR](https://www.sec.gov/edgar)
-- [XBRL Financial Datasets](https://www.sec.gov/dera/data/financial-statement-data-sets)
 
 ## License
 

@@ -44,6 +44,10 @@ path = "examples/cross_domain_discovery.rs"
 name = "optimized_benchmark"
 path = "examples/optimized_benchmark.rs"
 
+[[example]]
+name = "discovery_hunter"
+path = "examples/discovery_hunter.rs"
+
 [features]
 default = ["async", "parallel"]
 async = []
