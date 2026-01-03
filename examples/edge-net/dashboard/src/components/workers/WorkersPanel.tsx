@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardBody, Progress, Button, Chip } from '@heroui/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -15,94 +15,16 @@ import {
   Layers,
   Timer,
   TrendingUp,
+  Globe,
 } from 'lucide-react';
-
-interface Worker {
-  id: string;
-  name: string;
-  type: 'cpu' | 'gpu' | 'hybrid';
-  status: 'active' | 'idle' | 'offline' | 'error';
-  cpuUsage: number;
-  gpuUsage: number;
-  memoryUsage: number;
-  tasksCompleted: number;
-  tasksQueued: number;
-  uptime: string;
-  lastHeartbeat: string;
-}
-
-const mockWorkers: Worker[] = [
-  {
-    id: 'w1',
-    name: 'edge-node-alpha',
-    type: 'hybrid',
-    status: 'active',
-    cpuUsage: 78,
-    gpuUsage: 92,
-    memoryUsage: 64,
-    tasksCompleted: 1247,
-    tasksQueued: 12,
-    uptime: '7d 14h 32m',
-    lastHeartbeat: '2s ago',
-  },
-  {
-    id: 'w2',
-    name: 'compute-beta-01',
-    type: 'gpu',
-    status: 'active',
-    cpuUsage: 45,
-    gpuUsage: 98,
-    memoryUsage: 82,
-    tasksCompleted: 3892,
-    tasksQueued: 8,
-    uptime: '12d 3h 15m',
-    lastHeartbeat: '1s ago',
-  },
-  {
-    id: 'w3',
-    name: 'vector-gamma',
-    type: 'cpu',
-    status: 'idle',
-    cpuUsage: 12,
-    gpuUsage: 0,
-    memoryUsage: 28,
-    tasksCompleted: 892,
-    tasksQueued: 0,
-    uptime: '3d 8h 45m',
-    lastHeartbeat: '5s ago',
-  },
-  {
-    id: 'w4',
-    name: 'neural-delta',
-    type: 'hybrid',
-    status: 'error',
-    cpuUsage: 0,
-    gpuUsage: 0,
-    memoryUsage: 0,
-    tasksCompleted: 456,
-    tasksQueued: 23,
-    uptime: '0d 0h 0m',
-    lastHeartbeat: '5m ago',
-  },
-  {
-    id: 'w5',
-    name: 'inference-epsilon',
-    type: 'gpu',
-    status: 'active',
-    cpuUsage: 32,
-    gpuUsage: 87,
-    memoryUsage: 71,
-    tasksCompleted: 2134,
-    tasksQueued: 5,
-    uptime: '9d 21h 8m',
-    lastHeartbeat: '1s ago',
-  },
-];
+import { useWorkers } from '../../hooks/useWorkers';
+import type { RealWorker } from '../../services/panel-services/workersService';
 
 const statusConfig = {
   active: { color: 'bg-emerald-500', text: 'text-emerald-400', icon: CheckCircle2 },
   idle: { color: 'bg-amber-500', text: 'text-amber-400', icon: Pause },
   offline: { color: 'bg-zinc-500', text: 'text-zinc-400', icon: Clock },
+  syncing: { color: 'bg-sky-500', text: 'text-sky-400', icon: RefreshCw },
   error: { color: 'bg-red-500', text: 'text-red-400', icon: AlertCircle },
 };
 
@@ -110,9 +32,16 @@ const typeConfig = {
   cpu: { color: 'bg-sky-500/20 text-sky-400 border-sky-500/30', label: 'CPU' },
   gpu: { color: 'bg-violet-500/20 text-violet-400 border-violet-500/30', label: 'GPU' },
   hybrid: { color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', label: 'Hybrid' },
+  wasm: { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', label: 'WASM' },
 };
 
-function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
+function WorkerCard({ worker, index, onStart, onPause, formatUptime }: {
+  worker: RealWorker;
+  index: number;
+  onStart: (id: string) => void;
+  onPause: (id: string) => void;
+  formatUptime: (seconds: number) => string;
+}) {
   const status = statusConfig[worker.status];
   const type = typeConfig[worker.type];
   const StatusIcon = status.icon;
@@ -146,10 +75,21 @@ function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
               </div>
               <div>
                 <h4 className="font-medium text-white">{worker.name}</h4>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <Chip size="sm" className={`${type.color} border text-xs`}>
                     {type.label}
                   </Chip>
+                  {worker.isLocal && (
+                    <Chip size="sm" className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs">
+                      Local
+                    </Chip>
+                  )}
+                  {worker.region && !worker.isLocal && (
+                    <span className="text-xs text-zinc-500 flex items-center gap-1">
+                      <Globe size={10} />
+                      {worker.region}
+                    </span>
+                  )}
                   <span className={`text-xs ${status.text} flex items-center gap-1`}>
                     <StatusIcon size={12} />
                     {worker.status}
@@ -160,11 +100,25 @@ function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
 
             <div className="flex gap-1">
               {worker.status === 'active' ? (
-                <Button isIconOnly size="sm" variant="flat" className="bg-amber-500/20 text-amber-400">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="flat"
+                  className="bg-amber-500/20 text-amber-400"
+                  onPress={() => onPause(worker.id)}
+                  isDisabled={!worker.isLocal}
+                >
                   <Pause size={14} />
                 </Button>
               ) : worker.status !== 'error' ? (
-                <Button isIconOnly size="sm" variant="flat" className="bg-emerald-500/20 text-emerald-400">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="flat"
+                  className="bg-emerald-500/20 text-emerald-400"
+                  onPress={() => onStart(worker.id)}
+                  isDisabled={!worker.isLocal}
+                >
                   <Play size={14} />
                 </Button>
               ) : null}
@@ -193,16 +147,16 @@ function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
               />
             </div>
 
-            {worker.type !== 'cpu' && (
+            {(worker.type === 'gpu' || worker.type === 'hybrid') && (
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-zinc-400 flex items-center gap-1">
                     <Zap size={12} /> GPU
                   </span>
-                  <span className="text-violet-400">{worker.gpuUsage}%</span>
+                  <span className="text-violet-400">N/A</span>
                 </div>
                 <Progress
-                  value={worker.gpuUsage}
+                  value={0}
                   classNames={{
                     indicator: 'bg-gradient-to-r from-violet-500 to-purple-500',
                     track: 'bg-zinc-800',
@@ -241,7 +195,7 @@ function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
               <p className="text-xs text-zinc-500">Queued</p>
             </div>
             <div className="text-center">
-              <p className="text-xs font-medium text-zinc-400">{worker.uptime}</p>
+              <p className="text-xs font-medium text-zinc-400">{formatUptime(worker.uptime)}</p>
               <p className="text-xs text-zinc-500">Uptime</p>
             </div>
           </div>
@@ -252,29 +206,25 @@ function WorkerCard({ worker, index }: { worker: Worker; index: number }) {
 }
 
 export function WorkersPanel() {
-  const [workers, setWorkers] = useState<Worker[]>(mockWorkers);
+  const { workers, stats, isLoading, startWorker, pauseWorker, formatUptime } = useWorkers();
   const [filter, setFilter] = useState<'all' | 'active' | 'idle' | 'error'>('all');
 
-  // Simulate real-time updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWorkers((prev) =>
-        prev.map((w) => ({
-          ...w,
-          cpuUsage: w.status === 'active' ? Math.min(100, Math.max(10, w.cpuUsage + (Math.random() - 0.5) * 10)) : w.cpuUsage,
-          gpuUsage: w.status === 'active' && w.type !== 'cpu' ? Math.min(100, Math.max(10, w.gpuUsage + (Math.random() - 0.5) * 8)) : w.gpuUsage,
-          memoryUsage: w.status === 'active' ? Math.min(100, Math.max(10, w.memoryUsage + (Math.random() - 0.5) * 5)) : w.memoryUsage,
-        }))
-      );
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
   const filteredWorkers = workers.filter((w) => filter === 'all' || w.status === filter);
-  const activeCount = workers.filter((w) => w.status === 'active').length;
-  const totalTasks = workers.reduce((sum, w) => sum + w.tasksCompleted, 0);
+  const activeCount = stats.activeWorkers;
+  const totalTasks = stats.totalTasksCompleted;
   const queuedTasks = workers.reduce((sum, w) => sum + w.tasksQueued, 0);
-  const avgCpu = workers.filter((w) => w.status === 'active').reduce((sum, w) => sum + w.cpuUsage, 0) / activeCount || 0;
+  const avgCpu = stats.averageCpuUsage;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 text-sky-400 animate-spin mx-auto mb-2" />
+          <p className="text-zinc-400">Loading workers...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -383,7 +333,14 @@ export function WorkersPanel() {
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         <AnimatePresence>
           {filteredWorkers.map((worker, index) => (
-            <WorkerCard key={worker.id} worker={worker} index={index} />
+            <WorkerCard
+              key={worker.id}
+              worker={worker}
+              index={index}
+              onStart={startWorker}
+              onPause={pauseWorker}
+              formatUptime={formatUptime}
+            />
           ))}
         </AnimatePresence>
       </div>

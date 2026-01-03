@@ -21,22 +21,12 @@ import {
   Filter,
   Store,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react';
+import { usePlugins } from '../../hooks/usePlugins';
+import type { RealPlugin } from '../../services/panel-services/pluginsService';
 
-interface Plugin {
-  id: string;
-  name: string;
-  description: string;
-  author: string;
-  version: string;
-  category: 'ai' | 'network' | 'security' | 'utility' | 'compute';
-  status: 'installed' | 'available' | 'update-available';
-  securityStatus: 'verified' | 'quarantine' | 'pending' | 'unverified';
-  enabled: boolean;
-  downloads: number;
-  rating: number;
-  size: string;
-}
+type Plugin = RealPlugin;
 
 const categoryConfig = {
   ai: { icon: Brain, color: 'bg-violet-500/20 text-violet-400 border-violet-500/30' },
@@ -53,106 +43,7 @@ const securityConfig = {
   unverified: { icon: Shield, color: 'text-zinc-400', bgColor: 'bg-zinc-500/20', label: 'Unverified' },
 };
 
-const mockPlugins: Plugin[] = [
-  {
-    id: 'p1',
-    name: 'Neural Swarm Optimizer',
-    description: 'Advanced neural network optimization using swarm intelligence algorithms',
-    author: 'RuVector Labs',
-    version: '2.1.0',
-    category: 'ai',
-    status: 'installed',
-    securityStatus: 'verified',
-    enabled: true,
-    downloads: 12450,
-    rating: 4.8,
-    size: '2.4 MB',
-  },
-  {
-    id: 'p2',
-    name: 'WebRTC Mesh',
-    description: 'Peer-to-peer mesh networking for distributed compute',
-    author: 'Edge Collective',
-    version: '1.5.2',
-    category: 'network',
-    status: 'installed',
-    securityStatus: 'verified',
-    enabled: true,
-    downloads: 8920,
-    rating: 4.6,
-    size: '1.8 MB',
-  },
-  {
-    id: 'p3',
-    name: 'Zero-Knowledge Proofs',
-    description: 'Cryptographic verification without revealing underlying data',
-    author: 'CryptoCore',
-    version: '3.0.1',
-    category: 'security',
-    status: 'installed',
-    securityStatus: 'verified',
-    enabled: false,
-    downloads: 5670,
-    rating: 4.9,
-    size: '3.2 MB',
-  },
-  {
-    id: 'p4',
-    name: 'WASM Compiler',
-    description: 'On-the-fly WebAssembly compilation and optimization',
-    author: 'ByteForge',
-    version: '1.2.0',
-    category: 'compute',
-    status: 'update-available',
-    securityStatus: 'verified',
-    enabled: true,
-    downloads: 15230,
-    rating: 4.7,
-    size: '4.1 MB',
-  },
-  {
-    id: 'p5',
-    name: 'Task Scheduler Pro',
-    description: 'Advanced task scheduling with priority queues and load balancing',
-    author: 'WorkflowKit',
-    version: '2.0.0',
-    category: 'utility',
-    status: 'available',
-    securityStatus: 'pending',
-    enabled: false,
-    downloads: 3450,
-    rating: 4.4,
-    size: '1.1 MB',
-  },
-  {
-    id: 'p6',
-    name: 'Quantum Simulator',
-    description: 'Simulate quantum circuits for algorithm development',
-    author: 'QuantumLabs',
-    version: '0.9.0',
-    category: 'compute',
-    status: 'available',
-    securityStatus: 'unverified',
-    enabled: false,
-    downloads: 890,
-    rating: 4.2,
-    size: '5.6 MB',
-  },
-  {
-    id: 'p7',
-    name: 'Suspicious Plugin',
-    description: 'This plugin was flagged for suspicious behavior',
-    author: 'Unknown',
-    version: '1.0.0',
-    category: 'utility',
-    status: 'installed',
-    securityStatus: 'quarantine',
-    enabled: false,
-    downloads: 120,
-    rating: 2.1,
-    size: '0.8 MB',
-  },
-];
+// Mock plugins removed - now using real data from usePlugins hook
 
 function PluginCard({ plugin, onToggle, onAction }: { plugin: Plugin; onToggle: () => void; onAction: (action: string) => void }) {
   const category = categoryConfig[plugin.category];
@@ -280,26 +171,30 @@ function PluginCard({ plugin, onToggle, onAction }: { plugin: Plugin; onToggle: 
 }
 
 export function PluginsPanel() {
-  const [plugins, setPlugins] = useState<Plugin[]>(mockPlugins);
+  const { plugins, stats, isLoading, togglePlugin } = usePlugins();
   const [filter, setFilter] = useState<'all' | 'installed' | 'available' | 'marketplace'>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | Plugin['category']>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const installedCount = plugins.filter((p) => p.status === 'installed' || p.status === 'update-available').length;
-  const verifiedCount = plugins.filter((p) => p.securityStatus === 'verified').length;
-  const quarantinedCount = plugins.filter((p) => p.securityStatus === 'quarantine').length;
-  const enabledCount = plugins.filter((p) => p.enabled).length;
-
   const handleToggle = (id: string) => {
-    setPlugins((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p))
-    );
+    togglePlugin(id);
   };
 
   const handleAction = (id: string, action: string) => {
     console.log(`Plugin ${id}: ${action}`);
     // Handle plugin actions here
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 text-amber-400 animate-spin mx-auto mb-2" />
+          <p className="text-zinc-400">Loading plugins...</p>
+        </div>
+      </div>
+    );
+  }
 
   const filteredPlugins = plugins.filter((p) => {
     if (filter === 'installed' && p.status !== 'installed' && p.status !== 'update-available') return false;
@@ -339,7 +234,7 @@ export function PluginsPanel() {
             <Package className="text-sky-400" size={20} />
           </div>
           <p className="text-2xl font-bold text-sky-400">
-            {installedCount}<span className="text-lg text-zinc-500">/{plugins.length}</span>
+            {stats.installedPlugins}<span className="text-lg text-zinc-500">/{stats.totalPlugins}</span>
           </p>
         </motion.div>
 
@@ -353,7 +248,7 @@ export function PluginsPanel() {
             <p className="text-sm text-zinc-400">Verified</p>
             <ShieldCheck className="text-emerald-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-emerald-400">{verifiedCount}</p>
+          <p className="text-2xl font-bold text-emerald-400">{stats.verifiedPlugins}</p>
         </motion.div>
 
         <motion.div
@@ -366,7 +261,7 @@ export function PluginsPanel() {
             <p className="text-sm text-zinc-400">Enabled</p>
             <Check className="text-cyan-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-cyan-400">{enabledCount}</p>
+          <p className="text-2xl font-bold text-cyan-400">{stats.enabledPlugins}</p>
         </motion.div>
 
         <motion.div
@@ -377,10 +272,10 @@ export function PluginsPanel() {
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-zinc-400">Quarantined</p>
-            <ShieldBan className={quarantinedCount > 0 ? 'text-red-400' : 'text-zinc-500'} size={20} />
+            <ShieldBan className={stats.quarantinedPlugins > 0 ? 'text-red-400' : 'text-zinc-500'} size={20} />
           </div>
-          <p className={`text-2xl font-bold ${quarantinedCount > 0 ? 'text-red-400' : 'text-zinc-500'}`}>
-            {quarantinedCount}
+          <p className={`text-2xl font-bold ${stats.quarantinedPlugins > 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+            {stats.quarantinedPlugins}
           </p>
         </motion.div>
       </div>
@@ -467,7 +362,7 @@ export function PluginsPanel() {
       </motion.div>
 
       {/* Security Notice */}
-      {quarantinedCount > 0 && (
+      {stats.quarantinedPlugins > 0 && (
         <motion.div
           className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/30"
           initial={{ opacity: 0 }}
@@ -477,7 +372,7 @@ export function PluginsPanel() {
           <div>
             <p className="text-sm font-medium text-red-400">Security Alert</p>
             <p className="text-xs text-zinc-400">
-              {quarantinedCount} plugin(s) have been quarantined due to suspicious behavior.
+              {stats.quarantinedPlugins} plugin(s) have been quarantined due to suspicious behavior.
               Review and remove them for safety.
             </p>
           </div>

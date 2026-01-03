@@ -179,62 +179,22 @@ function App() {
       ),
       workers: (
         <Suspense fallback={<CrystalLoader size="lg" text="Loading Workers..." />}>
-          <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
-                  Compute Workers
-                </span>
-              </h1>
-              <p className="text-zinc-400">Manage distributed compute workers across the network</p>
-            </motion.div>
-            <WorkersPanel />
-          </div>
+          <WorkersPanel />
         </Suspense>
       ),
       agents: (
         <Suspense fallback={<CrystalLoader size="lg" text="Loading Agents..." />}>
-          <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                <span className="bg-gradient-to-r from-purple-400 via-violet-400 to-indigo-400 bg-clip-text text-transparent">
-                  AI Agents
-                </span>
-              </h1>
-              <p className="text-zinc-400">Orchestrate intelligent agents on the distributed network</p>
-            </motion.div>
-            <AgentsPanel />
-          </div>
+          <AgentsPanel />
         </Suspense>
       ),
       plugins: (
         <Suspense fallback={<CrystalLoader size="lg" text="Loading Plugins..." />}>
-          <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                <span className="bg-gradient-to-r from-rose-400 via-pink-400 to-fuchsia-400 bg-clip-text text-transparent">
-                  Plugin Marketplace
-                </span>
-              </h1>
-              <p className="text-zinc-400">Extend network capabilities with verified plugins</p>
-            </motion.div>
-            <PluginsPanel />
-          </div>
+          <PluginsPanel />
         </Suspense>
       ),
       genesis: (
         <Suspense fallback={<CrystalLoader size="lg" text="Loading Genesis..." />}>
-          <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 bg-clip-text text-transparent">
-                  Network Genesis
-                </span>
-              </h1>
-              <p className="text-zinc-400">Birth and manage network instances with cryptographic lineage</p>
-            </motion.div>
-            <GenesisPanel />
-          </div>
+          <GenesisPanel />
         </Suspense>
       ),
       docs: (

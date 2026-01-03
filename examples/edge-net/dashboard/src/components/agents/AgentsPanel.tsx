@@ -16,21 +16,12 @@ import {
   GitBranch,
   Workflow,
   Eye,
+  RefreshCw,
 } from 'lucide-react';
+import { useAgents } from '../../hooks/useAgents';
+import type { RealAgent } from '../../services/panel-services/agentsService';
 
-interface Agent {
-  id: string;
-  name: string;
-  type: 'researcher' | 'coder' | 'tester' | 'analyst' | 'optimizer' | 'coordinator';
-  status: 'idle' | 'working' | 'learning' | 'coordinating';
-  neuralPattern: 'convergent' | 'divergent' | 'lateral' | 'systems' | 'adaptive';
-  patternStrength: number;
-  tasksCompleted: number;
-  currentTask?: string;
-  learningProgress: number;
-  connections: string[];
-  lastActive: string;
-}
+type Agent = RealAgent;
 
 const agentTypeConfig = {
   researcher: {
@@ -80,84 +71,7 @@ const patternConfig = {
   adaptive: { label: 'Adaptive', color: 'text-cyan-400', description: 'Dynamic switching' },
 };
 
-const mockAgents: Agent[] = [
-  {
-    id: 'a1',
-    name: 'Research Alpha',
-    type: 'researcher',
-    status: 'working',
-    neuralPattern: 'divergent',
-    patternStrength: 87,
-    tasksCompleted: 234,
-    currentTask: 'Analyzing API documentation patterns',
-    learningProgress: 72,
-    connections: ['a2', 'a4'],
-    lastActive: 'now',
-  },
-  {
-    id: 'a2',
-    name: 'Coder Prime',
-    type: 'coder',
-    status: 'working',
-    neuralPattern: 'convergent',
-    patternStrength: 94,
-    tasksCompleted: 567,
-    currentTask: 'Implementing WASM bindings',
-    learningProgress: 88,
-    connections: ['a1', 'a3'],
-    lastActive: 'now',
-  },
-  {
-    id: 'a3',
-    name: 'Test Guardian',
-    type: 'tester',
-    status: 'learning',
-    neuralPattern: 'systems',
-    patternStrength: 76,
-    tasksCompleted: 189,
-    learningProgress: 45,
-    connections: ['a2'],
-    lastActive: '2s ago',
-  },
-  {
-    id: 'a4',
-    name: 'Insight Analyst',
-    type: 'analyst',
-    status: 'idle',
-    neuralPattern: 'lateral',
-    patternStrength: 82,
-    tasksCompleted: 312,
-    learningProgress: 91,
-    connections: ['a1', 'a5'],
-    lastActive: '15s ago',
-  },
-  {
-    id: 'a5',
-    name: 'Perf Optimizer',
-    type: 'optimizer',
-    status: 'working',
-    neuralPattern: 'adaptive',
-    patternStrength: 89,
-    tasksCompleted: 156,
-    currentTask: 'Optimizing vector search latency',
-    learningProgress: 67,
-    connections: ['a4', 'a6'],
-    lastActive: 'now',
-  },
-  {
-    id: 'a6',
-    name: 'Swarm Coord',
-    type: 'coordinator',
-    status: 'coordinating',
-    neuralPattern: 'systems',
-    patternStrength: 95,
-    tasksCompleted: 423,
-    currentTask: 'Orchestrating multi-agent workflow',
-    learningProgress: 83,
-    connections: ['a1', 'a2', 'a3', 'a4', 'a5'],
-    lastActive: 'now',
-  },
-];
+// Mock agents removed - now using real data from useAgents hook
 
 function NeuralPatternIndicator({ pattern, strength }: { pattern: Agent['neuralPattern']; strength: number }) {
   const config = patternConfig[pattern];
@@ -382,15 +296,21 @@ function CoordinationVisualization({ agents }: { agents: Agent[] }) {
 }
 
 export function AgentsPanel() {
-  const [agents] = useState<Agent[]>(mockAgents);
+  const { agents, stats, isLoading } = useAgents();
   const [filter, setFilter] = useState<'all' | Agent['type']>('all');
 
-  const workingCount = agents.filter((a) => a.status === 'working').length;
-  const learningCount = agents.filter((a) => a.status === 'learning').length;
-  const totalTasks = agents.reduce((sum, a) => sum + a.tasksCompleted, 0);
-  const avgLearning = agents.reduce((sum, a) => sum + a.learningProgress, 0) / agents.length;
-
   const filteredAgents = filter === 'all' ? agents : agents.filter((a) => a.type === filter);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 text-violet-400 animate-spin mx-auto mb-2" />
+          <p className="text-zinc-400">Loading agents...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -422,7 +342,7 @@ export function AgentsPanel() {
             <Activity className="text-emerald-400" size={20} />
           </div>
           <p className="text-2xl font-bold text-emerald-400">
-            {workingCount}<span className="text-lg text-zinc-500">/{agents.length}</span>
+            {stats.workingAgents}<span className="text-lg text-zinc-500">/{stats.totalAgents}</span>
           </p>
         </motion.div>
 
@@ -436,7 +356,7 @@ export function AgentsPanel() {
             <p className="text-sm text-zinc-400">Learning</p>
             <Sparkles className="text-violet-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-violet-400">{learningCount}</p>
+          <p className="text-2xl font-bold text-violet-400">{stats.learningAgents}</p>
         </motion.div>
 
         <motion.div
@@ -449,7 +369,7 @@ export function AgentsPanel() {
             <p className="text-sm text-zinc-400">Tasks Done</p>
             <Lightbulb className="text-sky-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-sky-400">{totalTasks.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-sky-400">{stats.totalTasks.toLocaleString()}</p>
         </motion.div>
 
         <motion.div
@@ -462,7 +382,7 @@ export function AgentsPanel() {
             <p className="text-sm text-zinc-400">Avg Learning</p>
             <Brain className="text-cyan-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-cyan-400">{avgLearning.toFixed(0)}%</p>
+          <p className="text-2xl font-bold text-cyan-400">{stats.avgLearning.toFixed(0)}%</p>
         </motion.div>
       </div>
 

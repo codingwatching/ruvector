@@ -19,130 +19,12 @@ import {
   Crown,
   Leaf,
   TreeDeciduous,
+  RefreshCw,
 } from 'lucide-react';
+import { useGenesis } from '../../hooks/useGenesis';
+import type { GenesisNode } from '../../services/panel-services/genesisService';
 
-interface GenesisNode {
-  id: string;
-  name: string;
-  generation: number;
-  parentId: string | null;
-  signature: string;
-  birthTime: string;
-  status: 'active' | 'dormant' | 'reproducing';
-  genome: {
-    computeCapacity: number;
-    networkSpeed: number;
-    reliability: number;
-    specialization: string;
-  };
-  offspring: number;
-  verified: boolean;
-}
-
-const mockGenesisNodes: GenesisNode[] = [
-  {
-    id: 'gen-0',
-    name: 'Genesis Prime',
-    generation: 0,
-    parentId: null,
-    signature: '0x7f4e2b1c9d8a3f6e5c4b2a1098765432fedcba98',
-    birthTime: '2024-01-01T00:00:00Z',
-    status: 'active',
-    genome: {
-      computeCapacity: 100,
-      networkSpeed: 95,
-      reliability: 99,
-      specialization: 'coordinator',
-    },
-    offspring: 3,
-    verified: true,
-  },
-  {
-    id: 'gen-1a',
-    name: 'Alpha Node',
-    generation: 1,
-    parentId: 'gen-0',
-    signature: '0x3a2b1c4d5e6f7890abcdef1234567890abcdef12',
-    birthTime: '2024-02-15T10:30:00Z',
-    status: 'reproducing',
-    genome: {
-      computeCapacity: 92,
-      networkSpeed: 88,
-      reliability: 96,
-      specialization: 'compute',
-    },
-    offspring: 2,
-    verified: true,
-  },
-  {
-    id: 'gen-1b',
-    name: 'Beta Node',
-    generation: 1,
-    parentId: 'gen-0',
-    signature: '0x9f8e7d6c5b4a3210fedcba0987654321abcdef34',
-    birthTime: '2024-03-01T14:45:00Z',
-    status: 'active',
-    genome: {
-      computeCapacity: 85,
-      networkSpeed: 97,
-      reliability: 94,
-      specialization: 'network',
-    },
-    offspring: 1,
-    verified: true,
-  },
-  {
-    id: 'gen-1c',
-    name: 'Gamma Node',
-    generation: 1,
-    parentId: 'gen-0',
-    signature: '0x1234abcd5678efgh9012ijkl3456mnop7890qrst',
-    birthTime: '2024-03-20T08:15:00Z',
-    status: 'dormant',
-    genome: {
-      computeCapacity: 78,
-      networkSpeed: 82,
-      reliability: 91,
-      specialization: 'storage',
-    },
-    offspring: 0,
-    verified: true,
-  },
-  {
-    id: 'gen-2a',
-    name: 'Delta Prime',
-    generation: 2,
-    parentId: 'gen-1a',
-    signature: '0xaabbccdd11223344eeffaabb55667788ccddeeff',
-    birthTime: '2024-04-10T16:20:00Z',
-    status: 'active',
-    genome: {
-      computeCapacity: 95,
-      networkSpeed: 90,
-      reliability: 97,
-      specialization: 'inference',
-    },
-    offspring: 0,
-    verified: true,
-  },
-  {
-    id: 'gen-2b',
-    name: 'Epsilon',
-    generation: 2,
-    parentId: 'gen-1a',
-    signature: '0x99887766554433221100ffeeddccbbaa00112233',
-    birthTime: '2024-05-05T11:00:00Z',
-    status: 'active',
-    genome: {
-      computeCapacity: 88,
-      networkSpeed: 93,
-      reliability: 95,
-      specialization: 'training',
-    },
-    offspring: 0,
-    verified: false,
-  },
-];
+// Mock nodes removed - now using real data from useGenesis hook
 
 const statusConfig = {
   active: { color: 'text-emerald-400', bgColor: 'bg-emerald-500', label: 'Active' },
@@ -436,18 +318,24 @@ function NetworkGenomeCard({ nodes }: { nodes: GenesisNode[] }) {
 }
 
 export function GenesisPanel() {
-  const [nodes] = useState<GenesisNode[]>(mockGenesisNodes);
+  const { nodes, rootNode, stats, isLoading } = useGenesis();
   const [selectedView, setSelectedView] = useState<'tree' | 'grid'>('tree');
-
-  const rootNode = nodes.find((n) => n.parentId === null);
-  const totalGenerations = Math.max(...nodes.map((n) => n.generation)) + 1;
-  const activeCount = nodes.filter((n) => n.status === 'active').length;
-  const verifiedCount = nodes.filter((n) => n.verified).length;
 
   const handleAction = (action: string) => {
     console.log(`Genesis action: ${action}`);
     // Handle genesis actions
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto mb-2" />
+          <p className="text-zinc-400">Loading genesis network...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -491,7 +379,7 @@ export function GenesisPanel() {
             <p className="text-sm text-zinc-400">Generations</p>
             <GitBranch className="text-violet-400" size={20} />
           </div>
-          <p className="text-2xl font-bold text-violet-400">{totalGenerations}</p>
+          <p className="text-2xl font-bold text-violet-400">{stats.totalGenerations}</p>
         </motion.div>
 
         <motion.div
@@ -505,7 +393,7 @@ export function GenesisPanel() {
             <Zap className="text-sky-400" size={20} />
           </div>
           <p className="text-2xl font-bold text-sky-400">
-            {activeCount}<span className="text-lg text-zinc-500">/{nodes.length}</span>
+            {stats.activeNodes}<span className="text-lg text-zinc-500">/{stats.totalNodes}</span>
           </p>
         </motion.div>
 
@@ -520,7 +408,7 @@ export function GenesisPanel() {
             <ShieldCheck className="text-cyan-400" size={20} />
           </div>
           <p className="text-2xl font-bold text-cyan-400">
-            {verifiedCount}<span className="text-lg text-zinc-500">/{nodes.length}</span>
+            {stats.verifiedNodes}<span className="text-lg text-zinc-500">/{stats.totalNodes}</span>
           </p>
         </motion.div>
       </div>
