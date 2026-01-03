@@ -35,7 +35,9 @@
 
 pub mod api_clients;
 pub mod arxiv_client;
+pub mod biorxiv_client;
 pub mod coherence;
+pub mod crossref_client;
 pub mod discovery;
 pub mod economic_clients;
 pub mod export;
@@ -48,6 +50,7 @@ pub mod patent_clients;
 pub mod persistence;
 pub mod realtime;
 pub mod ruvector_native;
+pub mod semantic_scholar;
 pub mod streaming;
 pub mod visualization;
 pub mod wiki_clients;
@@ -63,9 +66,12 @@ use thiserror::Error;
 // Re-exports
 pub use api_clients::{EdgarClient, NoaaClient, OpenAlexClient, SimpleEmbedder};
 pub use arxiv_client::ArxivClient;
+pub use biorxiv_client::{BiorxivClient, MedrxivClient};
+pub use crossref_client::CrossRefClient;
 pub use economic_clients::{AlphaVantageClient, FredClient, WorldBankClient};
 pub use medical_clients::{ClinicalTrialsClient, FdaClient, PubMedClient};
 pub use patent_clients::{EpoClient, UsptoPatentClient};
+pub use semantic_scholar::SemanticScholarClient;
 pub use wiki_clients::{WikidataClient, WikidataEntity, WikipediaClient};
 pub use coherence::{
     CoherenceBoundary, CoherenceConfig, CoherenceEngine, CoherenceEvent, CoherenceSignal,
