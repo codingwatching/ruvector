@@ -36,6 +36,9 @@ rand = "0.8"
 # URL encoding for API calls
 urlencoding = "2.1"
 
+# XML parsing for PubMed
+quick-xml = { version = "0.36", features = ["serialize"] }
+
 # Compression
 flate2 = "1.1"
 
@@ -64,6 +67,22 @@ path = "examples/api_client_demo.rs"
 [[example]]
 name = "real_data_discovery"
 path = "examples/real_data_discovery.rs"
+
+[[example]]
+name = "multi_domain_discovery"
+path = "examples/multi_domain_discovery.rs"
+
+[[example]]
+name = "realtime_feeds"
+path = "examples/realtime_feeds.rs"
+
+[[example]]
+name = "medical_discovery"
+path = "examples/medical_discovery.rs"
+
+[[example]]
+name = "wiki_discovery"
+path = "examples/wiki_discovery.rs"
 
 [[bin]]
 name = "discover"

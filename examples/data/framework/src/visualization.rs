@@ -13,6 +13,7 @@ use crate::ruvector_native::{Domain, PatternType};
 const COLOR_CLIMATE: &str = "\x1b[34m";  // Blue
 const COLOR_FINANCE: &str = "\x1b[32m";  // Green
 const COLOR_RESEARCH: &str = "\x1b[33m"; // Yellow
+const COLOR_MEDICAL: &str = "\x1b[36m";  // Cyan
 const COLOR_CROSS: &str = "\x1b[35m";    // Magenta
 const COLOR_RESET: &str = "\x1b[0m";
 const COLOR_BRIGHT: &str = "\x1b[1m";
@@ -37,6 +38,7 @@ fn domain_color(domain: Domain) -> &'static str {
         Domain::Climate => COLOR_CLIMATE,
         Domain::Finance => COLOR_FINANCE,
         Domain::Research => COLOR_RESEARCH,
+        Domain::Medical => COLOR_MEDICAL,
         Domain::CrossDomain => COLOR_CROSS,
     }
 }
@@ -47,6 +49,7 @@ fn domain_char(domain: Domain) -> char {
         Domain::Climate => 'C',
         Domain::Finance => 'F',
         Domain::Research => 'R',
+        Domain::Medical => 'M',
         Domain::CrossDomain => 'X',
     }
 }

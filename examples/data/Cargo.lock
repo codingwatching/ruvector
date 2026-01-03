@@ -1738,6 +1738,7 @@ dependencies = [
  "flate2",
  "futures",
  "ndarray",
+ "quick-xml",
  "rand",
  "rayon",
  "reqwest",

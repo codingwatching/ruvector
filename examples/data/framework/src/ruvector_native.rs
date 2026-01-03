@@ -29,6 +29,7 @@ pub enum Domain {
     Climate,
     Finance,
     Research,
+    Medical,
     CrossDomain,
 }
 

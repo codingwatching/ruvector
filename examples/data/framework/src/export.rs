@@ -621,6 +621,7 @@ fn domain_color(domain: Domain) -> &'static str {
         Domain::Climate => "lightblue",
         Domain::Finance => "lightgreen",
         Domain::Research => "lightyellow",
+        Domain::Medical => "lightpink",
         Domain::CrossDomain => "lightcoral",
     }
 }
@@ -631,6 +632,7 @@ fn domain_shape(domain: Domain) -> &'static str {
         Domain::Climate => "circle",
         Domain::Finance => "box",
         Domain::Research => "diamond",
+        Domain::Medical => "ellipse",
         Domain::CrossDomain => "hexagon",
     }
 }

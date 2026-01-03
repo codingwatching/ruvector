@@ -40,11 +40,14 @@ pub mod export;
 pub mod forecasting;
 pub mod hnsw;
 pub mod ingester;
+pub mod medical_clients;
 pub mod optimized;
 pub mod persistence;
+pub mod realtime;
 pub mod ruvector_native;
 pub mod streaming;
 pub mod visualization;
+pub mod wiki_clients;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -56,6 +59,8 @@ use thiserror::Error;
 
 // Re-exports
 pub use api_clients::{EdgarClient, NoaaClient, OpenAlexClient, SimpleEmbedder};
+pub use medical_clients::{ClinicalTrialsClient, FdaClient, PubMedClient};
+pub use wiki_clients::{WikidataClient, WikidataEntity, WikipediaClient};
 pub use coherence::{
     CoherenceBoundary, CoherenceConfig, CoherenceEngine, CoherenceEvent, CoherenceSignal,
 };
@@ -68,6 +73,7 @@ pub use export::{
 };
 pub use forecasting::{CoherenceForecaster, CrossDomainForecaster, Forecast, Trend};
 pub use ingester::{DataIngester, IngestionConfig, IngestionStats, SourceConfig};
+pub use realtime::{FeedItem, FeedSource, NewsAggregator, NewsSource, RealTimeEngine};
 pub use streaming::{StreamingConfig, StreamingEngine, StreamingEngineBuilder, StreamingMetrics};
 
 /// Framework error types
