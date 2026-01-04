@@ -40,6 +40,7 @@ pub mod biorxiv_client;
 pub mod coherence;
 pub mod crossref_client;
 pub mod discovery;
+pub mod dynamic_mincut;
 pub mod economic_clients;
 pub mod export;
 pub mod finance_clients;
@@ -48,6 +49,7 @@ pub mod genomics_clients;
 pub mod geospatial_clients;
 pub mod government_clients;
 pub mod hnsw;
+pub mod cut_aware_hnsw;
 pub mod ingester;
 pub mod mcp_server;
 pub mod medical_clients;
@@ -104,8 +106,17 @@ pub use wiki_clients::{WikidataClient, WikidataEntity, WikipediaClient};
 pub use coherence::{
     CoherenceBoundary, CoherenceConfig, CoherenceEngine, CoherenceEvent, CoherenceSignal,
 };
+pub use cut_aware_hnsw::{
+    CutAwareHNSW, CutAwareConfig, CutAwareMetrics, CoherenceZone,
+    SearchResult as CutAwareSearchResult, EdgeUpdate as CutAwareEdgeUpdate, UpdateKind, LayerCutStats,
+};
 pub use discovery::{
     DiscoveryConfig, DiscoveryEngine, DiscoveryPattern, PatternCategory, PatternStrength,
+};
+pub use dynamic_mincut::{
+    CutGatedSearch, CutWatcherConfig, DynamicCutWatcher, DynamicMinCutError,
+    EdgeUpdate as DynamicEdgeUpdate, EdgeUpdateType, EulerTourTree, HNSWGraph,
+    LocalCut, LocalMinCutProcedure, WatcherStats,
 };
 pub use export::{
     export_all, export_coherence_csv, export_dot, export_graphml, export_patterns_csv,

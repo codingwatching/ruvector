@@ -102,6 +102,10 @@ path = "examples/optimized_runner.rs"
 name = "news_social_demo"
 path = "examples/news_social_demo.rs"
 
+[[example]]
+name = "dynamic_mincut_benchmark"
+path = "examples/dynamic_mincut_benchmark.rs"
+
 [[bin]]
 name = "discover"
 path = "src/bin/discover.rs"
