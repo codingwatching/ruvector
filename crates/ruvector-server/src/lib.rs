@@ -13,8 +13,11 @@ pub mod error;
 pub mod routes;
 pub mod state;
 
-use axum::{routing::get, Router};
-use ruvector_security::{cors::build_cors_layer, AuthConfig, AuthMiddleware, CorsConfig, CorsMode, RateLimitConfig, RateLimiter};
+use axum::{middleware, routing::get, Router};
+use ruvector_security::{
+    cors::build_cors_layer, security_layer, AuthConfig, AuthMiddleware, CorsConfig, CorsMode,
+    RateLimitConfig, RateLimiter, SecurityState,
+};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::{compression::CompressionLayer, trace::TraceLayer};
@@ -119,11 +122,27 @@ impl RuvectorServer {
 
     /// Build the router with all routes
     fn build_router(&self) -> Router {
-        let mut router = Router::new()
+        // Create security state from config (S-1: Auth, S-5: Rate limiting)
+        let security_state = SecurityState::new(
+            AuthMiddleware::new(self.config.auth.clone()),
+            RateLimiter::new(self.config.rate_limit.clone()),
+        );
+
+        // Public routes (no auth required)
+        let public_routes = Router::new()
             .route("/health", get(routes::health::health_check))
-            .route("/ready", get(routes::health::readiness))
+            .route("/ready", get(routes::health::readiness));
+
+        // Protected routes with security middleware (S-1, S-5)
+        let protected_routes = Router::new()
             .nest("/collections", routes::collections::routes())
             .merge(routes::points::routes())
+            .layer(axum::Extension(security_state));
+
+        // Combine routes
+        let mut router = Router::new()
+            .merge(public_routes)
+            .merge(protected_routes)
             .with_state(self.state.clone());
 
         // Add middleware layers

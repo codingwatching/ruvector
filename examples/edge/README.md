@@ -254,6 +254,8 @@ const best = matcher.find_best_agent("write a function");
 9. [API Reference](#api-reference)
 10. [Performance](#performance)
 11. [Security](#security)
+12. [Interactive Swarm Generator](#interactive-swarm-generator)
+13. [Example: Plaid Financial Analysis](#example-plaid-financial-analysis)
 
 ---
 
@@ -1318,6 +1320,46 @@ const result = await network.routeRequest(request);
 - Works offline - all tools available without internet
 - Privacy-first - sensitive data never leaves the browser
 - Instant deployment - just include the library
+
+---
+
+## Example: Plaid Financial Analysis
+
+The `src/plaid/` module demonstrates privacy-preserving financial intelligence that runs 100% in the browser. It integrates with [Plaid's API](https://plaid.com/) for bank data while keeping all ML/AI processing local.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Transaction Categorization** | ML-based using HNSW similarity search (150x faster) |
+| **Anomaly Detection** | Identifies unusual spending compared to learned patterns |
+| **Budget Recommendations** | Q-learning optimization that improves over time |
+| **Temporal Patterns** | Weekly/monthly spending heatmaps |
+| **ZK Proofs** | Prove income/balance without revealing exact amounts |
+
+### Privacy Guarantees
+
+- Financial transactions **never leave the browser**
+- All ML models train locally in WebAssembly
+- Optional AES-256-GCM encryption for IndexedDB storage
+- Zero tracking or telemetry
+
+### Quick Start
+
+```bash
+# Build WASM
+./scripts/build-wasm.sh
+
+# Serve the demo
+npx serve pkg
+
+# Open http://localhost:3000/plaid-demo.html
+```
+
+### Documentation
+
+- [Plaid Local Learning Guide](docs/plaid-local-learning.md) - Full API reference and usage examples
+- [ZK Performance Analysis](docs/zk_performance_analysis.md) - Zero-knowledge proof benchmarks
 
 ---
 

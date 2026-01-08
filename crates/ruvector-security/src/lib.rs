@@ -22,6 +22,7 @@ pub mod auth;
 pub mod cors;
 pub mod error;
 pub mod ffi;
+pub mod middleware;
 pub mod path;
 pub mod rate_limit;
 
@@ -29,8 +30,9 @@ pub use auth::{AuthConfig, AuthMiddleware, AuthMode, BearerTokenValidator, Token
 pub use cors::{CorsConfig, CorsMode};
 pub use error::{SecurityError, SecurityResult};
 pub use ffi::{validate_ptr, FfiError, TrackedAllocation};
+pub use middleware::{auth_layer, rate_limit_layer, security_layer, SecurityState};
 pub use path::PathValidator;
-pub use rate_limit::{RateLimitConfig, RateLimiter};
+pub use rate_limit::{OperationType, RateLimitConfig, RateLimiter};
 
 /// Security configuration combining all security settings
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

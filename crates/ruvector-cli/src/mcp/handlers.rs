@@ -1,4 +1,8 @@
 //! MCP request handlers
+//!
+//! ## Security Features (ADR-0011)
+//!
+//! - Path validation for all file operations (S-3)
 
 use super::gnn_cache::{BatchGnnRequest, GnnCache, GnnCacheConfig, GnnOperation, LayerConfig};
 use super::protocol::*;
@@ -9,8 +13,10 @@ use ruvector_core::{
     VectorDB,
 };
 use ruvector_gnn::{compress::TensorCompress, search::differentiable_search};
+use ruvector_security::PathValidator;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
@@ -23,17 +29,45 @@ pub struct McpHandler {
     gnn_cache: Arc<GnnCache>,
     /// Tensor compressor for GNN operations
     tensor_compress: Arc<TensorCompress>,
+    /// Path validator for security (S-3: Path traversal prevention)
+    path_validator: PathValidator,
 }
 
 impl McpHandler {
     pub fn new(config: Config) -> Self {
         let gnn_cache = Arc::new(GnnCache::new(GnnCacheConfig::default()));
 
+        // Initialize path validator with current directory and common data directories
+        // S-3: Path traversal prevention
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let allowed_dirs = vec![
+            cwd.clone(),
+            cwd.join("data"),
+            cwd.join("backups"),
+            PathBuf::from("/tmp"),
+        ];
+        let path_validator = PathValidator::new(allowed_dirs).allow_symlinks(false);
+
         Self {
             config,
             databases: Arc::new(RwLock::new(HashMap::new())),
             gnn_cache,
             tensor_compress: Arc::new(TensorCompress::new()),
+            path_validator,
+        }
+    }
+
+    /// Create with custom allowed paths for security configuration
+    pub fn with_allowed_paths(config: Config, allowed_paths: Vec<PathBuf>) -> Self {
+        let gnn_cache = Arc::new(GnnCache::new(GnnCacheConfig::default()));
+        let path_validator = PathValidator::new(allowed_paths).allow_symlinks(false);
+
+        Self {
+            config,
+            databases: Arc::new(RwLock::new(HashMap::new())),
+            gnn_cache,
+            tensor_compress: Arc::new(TensorCompress::new()),
+            path_validator,
         }
     }
 
@@ -387,8 +421,14 @@ impl McpHandler {
         let params: CreateDbParams =
             serde_json::from_value(args.clone()).context("Invalid parameters")?;
 
+        // S-3: Validate path before use (path traversal prevention)
+        let validated_path = self
+            .path_validator
+            .validate_new_file(&params.path)
+            .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
+
         let mut db_options = self.config.to_db_options();
-        db_options.storage_path = params.path.clone();
+        db_options.storage_path = validated_path.to_string_lossy().to_string();
         db_options.dimensions = params.dimensions;
 
         if let Some(metric) = params.distance_metric {
@@ -402,12 +442,13 @@ impl McpHandler {
         }
 
         let db = VectorDB::new(db_options)?;
+        let path_str = validated_path.to_string_lossy().to_string();
         self.databases
             .write()
             .await
-            .insert(params.path.clone(), Arc::new(db));
+            .insert(path_str.clone(), Arc::new(db));
 
-        Ok(format!("Database created at: {}", params.path))
+        Ok(format!("Database created at: {}", path_str))
     }
 
     async fn tool_insert(&self, args: &Value) -> Result<String> {
@@ -461,27 +502,46 @@ impl McpHandler {
     async fn tool_backup(&self, args: &Value) -> Result<String> {
         let params: BackupParams = serde_json::from_value(args.clone())?;
 
-        std::fs::copy(&params.db_path, &params.backup_path).context("Failed to backup database")?;
+        // S-3: Validate both source and destination paths (path traversal prevention)
+        let validated_source = self
+            .path_validator
+            .validate(&params.db_path)
+            .map_err(|e| anyhow::anyhow!("Source path validation failed: {}", e))?;
 
-        Ok(format!("Backed up to: {}", params.backup_path))
+        let validated_dest = self
+            .path_validator
+            .validate_new_file(&params.backup_path)
+            .map_err(|e| anyhow::anyhow!("Destination path validation failed: {}", e))?;
+
+        std::fs::copy(&validated_source, &validated_dest).context("Failed to backup database")?;
+
+        Ok(format!("Backed up to: {}", validated_dest.display()))
     }
 
     async fn get_or_open_db(&self, path: &str) -> Result<Arc<VectorDB>> {
+        // S-3: Validate path before use (path traversal prevention)
+        let validated_path = self
+            .path_validator
+            .validate(path)
+            .map_err(|e| anyhow::anyhow!("Path validation failed: {}", e))?;
+
+        let path_str = validated_path.to_string_lossy().to_string();
+
         let databases = self.databases.read().await;
-        if let Some(db) = databases.get(path) {
+        if let Some(db) = databases.get(&path_str) {
             return Ok(db.clone());
         }
         drop(databases);
 
-        // Open new database
+        // Open new database with validated path
         let mut db_options = self.config.to_db_options();
-        db_options.storage_path = path.to_string();
+        db_options.storage_path = path_str.clone();
 
         let db = Arc::new(VectorDB::new(db_options)?);
         self.databases
             .write()
             .await
-            .insert(path.to_string(), db.clone());
+            .insert(path_str, db.clone());
 
         Ok(db)
     }
