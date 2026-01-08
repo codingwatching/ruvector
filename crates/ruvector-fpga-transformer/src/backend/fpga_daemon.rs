@@ -411,7 +411,7 @@ impl TransformerBackend for FpgaDaemonBackend {
 
         // Cache metadata locally
         {
-            let mut models = write_lock(&self.models, |m| {
+            write_lock(&self.models, |m| {
                 m.insert(
                     model_id,
                     ModelMetadata {

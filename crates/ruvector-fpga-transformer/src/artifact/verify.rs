@@ -114,7 +114,7 @@ pub fn verify_test_vectors(
 ) -> Result<()> {
     let max_err = artifact.manifest.tests.max_abs_err;
 
-    for (i, vector) in artifact.test_vectors.iter().enumerate() {
+    for (_i, vector) in artifact.test_vectors.iter().enumerate() {
         let output = infer_fn(&vector.tokens)?;
 
         // Compare outputs
