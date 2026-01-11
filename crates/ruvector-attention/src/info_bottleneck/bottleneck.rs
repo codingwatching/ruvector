@@ -69,7 +69,8 @@ impl InformationBottleneck {
 
         for i in 0..n {
             let lv = log_var[i].max(self.config.min_var.ln());
-            let std = (0.5 * lv).exp();
+            // Security: clamp to prevent exp() overflow
+            let std = (0.5 * lv.clamp(-20.0, 20.0)).exp();
             z[i] = mean[i] + std * epsilon[i];
         }
 
@@ -80,14 +81,16 @@ impl InformationBottleneck {
     /// d KL / d mu = mu
     /// d KL / d log_var = 0.5 * (exp(log_var) - 1)
     pub fn kl_gradients(&self, mean: &[f32], log_var: &[f32]) -> (Vec<f32>, Vec<f32>) {
-        let n = mean.len();
+        let n = mean.len().min(log_var.len()); // Security: bounds check
 
         let mut d_mean = vec![0.0f32; n];
         let mut d_log_var = vec![0.0f32; n];
 
         for i in 0..n {
             d_mean[i] = self.config.beta * mean[i];
-            d_log_var[i] = self.config.beta * 0.5 * (log_var[i].exp() - 1.0);
+            // Security: clamp log_var to prevent exp() overflow
+            let lv_clamped = log_var[i].clamp(-20.0, 20.0);
+            d_log_var[i] = self.config.beta * 0.5 * (lv_clamped.exp() - 1.0);
         }
 
         (d_mean, d_log_var)

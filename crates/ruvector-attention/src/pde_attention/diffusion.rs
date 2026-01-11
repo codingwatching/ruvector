@@ -107,9 +107,10 @@ impl DiffusionAttention {
             }
         }
 
-        // Apply temperature
+        // Apply temperature (Security: prevent division by zero)
+        let temp = self.config.temperature.max(1e-6);
         for xi in x.iter_mut() {
-            *xi /= self.config.temperature;
+            *xi /= temp;
         }
 
         // Softmax
@@ -216,7 +217,13 @@ impl DiffusionAttention {
         let exp_logits: Vec<f32> = logits.iter().map(|&l| (l - max_logit).exp()).collect();
         let sum: f32 = exp_logits.iter().sum();
 
-        exp_logits.iter().map(|&e| e / sum).collect()
+        // Security: prevent division by zero if all exp values underflow
+        if sum > 0.0 {
+            exp_logits.iter().map(|&e| e / sum).collect()
+        } else {
+            // Fallback to uniform distribution
+            vec![1.0 / logits.len() as f32; logits.len()]
+        }
     }
 
     /// Weighted sum

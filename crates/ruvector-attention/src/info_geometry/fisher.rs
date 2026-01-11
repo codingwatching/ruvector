@@ -44,7 +44,11 @@ impl FisherMetric {
     /// This is O(n) instead of O(n^2)
     #[inline]
     pub fn apply(&self, probs: &[f32], v: &[f32]) -> Vec<f32> {
-        let n = probs.len();
+        let n = probs.len().min(v.len()); // Security: bounds check
+
+        if n == 0 {
+            return vec![];
+        }
 
         // Compute p^T * v
         let pv = Self::dot_simd(probs, v);
@@ -62,7 +66,12 @@ impl FisherMetric {
     /// F^{-1} ≈ diag(1/p) for small perturbations
     #[inline]
     pub fn apply_inverse_approx(&self, probs: &[f32], v: &[f32]) -> Vec<f32> {
-        let n = probs.len();
+        let n = probs.len().min(v.len()); // Security: bounds check
+
+        if n == 0 {
+            return vec![];
+        }
+
         let mut result = vec![0.0f32; n];
 
         for i in 0..n {
@@ -82,10 +91,14 @@ impl FisherMetric {
     /// Solve F*x = b using conjugate gradient
     /// Returns x such that probs[i]*x[i] - probs[i]*sum(probs[j]*x[j]) ≈ b[i]
     pub fn solve_cg(&self, probs: &[f32], b: &[f32]) -> Vec<f32> {
-        let n = probs.len();
+        let n = probs.len().min(b.len()); // Security: bounds check
+
+        if n == 0 {
+            return vec![];
+        }
 
         // Project b to sum-zero (must be in tangent space)
-        let mut b_proj = b.to_vec();
+        let mut b_proj = b[..n].to_vec();
         let b_mean: f32 = b_proj.iter().sum::<f32>() / n as f32;
         for i in 0..n {
             b_proj[i] -= b_mean;
@@ -116,7 +129,7 @@ impl FisherMetric {
                 break;
             }
 
-            let beta = rtr_new / rtr;
+            let beta = rtr_new / rtr.max(self.config.eps); // Security: prevent division by zero
             for i in 0..n {
                 d[i] = r[i] + beta * d[i];
             }

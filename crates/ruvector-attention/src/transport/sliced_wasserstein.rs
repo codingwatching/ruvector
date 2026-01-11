@@ -170,7 +170,7 @@ impl SlicedWassersteinAttention {
         // Stage 2: OT distance only on candidates
         let query_projections = self.projection_cache.project(query);
 
-        let mut candidate_distances: Vec<(usize, f32)> = candidate_indices
+        let candidate_distances: Vec<(usize, f32)> = candidate_indices
             .iter()
             .map(|&idx| {
                 let key_projs = &window_cache.key_projections[idx];

@@ -98,7 +98,7 @@ impl ReportBuilder {
             return GeometryReport::empty();
         }
 
-        let dim = keys[0].len();
+        let _dim = keys[0].len();
 
         // 1. OT distance (simplified sliced Wasserstein)
         let ot_mean = self.compute_ot_distance(query, keys);

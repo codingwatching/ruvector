@@ -2,7 +2,6 @@
 //!
 //! Efficient KL divergence for various distributions used in attention.
 
-use serde::{Deserialize, Serialize};
 
 /// Diagonal Gaussian parameters
 #[derive(Debug, Clone)]

@@ -72,7 +72,8 @@ impl GraphLaplacian {
         lap_type: LaplacianType,
     ) -> Self {
         let n = keys.len();
-        let k = k.min(n - 1);
+        // Security: prevent integer underflow when n=0 or n=1
+        let k = if n > 1 { k.min(n - 1) } else { 0 };
         let sigma2 = (sigma * sigma).max(1e-9);
 
         let mut weights = vec![0.0f32; n * n];
