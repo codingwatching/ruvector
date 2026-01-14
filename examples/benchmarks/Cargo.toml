@@ -73,3 +73,7 @@ path = "src/bin/swarm_regret.rs"
 [[bin]]
 name = "timepuzzle-runner"
 path = "src/bin/timepuzzle_runner.rs"
+
+[[bin]]
+name = "intelligence-assessment"
+path = "src/bin/intelligence_assessment.rs"
