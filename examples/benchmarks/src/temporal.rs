@@ -472,3 +472,182 @@ mod tests {
         assert_eq!(result.solutions.len(), 1);
     }
 }
+
+// ============================================================================
+// Adaptive Solver with ReasoningBank Learning
+// ============================================================================
+
+use crate::reasoning_bank::{ReasoningBank, Strategy, Trajectory, Verdict};
+
+/// Adaptive temporal solver with learning capabilities
+///
+/// Uses ReasoningBank to:
+/// - Track solution trajectories
+/// - Learn from successes and failures
+/// - Adapt strategy based on puzzle characteristics
+/// - Achieve sublinear regret through experience
+#[derive(Clone, Debug)]
+pub struct AdaptiveSolver {
+    /// Internal solver
+    solver: TemporalSolver,
+    /// ReasoningBank for learning
+    pub reasoning_bank: ReasoningBank,
+    /// Current strategy
+    current_strategy: Strategy,
+    /// Total episodes completed
+    pub episodes: usize,
+}
+
+impl Default for AdaptiveSolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AdaptiveSolver {
+    /// Create a new adaptive solver
+    pub fn new() -> Self {
+        Self {
+            solver: TemporalSolver::default(),
+            reasoning_bank: ReasoningBank::new(),
+            current_strategy: Strategy::default(),
+            episodes: 0,
+        }
+    }
+
+    /// Create with pre-trained ReasoningBank
+    pub fn with_reasoning_bank(reasoning_bank: ReasoningBank) -> Self {
+        Self {
+            solver: TemporalSolver::default(),
+            reasoning_bank,
+            current_strategy: Strategy::default(),
+            episodes: 0,
+        }
+    }
+
+    /// Solve a puzzle with adaptive learning
+    pub fn solve(&mut self, puzzle: &TemporalPuzzle) -> Result<SolverResult> {
+        // Get constraint types for pattern matching
+        let constraint_types: Vec<String> = puzzle.constraints.iter()
+            .map(|c| constraint_type_name(c))
+            .collect();
+
+        // Get recommended strategy from ReasoningBank
+        self.current_strategy = self.reasoning_bank.get_strategy(
+            puzzle.difficulty,
+            &constraint_types,
+        );
+
+        // Configure solver based on strategy
+        self.solver.calendar_tool = self.current_strategy.use_rewriting;
+        self.solver.max_steps = self.current_strategy.max_steps;
+
+        // Create trajectory for this puzzle
+        let mut trajectory = Trajectory::new(&puzzle.id, puzzle.difficulty);
+        trajectory.constraint_types = constraint_types;
+
+        // Solve the puzzle
+        let start = std::time::Instant::now();
+        let result = self.solver.solve(puzzle)?;
+        trajectory.latency_ms = start.elapsed().as_millis() as u64;
+
+        // Record attempt
+        let solution_str = result.solutions.first()
+            .map(|d| d.to_string())
+            .unwrap_or_else(|| "none".to_string());
+
+        let confidence = self.calculate_confidence(&result, puzzle);
+
+        trajectory.record_attempt(
+            solution_str,
+            confidence,
+            result.steps,
+            result.tool_calls,
+            &self.current_strategy.name,
+        );
+
+        // Determine verdict
+        let verdict = if result.correct {
+            if confidence >= 0.9 {
+                Verdict::Success
+            } else {
+                Verdict::Acceptable
+            }
+        } else if result.solved {
+            Verdict::Suboptimal {
+                reason: "Solution found but incorrect".to_string(),
+                delta: 1.0 - confidence,
+            }
+        } else if confidence < self.current_strategy.confidence_threshold {
+            Verdict::LowConfidence
+        } else {
+            Verdict::Failed
+        };
+
+        trajectory.set_verdict(verdict, puzzle.solutions.first().map(|d| d.to_string()));
+
+        // Record trajectory for learning
+        self.reasoning_bank.record_trajectory(trajectory);
+        self.episodes += 1;
+
+        Ok(result)
+    }
+
+    /// Calculate confidence in a result
+    fn calculate_confidence(&self, result: &SolverResult, puzzle: &TemporalPuzzle) -> f64 {
+        let mut confidence = 0.5;
+
+        // Higher confidence if solved quickly
+        if result.solved {
+            confidence += 0.2;
+            if result.steps < self.solver.max_steps / 2 {
+                confidence += 0.1;
+            }
+        }
+
+        // Higher confidence with tool use on complex puzzles
+        if result.tool_calls > 0 && puzzle.difficulty > 5 {
+            confidence += 0.1;
+        }
+
+        // Lower confidence if took many steps
+        if result.steps > self.solver.max_steps * 3 / 4 {
+            confidence -= 0.1;
+        }
+
+        // Adjust based on learned calibration
+        let calibrated_threshold = self.reasoning_bank.calibration.get_threshold(puzzle.difficulty);
+        if confidence >= calibrated_threshold {
+            confidence += 0.05;
+        }
+
+        confidence.min(1.0).max(0.0)
+    }
+
+    /// Get learning progress
+    pub fn learning_progress(&self) -> crate::reasoning_bank::LearningProgress {
+        self.reasoning_bank.learning_progress()
+    }
+
+    /// Get hints for a puzzle
+    pub fn get_hints(&self, constraint_types: &[String]) -> Vec<String> {
+        self.reasoning_bank.get_hints(constraint_types)
+    }
+}
+
+/// Get the type name of a constraint for pattern matching
+fn constraint_type_name(constraint: &TemporalConstraint) -> String {
+    match constraint {
+        TemporalConstraint::Exact(_) => "Exact".to_string(),
+        TemporalConstraint::After(_) => "After".to_string(),
+        TemporalConstraint::Before(_) => "Before".to_string(),
+        TemporalConstraint::Between(_, _) => "Between".to_string(),
+        TemporalConstraint::DayOfWeek(_) => "DayOfWeek".to_string(),
+        TemporalConstraint::DaysAfter(_, _) => "DaysAfter".to_string(),
+        TemporalConstraint::DaysBefore(_, _) => "DaysBefore".to_string(),
+        TemporalConstraint::InMonth(_) => "InMonth".to_string(),
+        TemporalConstraint::InYear(_) => "InYear".to_string(),
+        TemporalConstraint::DayOfMonth(_) => "DayOfMonth".to_string(),
+        TemporalConstraint::RelativeToEvent(_, _) => "RelativeToEvent".to_string(),
+    }
+}

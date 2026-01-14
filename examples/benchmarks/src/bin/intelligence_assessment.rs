@@ -13,7 +13,7 @@ use ruvector_benchmarks::{
         print_intelligence_report,
     },
     swarm_regret::SwarmController,
-    temporal::TemporalSolver,
+    temporal::{TemporalSolver, AdaptiveSolver},
     timepuzzles::{PuzzleGenerator, PuzzleGeneratorConfig},
 };
 
@@ -32,6 +32,10 @@ struct Args {
     /// Enable calendar tool
     #[arg(long, default_value = "true")]
     calendar: bool,
+
+    /// Enable adaptive learning (ReasoningBank)
+    #[arg(long, default_value = "true")]
+    adaptive: bool,
 
     /// Random seed
     #[arg(long)]
@@ -56,8 +60,20 @@ fn main() -> Result<()> {
 
     // Initialize components
     let mut controller = SwarmController::new(args.tasks_per_episode);
-    let mut solver = TemporalSolver::with_tools(args.calendar, false);
-    solver.max_steps = 100;
+
+    // Choose solver based on adaptive flag
+    let mut adaptive_solver = if args.adaptive {
+        Some(AdaptiveSolver::new())
+    } else {
+        None
+    };
+    let mut basic_solver = if !args.adaptive {
+        let mut s = TemporalSolver::with_tools(args.calendar, false);
+        s.max_steps = 100;
+        Some(s)
+    } else {
+        None
+    };
 
     let puzzle_config = PuzzleGeneratorConfig {
         min_difficulty: 1,
@@ -71,6 +87,7 @@ fn main() -> Result<()> {
     println!("   Episodes:         {}", args.episodes);
     println!("   Tasks/episode:    {}", args.tasks_per_episode);
     println!("   Calendar tool:    {}", args.calendar);
+    println!("   Adaptive learning:{}", args.adaptive);
     println!();
 
     println!("🏃 Running assessment...");
@@ -94,7 +111,14 @@ fn main() -> Result<()> {
         for puzzle in &puzzles {
             raw_metrics.tasks_attempted += 1;
 
-            let result = solver.solve(puzzle)?;
+            // Use adaptive or basic solver
+            let result = if let Some(ref mut solver) = adaptive_solver {
+                solver.solve(puzzle)?
+            } else if let Some(ref mut solver) = basic_solver {
+                solver.solve(puzzle)?
+            } else {
+                unreachable!()
+            };
 
             if result.solved {
                 solved += 1;
@@ -259,6 +283,63 @@ fn main() -> Result<()> {
     }
     if assessment.overall_score >= 70.0 {
         println!("   • Good performance! Consider harder difficulty levels");
+    }
+
+    // Show adaptive learning progress if enabled
+    if let Some(ref solver) = adaptive_solver {
+        println!();
+        println!("╔══════════════════════════════════════════════════════════════╗");
+        println!("║                 Adaptive Learning Progress                    ║");
+        println!("╚══════════════════════════════════════════════════════════════╝");
+        println!();
+
+        let progress = solver.learning_progress();
+        println!("🧠 ReasoningBank Statistics:");
+        println!("   Total trajectories: {}", progress.total_trajectories);
+        println!("   Success rate:       {:.1}%", progress.success_rate * 100.0);
+        println!("   Improvement rate:   {:.4}", progress.improvement_rate);
+        println!("   Patterns learned:   {}", progress.patterns_learned);
+        println!("   Strategies tried:   {}", progress.strategies_tried);
+        println!(
+            "   Is improving:       {}",
+            if progress.is_improving {
+                "Yes ✓"
+            } else {
+                "No ✗"
+            }
+        );
+
+        // Show learned patterns
+        if !solver.reasoning_bank.patterns.is_empty() {
+            println!();
+            println!("📚 Learned Patterns:");
+            for (constraint_type, patterns) in &solver.reasoning_bank.patterns {
+                for p in patterns.iter().filter(|p| p.observations >= 3) {
+                    println!(
+                        "   • {}: {} strategy ({:.0}% success, {} obs)",
+                        constraint_type,
+                        p.best_strategy,
+                        p.success_rate * 100.0,
+                        p.observations
+                    );
+                }
+            }
+        }
+
+        // Show strategy stats
+        if !solver.reasoning_bank.strategy_stats.is_empty() {
+            println!();
+            println!("📊 Strategy Performance:");
+            for (strategy, stats) in &solver.reasoning_bank.strategy_stats {
+                println!(
+                    "   • {}: {:.1}% success ({} attempts, {:.1} avg steps)",
+                    strategy,
+                    stats.success_rate() * 100.0,
+                    stats.attempts,
+                    stats.avg_steps()
+                );
+            }
+        }
     }
 
     Ok(())

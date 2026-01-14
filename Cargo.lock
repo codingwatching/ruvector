@@ -3713,6 +3713,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "lean-agentic"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3b6dcd7e59353c45bde9490cac01423f16eb535da84f3be277c08087842778b"
+
+[[package]]
 name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6547,6 +6553,7 @@ dependencies = [
  "futures",
  "hdrhistogram",
  "indicatif",
+ "lean-agentic",
  "plotters",
  "rand 0.8.5",
  "rand_distr 0.4.3",
