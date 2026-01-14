@@ -49,16 +49,34 @@ impl DenseVec {
         self.values.len()
     }
 
-    /// Compute L2 norm
+    /// Compute L2 norm (SIMD-optimized)
     pub fn l2_norm(&self) -> f32 {
-        let mut s = 0.0f32;
-        for v in &self.values {
-            s += v * v;
+        let n = self.values.len();
+        let chunks = n / 4;
+
+        // Process 4 elements at a time
+        let mut sum0 = 0.0f32;
+        let mut sum1 = 0.0f32;
+        let mut sum2 = 0.0f32;
+        let mut sum3 = 0.0f32;
+
+        for i in 0..chunks {
+            let base = i * 4;
+            sum0 += self.values[base] * self.values[base];
+            sum1 += self.values[base + 1] * self.values[base + 1];
+            sum2 += self.values[base + 2] * self.values[base + 2];
+            sum3 += self.values[base + 3] * self.values[base + 3];
         }
+
+        let mut s = sum0 + sum1 + sum2 + sum3;
+        for i in (chunks * 4)..n {
+            s += self.values[i] * self.values[i];
+        }
+
         s.sqrt()
     }
 
-    /// Compute dot product with another vector
+    /// Compute dot product with another vector (SIMD-optimized for 4-wide chunks)
     pub fn dot(&self, other: &DenseVec) -> Result<f32> {
         if self.dim() != other.dim() {
             return Err(anyhow!(
@@ -67,10 +85,30 @@ impl DenseVec {
                 other.dim()
             ));
         }
-        let mut s = 0.0f32;
-        for i in 0..self.values.len() {
+
+        let n = self.values.len();
+        let chunks = n / 4;
+
+        // Process 4 elements at a time (auto-vectorizable)
+        let mut sum0 = 0.0f32;
+        let mut sum1 = 0.0f32;
+        let mut sum2 = 0.0f32;
+        let mut sum3 = 0.0f32;
+
+        for i in 0..chunks {
+            let base = i * 4;
+            sum0 += self.values[base] * other.values[base];
+            sum1 += self.values[base + 1] * other.values[base + 1];
+            sum2 += self.values[base + 2] * other.values[base + 2];
+            sum3 += self.values[base + 3] * other.values[base + 3];
+        }
+
+        // Handle remainder
+        let mut s = sum0 + sum1 + sum2 + sum3;
+        for i in (chunks * 4)..n {
             s += self.values[i] * other.values[i];
         }
+
         Ok(s)
     }
 

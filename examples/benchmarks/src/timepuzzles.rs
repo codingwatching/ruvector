@@ -11,7 +11,7 @@
 
 use crate::temporal::{TemporalConstraint, TemporalPuzzle};
 use anyhow::Result;
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, Weekday};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -241,19 +241,21 @@ impl PuzzleGenerator {
             .with_difficulty(difficulty)
             .with_solutions(vec![target]);
 
-        // Add constraints
+        // Add constraints and collect used anchors
         let constraint_types = self.select_constraint_types(num_constraints, difficulty);
+        let mut used_anchors: Vec<TemporalAnchor> = Vec::new();
+
         for ct in constraint_types {
-            let constraint = self.generate_constraint(&ct, target)?;
+            let (constraint, anchor_opt) = self.generate_constraint_with_anchor(&ct, target)?;
             puzzle.constraints.push(constraint);
+            if let Some(anchor) = anchor_opt {
+                used_anchors.push(anchor);
+            }
         }
 
-        // Add reference dates for relative constraints
-        if self.config.relative_constraints && difficulty >= 4 {
-            let anchor = self.anchors.choose(&mut self.rng).cloned();
-            if let Some(a) = anchor {
-                puzzle.references.insert(a.name.clone(), a.date);
-            }
+        // Add all used anchors to references
+        for anchor in used_anchors {
+            puzzle.references.insert(anchor.name.clone(), anchor.date);
         }
 
         // Add tags
@@ -306,17 +308,17 @@ impl PuzzleGenerator {
         types
     }
 
-    /// Generate a specific constraint
-    fn generate_constraint(
+    /// Generate a specific constraint, returning the constraint and any anchor used
+    fn generate_constraint_with_anchor(
         &mut self,
         ct: &ConstraintType,
         target: NaiveDate,
-    ) -> Result<TemporalConstraint> {
+    ) -> Result<(TemporalConstraint, Option<TemporalAnchor>)> {
         match ct {
-            ConstraintType::Year => Ok(TemporalConstraint::InYear(target.year())),
-            ConstraintType::Month => Ok(TemporalConstraint::InMonth(target.month())),
-            ConstraintType::DayOfMonth => Ok(TemporalConstraint::DayOfMonth(target.day())),
-            ConstraintType::DayOfWeek => Ok(TemporalConstraint::DayOfWeek(target.weekday())),
+            ConstraintType::Year => Ok((TemporalConstraint::InYear(target.year()), None)),
+            ConstraintType::Month => Ok((TemporalConstraint::InMonth(target.month()), None)),
+            ConstraintType::DayOfMonth => Ok((TemporalConstraint::DayOfMonth(target.day()), None)),
+            ConstraintType::DayOfWeek => Ok((TemporalConstraint::DayOfWeek(target.weekday()), None)),
             ConstraintType::DayRange => {
                 let start = target.day().saturating_sub(self.rng.gen_range(0..5));
                 let end = (target.day() + self.rng.gen_range(0..5)).min(28);
@@ -324,33 +326,31 @@ impl PuzzleGenerator {
                     .unwrap_or(target);
                 let end_date =
                     NaiveDate::from_ymd_opt(target.year(), target.month(), end).unwrap_or(target);
-                Ok(TemporalConstraint::Between(start_date, end_date))
+                Ok((TemporalConstraint::Between(start_date, end_date), None))
             }
             ConstraintType::DateRange => {
                 let days_before = self.rng.gen_range(0..10);
                 let days_after = self.rng.gen_range(0..10);
                 let start = target - chrono::Duration::days(days_before);
                 let end = target + chrono::Duration::days(days_after);
-                Ok(TemporalConstraint::Between(start, end))
+                Ok((TemporalConstraint::Between(start, end), None))
             }
             ConstraintType::RelativeToAnchor => {
-                if let Some(anchor) = self.anchors.choose(&mut self.rng) {
+                if let Some(anchor) = self.anchors.choose(&mut self.rng).cloned() {
                     let diff = (target - anchor.date).num_days();
-                    if diff >= 0 {
-                        Ok(TemporalConstraint::DaysAfter(anchor.name.clone(), diff))
+                    let constraint = if diff >= 0 {
+                        TemporalConstraint::DaysAfter(anchor.name.clone(), diff)
                     } else {
-                        Ok(TemporalConstraint::DaysBefore(
-                            anchor.name.clone(),
-                            diff.abs(),
-                        ))
-                    }
+                        TemporalConstraint::DaysBefore(anchor.name.clone(), diff.abs())
+                    };
+                    Ok((constraint, Some(anchor)))
                 } else {
-                    Ok(TemporalConstraint::InYear(target.year()))
+                    Ok((TemporalConstraint::InYear(target.year()), None))
                 }
             }
             ConstraintType::MultipleConditions => {
                 // This is a meta-type, just return year constraint
-                Ok(TemporalConstraint::InYear(target.year()))
+                Ok((TemporalConstraint::InYear(target.year()), None))
             }
         }
     }
