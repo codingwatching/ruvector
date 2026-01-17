@@ -1,22 +1,78 @@
 # ruQu: Classical Nervous System for Quantum Machines
 
 <p align="center">
-  <strong>🧠 Real-time coherence assessment that gives quantum computers structural self-awareness</strong>
+  <a href="https://ruv.io"><img src="https://img.shields.io/badge/ruv.io-quantum_computing-blueviolet?style=for-the-badge" alt="ruv.io"></a>
+  <a href="https://github.com/ruvnet/ruvector"><img src="https://img.shields.io/badge/RuVector-monorepo-orange?style=for-the-badge&logo=github" alt="RuVector"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/tests-103%2B_passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/latency-468ns_P99-blue" alt="P99 Latency">
+  <img src="https://img.shields.io/badge/throughput-3.8M%2Fsec-blue" alt="Throughput">
+  <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-green" alt="License">
+  <img src="https://img.shields.io/badge/rust-1.75%2B-orange?logo=rust" alt="Rust">
+</p>
+
+<p align="center">
+  <strong>Real-time coherence assessment that gives quantum computers the ability to sense their own health</strong>
 </p>
 
 <p align="center">
   <a href="#what-is-ruqu">What is ruQu?</a> •
+  <a href="#try-it-in-5-minutes">Try It</a> •
   <a href="#key-capabilities">Capabilities</a> •
-  <a href="#quick-start">Quick Start</a> •
   <a href="#tutorials">Tutorials</a> •
-  <a href="#use-cases">Use Cases</a>
+  <a href="https://ruv.io">ruv.io</a>
 </p>
 
 ---
 
-**Created by [ruv.io](https://ruv.io) and [RuVector](https://github.com/ruvnet/ruvector)**
+**Created by [ruv.io](https://ruv.io) — Building the future of quantum computing infrastructure**
 
-**103+ tests passing** | **Real O(n^{o(1)}) min-cut algorithm** | **3.8M syndromes/sec** | **468ns P99 latency**
+**Part of the [RuVector](https://github.com/ruvnet/ruvector) quantum computing toolkit**
+
+---
+
+## Try It in 5 Minutes
+
+Get a latency histogram and risk signal immediately:
+
+```bash
+# Clone and build
+git clone https://github.com/ruvnet/ruvector
+cd ruvector
+
+# Run the demo with live metrics
+cargo run -p ruqu --bin ruqu_demo --release -- --distance 5 --rounds 1000 --error-rate 0.01
+
+# Output: Latency histogram, throughput, decision breakdown
+```
+
+**What you'll see:**
+
+```
+╔═══════════════════════════════════════════════════════════════════╗
+║                    ruQu Demo - Proof Artifact                     ║
+╠═══════════════════════════════════════════════════════════════════╣
+║ Code Distance: d=5  | Error Rate: 0.0100  | Rounds:   1000      ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+Round │ Cut   │ Risk  │ Decision │ Regions │ Latency
+──────┼───────┼───────┼──────────┼─────────┼─────────
+    0 │ 13.83 │  0.00 │ PERMIT   │ 0000001 │  4521ns
+
+Latency: P50=3.9μs  P99=26μs  Mean=4.5μs
+Decisions: 100% PERMIT (low error rate)
+```
+
+**Try with higher error rate to see DENY decisions:**
+
+```bash
+cargo run -p ruqu --bin ruqu_demo --release -- --distance 3 --rounds 200 --error-rate 0.10
+# Output: 62% DENY, 38% DEFER at 10% error rate
+```
+
+**Metrics file generated:** `ruqu_metrics.json` with full histogram data for analysis.
 
 ---
 
@@ -121,11 +177,32 @@ Scaling Across Code Distances:
 
 ## What is ruQu?
 
-**ruQu** (pronounced "roo-cue") is a Rust library that gives quantum computers a "nervous system" — the ability to sense their own structural health and make real-time decisions about what's safe to do.
+**ruQu** (pronounced "roo-cue") is a Rust library that lets quantum computers know when it's safe to act.
 
-### The Simple Explanation
+### The Problem
 
-Think of ruQu like the pain receptors in your body:
+Quantum computers make errors constantly. Error correction codes (like surface codes) can fix these errors, but:
+
+1. **Some error patterns are dangerous** — correlated errors that span the whole chip can cause logical failures
+2. **Decoders are blind to structure** — they correct errors without knowing if the underlying graph is healthy
+3. **Crashes are expensive** — a logical failure means starting over completely
+
+### The Solution
+
+ruQu monitors the **structure** of error patterns using graph min-cut analysis:
+
+```
+Syndrome Stream → [Min-Cut Analysis] → PERMIT / DEFER / DENY
+                        ↓
+                  "Is the error pattern
+                   structurally safe?"
+```
+
+- **PERMIT**: Errors are scattered, safe to continue
+- **DEFER**: Uncertainty, proceed with caution
+- **DENY**: Correlated errors detected, quarantine this region
+
+### Real-World Analogy
 
 | Your Body | ruQu for Quantum |
 |-----------|------------------|
@@ -133,18 +210,18 @@ Think of ruQu like the pain receptors in your body:
 | Reflexes pull your hand away from heat automatically | ruQu quarantines fragile regions before they corrupt data |
 | You can still walk even with a sprained ankle | Quantum computer keeps running even with damaged qubits |
 
-**Without ruQu**: Quantum computer crashes → full reset → start over.
-
-**With ruQu**: Quantum computer senses trouble → isolates problem area → keeps healthy parts running.
-
 ### Why This Matters
 
-Current quantum computers are like a car without a dashboard — they run until something breaks, then stop completely. ruQu adds:
+**Without ruQu**: Quantum computer runs until logical failure → full reset → lose all progress.
 
-- **Speedometer**: How fast can I safely go right now?
-- **Engine temperature**: Which regions are overheating?
-- **Check engine light**: Early warning before failure
-- **Limp mode**: Keep driving at reduced capacity
+**With ruQu**: Quantum computer detects trouble early → isolates problem region → healthy parts keep running.
+
+Think of it like a car dashboard:
+
+- **Speedometer**: How much computational load can I safely handle?
+- **Engine temperature**: Which qubit regions are showing stress?
+- **Check engine light**: Early warning before logical failure
+- **Limp mode**: Reduced capacity is better than complete failure
 
 ---
 
@@ -1135,19 +1212,25 @@ Results:
 
 ## References
 
+### ruv.io Resources
+
+- **[ruv.io](https://ruv.io)** — Quantum computing infrastructure and tools
+- **[RuVector GitHub](https://github.com/ruvnet/ruvector)** — Full monorepo with all quantum tools
+- **[ruQu Demo](https://github.com/ruvnet/ruvector/tree/main/crates/ruQu)** — This crate's source code
+
 ### Documentation
 
 - [ADR-001: ruQu Architecture Decision Record](docs/adr/ADR-001-ruqu-architecture.md)
 - [DDD-001: Domain-Driven Design - Coherence Gate](docs/ddd/DDD-001-coherence-gate-domain.md)
 - [DDD-002: Domain-Driven Design - Syndrome Processing](docs/ddd/DDD-002-syndrome-processing-domain.md)
-- [Simulation Integration Guide](docs/SIMULATION-INTEGRATION.md) - Using Stim, stim-rs, and Rust quantum simulators
+- [Simulation Integration Guide](docs/SIMULATION-INTEGRATION.md) — Using Stim, stim-rs, and Rust quantum simulators
 
-### External Resources
+### Academic References
 
-- [El-Hayek, Henzinger, Li. "Dynamic Min-Cut with Subpolynomial Update Time." arXiv:2512.13105, 2025](https://arxiv.org/abs/2512.13105)
-- [Google Quantum AI. "Quantum error correction below the surface code threshold." Nature, 2024](https://www.nature.com/articles/s41586-024-08449-y)
-- [Riverlane. "Collision Clustering Decoder." Nature Communications, 2025](https://www.nature.com/articles/s41467-024-54738-z)
-- [Stim: High-performance Quantum Error Correction Simulator](https://github.com/quantumlib/Stim)
+- [El-Hayek, Henzinger, Li. "Dynamic Min-Cut with Subpolynomial Update Time." arXiv:2512.13105, 2025](https://arxiv.org/abs/2512.13105) — The core algorithm ruQu implements
+- [Google Quantum AI. "Quantum error correction below the surface code threshold." Nature, 2024](https://www.nature.com/articles/s41586-024-08449-y) — Context for QEC research
+- [Riverlane. "Collision Clustering Decoder." Nature Communications, 2025](https://www.nature.com/articles/s41467-024-54738-z) — Complementary decoder technology
+- [Stim: High-performance Quantum Error Correction Simulator](https://github.com/quantumlib/Stim) — Syndrome generation tool
 
 ---
 
@@ -1163,4 +1246,14 @@ MIT OR Apache-2.0
 
 <p align="center">
   <strong>ruQu — Structural self-awareness for the quantum age.</strong>
+</p>
+
+<p align="center">
+  <a href="https://ruv.io">ruv.io</a> •
+  <a href="https://github.com/ruvnet/ruvector">RuVector</a> •
+  <a href="https://github.com/ruvnet/ruvector/issues">Issues</a>
+</p>
+
+<p align="center">
+  <sub>Built with ❤️ by the <a href="https://ruv.io">ruv.io</a> team</sub>
 </p>

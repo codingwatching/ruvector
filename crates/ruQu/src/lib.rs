@@ -94,6 +94,10 @@ pub mod metrics;
 pub mod parallel;
 pub mod stim;
 
+// Production interfaces
+pub mod schema;
+pub mod traits;
+
 // Re-exports for convenient access
 pub use error::{Result, RuQuError};
 pub use filters::{

@@ -48,6 +48,9 @@ serde_json = { workspace = true }
 # Error handling
 thiserror = { workspace = true }
 
+# CRC for binary log format
+crc32fast = "1.4"
+
 [dev-dependencies]
 criterion = { workspace = true }
 proptest = { workspace = true }
@@ -98,3 +101,11 @@ full = ["structural", "tilezero", "simd", "decoder", "attention", "parallel", "t
 [lib]
 crate-type = ["rlib"]
 bench = false
+
+# ============================================================================
+# Binaries - Runnable proof artifacts
+# ============================================================================
+
+[[bin]]
+name = "ruqu_demo"
+path = "src/bin/ruqu_demo.rs"
