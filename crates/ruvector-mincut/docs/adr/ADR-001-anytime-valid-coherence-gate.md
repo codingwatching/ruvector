@@ -5,6 +5,64 @@
 **Authors**: Research Team
 **Deciders**: Architecture Review Board
 
+## Plain Language Summary
+
+**What is it?**
+
+An Anytime-Valid Coherence Gate is a small control loop that decides, at any moment:
+
+> "Is it safe to act right now, or should we pause or escalate?"
+
+It does not try to be smart. It tries to be **safe**, **calm**, and **correct** about permission.
+
+**Why "anytime-valid"?**
+
+Because you can stop the computation at any time and still trust the decision.
+
+Like a smoke detector:
+- It can keep listening forever
+- The moment it has enough evidence, it triggers
+- If you stop listening early, whatever it already concluded is still valid
+
+You are not waiting for a model to finish thinking. You are continuously monitoring stability.
+
+**Why "coherence"?**
+
+Coherence means: does the system's current state agree with itself?
+
+In RuVector, coherence is measured from structure:
+- RuVector holds relationships as vectors plus a graph
+- Min-cut and boundary signals tell you when the graph is becoming fragile or splitting into conflicting regions
+- If the system is splitting, you do not let it take big actions
+
+**What it outputs:**
+
+| Decision | Meaning |
+|----------|---------|
+| **Permit** | Stable enough, proceed |
+| **Defer** | Uncertain, escalate to a stronger model or human |
+| **Deny** | Unstable or policy-violating, block the action |
+
+Every decision returns a short "receipt" explaining why.
+
+**A concrete example:**
+
+An agent wants to push a config change to a network device.
+- If the dependency graph is stable and similar changes worked before → **Permit**
+- If signals are weird (new dependencies, new actors, drift) → **Defer** and ask for confirmation
+- If the change crosses a fragile boundary (touches a partition already unstable) → **Deny**
+
+**Why it matters:**
+
+It turns autonomy into something enterprises can trust because:
+- Actions are bounded
+- Uncertainty is handled explicitly
+- You get an audit trail
+
+*"Attention becomes a permission system, not a popularity contest"* — applied to whole-system actions instead of token attention.
+
+---
+
 ## Context
 
 The RuVector ecosystem requires a principled mechanism for controlling autonomous agent actions with:
@@ -193,6 +251,625 @@ pub struct WitnessReceipt {
 }
 ```
 
+## Security Hardening
+
+### Threat Model
+
+| Threat Actor | Capabilities | Target | Impact |
+|--------------|--------------|--------|--------|
+| **Malicious Agent** | Action injection, timing manipulation | Gate bypass | Unauthorized actions executed |
+| **Network Adversary** | Message interception, replay | Receipt forgery | False audit trail |
+| **Insider Threat** | Threshold modification, key access | Policy manipulation | Safety guarantees voided |
+| **Byzantine Node** | Arbitrary behavior in distributed gate | Consensus corruption | Inconsistent decisions |
+
+### Cryptographic Requirements
+
+#### Receipt Signing (CRITICAL)
+
+```rust
+pub struct WitnessReceipt {
+    // ... existing fields ...
+
+    // Cryptographic seal (REQUIRED)
+    pub receipt_hash: [u8; 32],         // Blake3 hash of serialized content
+    pub signature: Ed25519Signature,     // REQUIRED, not optional
+    pub signer_id: PublicKey,           // Identity of signing gate
+    pub timestamp_proof: TimestampProof, // Prevents backdating
+}
+
+/// Timestamp proof prevents replay and backdating
+pub struct TimestampProof {
+    pub timestamp: u64,
+    pub previous_receipt_hash: [u8; 32], // Chain linkage
+    pub merkle_root: [u8; 32],           // Batch anchor
+}
+
+impl WitnessReceipt {
+    /// Sign receipt - MUST be called before any external use
+    pub fn sign(&mut self, key: &SigningKey) -> Result<(), CryptoError> {
+        let content = self.serialize_without_signature();
+        self.receipt_hash = blake3::hash(&content).into();
+        self.signature = key.sign(&self.receipt_hash);
+        Ok(())
+    }
+
+    /// Verify receipt integrity and authenticity
+    pub fn verify(&self, trusted_keys: &KeyStore) -> Result<(), VerifyError> {
+        // 1. Verify hash
+        let expected_hash = blake3::hash(&self.serialize_without_signature());
+        if self.receipt_hash != expected_hash.into() {
+            return Err(VerifyError::HashMismatch);
+        }
+
+        // 2. Verify signature
+        let public_key = trusted_keys.get(&self.signer_id)?;
+        public_key.verify(&self.receipt_hash, &self.signature)?;
+
+        // 3. Verify timestamp chain
+        self.timestamp_proof.verify()?;
+
+        Ok(())
+    }
+}
+```
+
+#### Key Management
+
+| Key Type | Purpose | Rotation | Storage |
+|----------|---------|----------|---------|
+| Gate Signing Key | Sign receipts | 30 days | HSM or secure enclave |
+| Receipt Verification Keys | Verify receipts | On rotation | Distributed key store |
+| Threshold Keys | Multi-party signing | 90 days | Shamir secret sharing |
+
+### Attack Mitigations
+
+#### E-Value Manipulation Prevention
+
+```rust
+/// Bounds checking for e-value inputs
+impl EValue {
+    pub fn from_likelihood_ratio(
+        likelihood_h1: f64,
+        likelihood_h0: f64,
+    ) -> Result<Self, EValueError> {
+        // Prevent division by zero
+        if likelihood_h0 <= f64::EPSILON {
+            return Err(EValueError::InvalidDenominator);
+        }
+
+        let ratio = likelihood_h1 / likelihood_h0;
+
+        // Bound extreme values to prevent overflow attacks
+        let bounded = ratio.clamp(E_VALUE_MIN, E_VALUE_MAX);
+
+        // Log if clamping occurred (potential attack indicator)
+        if (bounded - ratio).abs() > f64::EPSILON {
+            security_log!("E-value clamped: {} -> {}", ratio, bounded);
+        }
+
+        Ok(Self { value: bounded, ..Default::default() })
+    }
+}
+
+const E_VALUE_MIN: f64 = 1e-10;
+const E_VALUE_MAX: f64 = 1e10;
+```
+
+#### Race Condition Prevention
+
+```rust
+/// Atomic gate decision with sequence numbers
+pub struct AtomicGateDecision {
+    /// Monotonic sequence for ordering
+    sequence: AtomicU64,
+    /// Lock for decision atomicity
+    decision_lock: RwLock<()>,
+}
+
+impl AtomicGateDecision {
+    pub async fn evaluate(&self, action: &Action) -> GateResult {
+        // Acquire exclusive lock for decision
+        let _guard = self.decision_lock.write().await;
+
+        // Get sequence number BEFORE evaluation
+        let seq = self.sequence.fetch_add(1, Ordering::SeqCst);
+
+        // Evaluate all three signals atomically
+        let result = self.evaluate_internal(action, seq).await;
+
+        // Sequence number in receipt ensures ordering
+        result.with_sequence(seq)
+    }
+}
+```
+
+#### Replay Attack Prevention
+
+```rust
+/// Replay prevention via nonce tracking
+pub struct ReplayGuard {
+    /// Recent action hashes (bloom filter for efficiency)
+    recent_actions: BloomFilter,
+    /// Sliding window of full hashes for false positive resolution
+    hash_window: VecDeque<[u8; 32]>,
+    /// Maximum age of tracked actions
+    window_duration: Duration,
+}
+
+impl ReplayGuard {
+    pub fn check_and_record(&mut self, action: &Action) -> Result<(), ReplayError> {
+        let hash = action.content_hash();
+
+        // Fast path: bloom filter check
+        if self.recent_actions.might_contain(&hash) {
+            // Slow path: verify against full hash window
+            if self.hash_window.contains(&hash) {
+                return Err(ReplayError::DuplicateAction { hash });
+            }
+        }
+
+        // Record action
+        self.recent_actions.insert(&hash);
+        self.hash_window.push_back(hash);
+        self.prune_old_entries();
+
+        Ok(())
+    }
+}
+```
+
+### Trust Boundaries
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         TRUST BOUNDARY: GATE CORE                       │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  • E-process computation    • Min-cut evaluation                 │  │
+│  │  • Conformal prediction     • Decision logic                     │  │
+│  │  • Receipt signing          • Key material                       │  │
+│  │                                                                   │  │
+│  │  Invariants:                                                      │  │
+│  │  - All inputs validated before use                               │  │
+│  │  - All outputs signed before release                             │  │
+│  │  - No external calls during decision                             │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                    │                                    │
+│                         (authenticated channel)                         │
+│                                    │                                    │
+└────────────────────────────────────┼────────────────────────────────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────┐
+│                    TRUST BOUNDARY: AGENT INTERFACE                      │
+│                                    │                                    │
+│  • Action submission (validated)   │  • Decision receipt (verified)    │
+│  • Context provision (sanitized)   │  • Witness query (authenticated)  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Performance Optimization
+
+### Identified Bottlenecks & Solutions
+
+#### 1. E-Process History Management
+
+**Problem**: Unbounded history growth in `EProcess.history: Vec<EValue>`
+
+**Solution**: Ring buffer with configurable retention
+
+```rust
+pub struct EProcess {
+    /// Current accumulated value (always maintained)
+    current: f64,
+
+    /// Bounded history ring buffer
+    history: RingBuffer<EValueSummary>,
+
+    /// Checkpoint for long-term audit (sampled)
+    checkpoints: Vec<EProcessCheckpoint>,
+}
+
+/// Compact summary for history
+pub struct EValueSummary {
+    value: f32,           // Reduced precision for storage
+    timestamp: u32,       // Relative to epoch
+    flags: u8,            // Metadata bits
+}
+
+impl EProcess {
+    const HISTORY_CAPACITY: usize = 1024;
+    const CHECKPOINT_INTERVAL: usize = 100;
+
+    pub fn update(&mut self, e: EValue) {
+        // Update current (always)
+        self.current = self.update_rule.apply(self.current, e.value);
+
+        // Add to ring buffer (bounded)
+        self.history.push(e.to_summary());
+
+        // Periodic checkpoint for audit
+        if self.history.len() % Self::CHECKPOINT_INTERVAL == 0 {
+            self.checkpoints.push(self.checkpoint());
+        }
+    }
+}
+```
+
+#### 2. Min-Cut Hierarchy Updates
+
+**Problem**: Sequential iteration over all hierarchy levels
+
+**Solution**: Lazy propagation with dirty tracking
+
+```rust
+pub struct LazyHierarchy {
+    levels: Vec<HierarchyLevel>,
+    /// Bitmap of levels needing update
+    dirty_levels: u64,
+    /// Deferred updates queue
+    pending_updates: VecDeque<DeferredUpdate>,
+}
+
+impl LazyHierarchy {
+    pub fn insert(&mut self, edge: Edge) {
+        // Only update lowest level immediately
+        self.levels[0].insert(edge);
+        self.dirty_levels |= 1;
+
+        // Defer higher level updates
+        self.pending_updates.push_back(DeferredUpdate::Insert(edge));
+    }
+
+    pub fn get_cut(&mut self) -> CutValue {
+        // Propagate only if needed for query
+        if self.dirty_levels != 0 {
+            self.propagate_lazy();
+        }
+        self.levels.last().unwrap().cut_value()
+    }
+
+    fn propagate_lazy(&mut self) {
+        // Process only dirty levels
+        while self.dirty_levels != 0 {
+            let level = self.dirty_levels.trailing_zeros() as usize;
+            self.update_level(level);
+            self.dirty_levels &= !(1 << level);
+        }
+    }
+}
+```
+
+#### 3. SIMD-Optimized E-Value Computation
+
+```rust
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
+/// Batch e-value computation with SIMD
+pub fn compute_mixture_evalue_simd(
+    likelihoods_h1: &[f64],
+    likelihoods_h0: &[f64],
+    weights: &[f64],
+) -> f64 {
+    assert_eq!(likelihoods_h1.len(), likelihoods_h0.len());
+    assert_eq!(likelihoods_h1.len(), weights.len());
+
+    #[cfg(target_feature = "avx2")]
+    unsafe {
+        let mut sum = _mm256_setzero_pd();
+
+        for i in (0..likelihoods_h1.len()).step_by(4) {
+            let h1 = _mm256_loadu_pd(likelihoods_h1.as_ptr().add(i));
+            let h0 = _mm256_loadu_pd(likelihoods_h0.as_ptr().add(i));
+            let w = _mm256_loadu_pd(weights.as_ptr().add(i));
+
+            let ratio = _mm256_div_pd(h1, h0);
+            let weighted = _mm256_mul_pd(ratio, w);
+            sum = _mm256_add_pd(sum, weighted);
+        }
+
+        // Horizontal sum
+        horizontal_sum_pd(sum)
+    }
+
+    #[cfg(not(target_feature = "avx2"))]
+    {
+        // Scalar fallback
+        likelihoods_h1.iter()
+            .zip(likelihoods_h0.iter())
+            .zip(weights.iter())
+            .map(|((h1, h0), w)| (h1 / h0) * w)
+            .sum()
+    }
+}
+```
+
+#### 4. Receipt Serialization Optimization
+
+```rust
+/// Zero-copy receipt serialization
+pub struct ReceiptBuffer {
+    /// Pre-allocated buffer pool
+    pool: BufferPool,
+    /// Current buffer
+    current: Buffer,
+}
+
+impl WitnessReceipt {
+    /// Serialize to pre-allocated buffer (zero-copy)
+    pub fn serialize_into(&self, buffer: &mut [u8]) -> Result<usize, SerializeError> {
+        let mut cursor = 0;
+
+        // Fixed-size header (no allocation)
+        cursor += self.write_header(&mut buffer[cursor..])?;
+
+        // Structural witness (fixed size)
+        cursor += self.structural.write_to(&mut buffer[cursor..])?;
+
+        // Predictive witness (bounded size)
+        cursor += self.predictive.write_to(&mut buffer[cursor..])?;
+
+        // Evidential witness (fixed size)
+        cursor += self.evidential.write_to(&mut buffer[cursor..])?;
+
+        // Hash and signature (fixed size)
+        buffer[cursor..cursor + 32].copy_from_slice(&self.receipt_hash);
+        cursor += 32;
+        buffer[cursor..cursor + 64].copy_from_slice(&self.signature.to_bytes());
+        cursor += 64;
+
+        Ok(cursor)
+    }
+}
+```
+
+### Latency Budget (Revised)
+
+| Component | Budget | Optimization | Measured p99 |
+|-----------|--------|--------------|--------------|
+| Min-cut query | 10ms | Lazy propagation | TBD |
+| Conformal prediction | 15ms | Cached quantiles | TBD |
+| E-process update | 5ms | SIMD mixture | TBD |
+| Decision logic | 5ms | Short-circuit | TBD |
+| Receipt generation | 10ms | Zero-copy serialize | TBD |
+| Signing | 5ms | Ed25519 batch | TBD |
+| **Total** | **50ms** | | |
+
+---
+
+## Distributed Coordination
+
+### Multi-Agent Gate Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DISTRIBUTED COHERENCE GATE                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐     │
+│  │   REGIONAL      │    │   REGIONAL      │    │   REGIONAL      │     │
+│  │   GATE (Raft)   │    │   GATE (Raft)   │    │   GATE (Raft)   │     │
+│  │                 │    │                 │    │                 │     │
+│  │  • Local cuts   │    │  • Local cuts   │    │  • Local cuts   │     │
+│  │  • Local conf   │    │  • Local conf   │    │  • Local conf   │     │
+│  │  • Local e-proc │    │  • Local e-proc │    │  • Local e-proc │     │
+│  └────────┬────────┘    └────────┬────────┘    └────────┬────────┘     │
+│           │                      │                      │              │
+│           └──────────────────────┼──────────────────────┘              │
+│                                  │                                     │
+│                    ┌─────────────▼─────────────┐                       │
+│                    │   GLOBAL COORDINATOR      │                       │
+│                    │   (DAG Consensus)         │                       │
+│                    │                           │                       │
+│                    │  • Cross-region cuts      │                       │
+│                    │  • Aggregated e-process   │                       │
+│                    │  • Boundary arbitration   │                       │
+│                    └───────────────────────────┘                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Hierarchical Decision Protocol
+
+```rust
+/// Distributed gate with hierarchical coordination
+pub struct DistributedGateController {
+    /// Local gate for fast-path decisions
+    local_gate: AnytimeGateController,
+
+    /// Regional coordinator (Raft consensus)
+    regional: RegionalCoordinator,
+
+    /// Global coordinator (DAG consensus)
+    global: GlobalCoordinator,
+
+    /// Decision routing policy
+    routing: DecisionRoutingPolicy,
+}
+
+pub enum DecisionScope {
+    /// Action affects only local partition
+    Local,
+    /// Action crosses regional boundary
+    Regional,
+    /// Action has global implications
+    Global,
+}
+
+impl DistributedGateController {
+    pub async fn evaluate(&mut self, action: &Action, context: &Context) -> GateResult {
+        // 1. Determine scope
+        let scope = self.routing.classify(action, context);
+
+        // 2. Route to appropriate level
+        match scope {
+            DecisionScope::Local => {
+                // Fast path: local decision only
+                self.local_gate.evaluate(action, context)
+            }
+
+            DecisionScope::Regional => {
+                // Medium path: coordinate with regional peers
+                let local_result = self.local_gate.evaluate(action, context);
+                let regional_result = self.regional.coordinate(action, &local_result).await?;
+                self.merge_results(local_result, regional_result)
+            }
+
+            DecisionScope::Global => {
+                // Slow path: full coordination
+                let local_result = self.local_gate.evaluate(action, context);
+                let regional_result = self.regional.coordinate(action, &local_result).await?;
+                let global_result = self.global.arbitrate(action, &regional_result).await?;
+                self.merge_all_results(local_result, regional_result, global_result)
+            }
+        }
+    }
+}
+```
+
+### Distributed E-Process Aggregation
+
+```rust
+/// E-process that aggregates across distributed gates
+pub struct DistributedEProcess {
+    /// Local e-process
+    local: EProcess,
+
+    /// Peer e-process summaries (received via gossip)
+    peer_summaries: HashMap<NodeId, EProcessSummary>,
+
+    /// Aggregation method
+    aggregation: AggregationMethod,
+}
+
+pub enum AggregationMethod {
+    /// Conservative: minimum across all nodes
+    Minimum,
+    /// Average with confidence weighting
+    WeightedAverage,
+    /// Consensus-based (requires agreement)
+    Consensus { threshold: f64 },
+}
+
+impl DistributedEProcess {
+    /// Get aggregated e-value for distributed decision
+    pub fn aggregated_value(&self) -> f64 {
+        match self.aggregation {
+            AggregationMethod::Minimum => {
+                let local = self.local.current_value();
+                let peer_min = self.peer_summaries.values()
+                    .map(|s| s.current_value)
+                    .fold(f64::INFINITY, f64::min);
+                local.min(peer_min)
+            }
+
+            AggregationMethod::WeightedAverage => {
+                let total_weight: f64 = 1.0 + self.peer_summaries.values()
+                    .map(|s| s.confidence_weight)
+                    .sum::<f64>();
+
+                let weighted_sum = self.local.current_value()
+                    + self.peer_summaries.values()
+                        .map(|s| s.current_value * s.confidence_weight)
+                        .sum::<f64>();
+
+                weighted_sum / total_weight
+            }
+
+            AggregationMethod::Consensus { threshold } => {
+                // Requires threshold fraction of nodes to agree
+                let values: Vec<f64> = std::iter::once(self.local.current_value())
+                    .chain(self.peer_summaries.values().map(|s| s.current_value))
+                    .collect();
+
+                // Return median if sufficient agreement, else conservative min
+                if self.check_agreement(&values, threshold) {
+                    statistical_median(&values)
+                } else {
+                    values.iter().cloned().fold(f64::INFINITY, f64::min)
+                }
+            }
+        }
+    }
+}
+```
+
+### Fault Tolerance
+
+```rust
+/// Fault-tolerant gate with automatic failover
+pub struct FaultTolerantGate {
+    /// Primary gate
+    primary: AnytimeGateController,
+
+    /// Standby gates (hot standbys)
+    standbys: Vec<AnytimeGateController>,
+
+    /// Health monitor
+    health: HealthMonitor,
+
+    /// Failover policy
+    failover: FailoverPolicy,
+}
+
+pub struct FailoverPolicy {
+    /// Maximum consecutive failures before failover
+    max_failures: u32,
+    /// Health check interval
+    check_interval: Duration,
+    /// Recovery grace period
+    recovery_grace: Duration,
+}
+
+impl FaultTolerantGate {
+    pub async fn evaluate(&mut self, action: &Action, context: &Context) -> GateResult {
+        // Try primary
+        match self.try_primary(action, context).await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                self.health.record_failure(&e);
+            }
+        }
+
+        // Failover to standbys
+        for (idx, standby) in self.standbys.iter_mut().enumerate() {
+            match standby.evaluate(action, context) {
+                Ok(result) => {
+                    // Promote standby if primary unhealthy
+                    if self.health.should_failover() {
+                        self.promote_standby(idx);
+                    }
+                    return Ok(result);
+                }
+                Err(e) => {
+                    self.health.record_standby_failure(idx, &e);
+                }
+            }
+        }
+
+        // All gates failed - safe default
+        Ok(GateResult {
+            decision: GateDecision::Deny,
+            reason: "All gates unavailable - failing safe".into(),
+            ..Default::default()
+        })
+    }
+}
+```
+
+### Integration with RuVector Consensus
+
+| Consensus Layer | RuVector Module | Gate Integration |
+|-----------------|-----------------|------------------|
+| Regional (Raft) | `ruvector-raft` | Local cut coordination, leader-based decisions |
+| Global (DAG) | `ruvector-cluster` | Cross-region boundary arbitration |
+| State Sync | `ruvector-sync` | E-process summary propagation |
+| Receipt Chain | `ruvector-merkle` | Distributed receipt verification |
+
+---
+
 ## Consequences
 
 ### Benefits
@@ -202,6 +879,10 @@ pub struct WitnessReceipt {
 3. **Computational Efficiency**: O(n^{o(1)}) update time from subpolynomial min-cut
 4. **Audit Trail**: Every decision has cryptographic witness receipt
 5. **Defense in Depth**: Three independent signals must concur for permit
+6. **Cryptographic Integrity**: All receipts signed with Ed25519
+7. **Attack Resistance**: E-value bounds, replay guards, race condition prevention
+8. **Distributed Scalability**: Hierarchical coordination with regional and global tiers
+9. **Fault Tolerance**: Automatic failover with safe defaults
 
 ### Risks & Mitigations
 
@@ -211,15 +892,26 @@ pub struct WitnessReceipt {
 | E-value power under uncertainty | Mixture e-values for robustness |
 | Graph model mismatch | Learn graph structure from trajectories |
 | Threshold tuning | Adaptive thresholds via meta-learning |
+| Receipt forgery | Mandatory Ed25519 signing; chain linkage |
+| E-value manipulation | Input bounds; clamping with security logging |
+| Race conditions | Atomic decisions with sequence numbers |
+| Replay attacks | Bloom filter + sliding window guard |
+| Network partitions | Hierarchical decisions; local autonomy |
+| Byzantine nodes | Consensus-based aggregation; safe defaults |
 
 ### Complexity Analysis
 
-| Operation | Current | With AVCG |
-|-----------|---------|-----------|
-| Edge update | O(n^{o(1)}) | O(n^{o(1)}) (unchanged) |
-| Gate evaluation | O(1) | O(k) where k = prediction set computation |
-| Witness generation | O(m) | O(m) (amortized) |
-| Certificate verification | O(n) | O(n + log T) where T = history length |
+| Operation | Current | With AVCG | Distributed AVCG |
+|-----------|---------|-----------|------------------|
+| Edge update | O(n^{o(1)}) | O(n^{o(1)}) | O(n^{o(1)}) + network |
+| Gate evaluation | O(1) | O(k) prediction set | O(k) + O(R) regional |
+| Witness generation | O(m) | O(m) amortized | O(m) + signing |
+| Certificate verification | O(n) | O(n + log T) | O(n + log T) + sig verify |
+| Receipt signing | N/A | O(1) Ed25519 | O(1) + HSM latency |
+| Distributed consensus | N/A | N/A | O(log N) Raft |
+| E-process aggregation | N/A | O(1) | O(P) peers |
+
+Where: k = prediction set size, T = history length, R = regional peers, N = cluster size, P = peer count
 
 ## References
 
