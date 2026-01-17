@@ -1319,6 +1319,41 @@ Results:
 
 ---
 
+## Limitations & Roadmap
+
+### Current Limitations
+
+| Limitation | Impact | Mitigation Path |
+|------------|--------|-----------------|
+| **Simulation-only validation** | Hardware behavior may differ | Partner with hardware teams for on-device testing |
+| **Surface code focus** | Other codes (color, Floquet) untested | Architecture is code-agnostic; validation needed |
+| **Fixed grid topology** | Assumes regular detector layout | Extend to arbitrary graphs |
+| **API stability** | v0.x means breaking changes possible | Semantic versioning; deprecation warnings |
+
+### What We Don't Know Yet
+
+- **Scaling behavior at d>11** — Algorithm is O(n^{o(1)}) in theory; large-scale benchmarks pending
+- **Real hardware noise models** — Simulation uses idealized correlated bursts; real drift patterns may differ
+- **Optimal threshold selection** — Current thresholds are empirically tuned; adaptive learning may improve
+
+### Roadmap
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| **v0.1** | Core coherence gate with min-cut | ✅ Complete |
+| **v0.2** | Predictive early warning, drift detection | ✅ Complete |
+| **v0.3** | Hardware integration API | 🔄 In progress |
+| **v0.4** | Multi-code support (color codes) | 📋 Planned |
+| **v1.0** | Production-ready with hardware validation | 📋 Planned |
+
+### How to Help
+
+- **Hardware partners**: We need access to real syndrome streams for validation
+- **Algorithm experts**: Optimize min-cut for specific code geometries
+- **Application developers**: Build on ruQu for healthcare, finance, or security use cases
+
+---
+
 ## References
 
 <details>
