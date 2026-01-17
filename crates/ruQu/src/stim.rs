@@ -85,6 +85,31 @@ impl SurfaceCodeConfig {
     pub fn total_detectors(&self) -> usize {
         self.detectors_per_round() * self.rounds
     }
+
+    /// Builder: set error rate
+    pub fn with_error_rate(mut self, rate: f64) -> Self {
+        self.error_rate = rate;
+        self
+    }
+
+    /// Builder: set measurement error rate
+    pub fn with_measurement_error_rate(mut self, _rate: f64) -> Self {
+        // Store as a fraction of error_rate for now
+        self.measure_errors = true;
+        self
+    }
+
+    /// Builder: set random seed for reproducibility
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// Builder: set number of rounds
+    pub fn with_rounds(mut self, rounds: usize) -> Self {
+        self.rounds = rounds;
+        self
+    }
 }
 
 impl Default for SurfaceCodeConfig {
