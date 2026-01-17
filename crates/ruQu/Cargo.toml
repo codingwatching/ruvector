@@ -1,0 +1,73 @@
+[package]
+name = "ruqu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Classical nervous system for quantum machines - real-time coherence assessment via dynamic min-cut"
+keywords = ["quantum", "coherence", "gate", "min-cut", "error-correction"]
+categories = ["science", "algorithms", "hardware-support"]
+
+[dependencies]
+# RuVector dependencies
+ruvector-mincut = { path = "../ruvector-mincut", optional = true }
+cognitum-gate-tilezero = { path = "../cognitum-gate-tilezero", optional = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Instrumentation
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+# ============================================================================
+# Benchmarks - Comprehensive performance testing
+# Run all: cargo bench -p ruqu
+# Run specific: cargo bench -p ruqu --bench latency_bench
+# ============================================================================
+
+[[bench]]
+name = "syndrome_bench"
+harness = false
+
+[[bench]]
+name = "latency_bench"
+harness = false
+
+[[bench]]
+name = "throughput_bench"
+harness = false
+
+[[bench]]
+name = "scaling_bench"
+harness = false
+
+[[bench]]
+name = "memory_bench"
+harness = false
+
+[features]
+default = ["structural"]
+simd = []  # SIMD acceleration for bitmap operations
+wasm = []  # WASM-compatible mode (no SIMD)
+structural = ["ruvector-mincut"]  # Min-cut based structural filter
+tilezero = ["cognitum-gate-tilezero"]  # TileZero arbiter integration
+full = ["structural", "tilezero", "simd"]  # All features enabled
+
+[lib]
+crate-type = ["rlib"]
+bench = false

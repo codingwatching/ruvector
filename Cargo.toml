@@ -62,6 +62,7 @@ members = [
     "crates/cognitum-gate-kernel",
     "crates/cognitum-gate-tilezero",
     "crates/mcp-gate",
+    "crates/ruQu",
 ]
 resolver = "2"
 
