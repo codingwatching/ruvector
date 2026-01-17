@@ -1262,6 +1262,353 @@ The permit token as a capability means:
 
 ---
 
+## API Contract
+
+### Request: Permit Action
+
+```json
+{
+  "action_id": "cfg-push-7a3f",
+  "action_type": "config_change",
+  "target": {
+    "device": "router-west-03",
+    "path": "/network/interfaces/eth0"
+  },
+  "context": {
+    "agent_id": "ops-agent-12",
+    "session_id": "sess-abc123",
+    "prior_actions": ["cfg-push-7a3e"],
+    "urgency": "normal"
+  }
+}
+```
+
+### Response: Permit
+
+```json
+{
+  "decision": "permit",
+  "token": "eyJ0eXAiOiJQVCIsImFsZyI6IkVkMjU1MTkifQ...",
+  "valid_until_ns": 1737158400000000000,
+  "witness": {
+    "structural": {
+      "cut_value": 12.7,
+      "partition": "stable",
+      "critical_edges": 0
+    },
+    "predictive": {
+      "set_size": 3,
+      "coverage": 0.92
+    },
+    "evidential": {
+      "e_value": 847.3,
+      "verdict": "accept"
+    }
+  },
+  "receipt_sequence": 1847392
+}
+```
+
+### Response: Defer
+
+```json
+{
+  "decision": "defer",
+  "reason": "shift_detected",
+  "detail": "Distribution shift pressure 0.73 exceeds threshold 0.5",
+  "escalation": {
+    "to": "human_operator",
+    "context_url": "/receipts/1847393/context",
+    "timeout_ns": 300000000000
+  },
+  "witness": {
+    "structural": { "cut_value": 11.2, "partition": "stable" },
+    "predictive": { "set_size": 18, "coverage": 0.91 },
+    "evidential": { "e_value": 3.2, "verdict": "continue" }
+  },
+  "receipt_sequence": 1847393
+}
+```
+
+### Response: Deny
+
+```json
+{
+  "decision": "deny",
+  "reason": "boundary_violation",
+  "detail": "Action crosses fragile partition (cut=2.1 < min=5.0)",
+  "witness": {
+    "structural": {
+      "cut_value": 2.1,
+      "partition": "fragile",
+      "critical_edges": 4,
+      "boundary": ["edge-17", "edge-23", "edge-41", "edge-52"]
+    },
+    "predictive": { "set_size": 47, "coverage": 0.88 },
+    "evidential": { "e_value": 0.004, "verdict": "reject" }
+  },
+  "receipt_sequence": 1847394
+}
+```
+
+---
+
+## Migration Path
+
+### Phase M1: Shadow Mode
+
+Run AVCG alongside existing `GateController`. Compare decisions, don't enforce.
+
+```rust
+impl HybridGate {
+    pub fn evaluate(&mut self, action: &Action) -> GateResult {
+        // Existing gate makes the decision
+        let legacy_result = self.legacy_gate.evaluate(action);
+
+        // AVCG runs in shadow, logs disagreements
+        let avcg_result = self.avcg_gate.evaluate(action);
+
+        if legacy_result.decision != avcg_result.decision {
+            metrics::counter!("gate.shadow.disagreement").increment(1);
+            log::info!(
+                "Shadow disagreement: legacy={:?} avcg={:?} action={}",
+                legacy_result.decision,
+                avcg_result.decision,
+                action.id
+            );
+        }
+
+        legacy_result  // Legacy still decides
+    }
+}
+```
+
+**Exit criteria**: <1% disagreement rate over 7 days, zero false denies on known-safe actions.
+
+### Phase M2: Canary Enforcement
+
+AVCG enforces for 5% of traffic, legacy handles rest.
+
+```rust
+impl CanaryGate {
+    pub fn evaluate(&mut self, action: &Action) -> GateResult {
+        let canary = self.canary_selector.select(action);
+
+        if canary {
+            metrics::counter!("gate.canary.avcg").increment(1);
+            self.avcg_gate.evaluate(action)
+        } else {
+            self.legacy_gate.evaluate(action)
+        }
+    }
+}
+```
+
+**Exit criteria**: No incidents attributed to AVCG decisions over 14 days.
+
+### Phase M3: Majority Rollout
+
+AVCG handles 95%, legacy available for fallback.
+
+### Phase M4: Full Cutover
+
+Legacy removed. AVCG is the gate.
+
+```
+Timeline:
+M1 (Shadow)     → 2-4 weeks
+M2 (Canary 5%)  → 2 weeks
+M3 (Majority)   → 2 weeks
+M4 (Full)       → 1 week
+                  ─────────
+Total           → 7-9 weeks
+```
+
+---
+
+## Observability
+
+### Metrics (Prometheus)
+
+```
+# Decision counters
+gate_decisions_total{decision="permit|defer|deny", reason="..."}
+
+# Latency histograms
+gate_latency_seconds{phase="mincut|conformal|eprocess|decision|receipt"}
+
+# Signal values
+gate_cut_value{quantile="0.5|0.9|0.99"}
+gate_prediction_set_size{quantile="0.5|0.9|0.99"}
+gate_evalue{quantile="0.5|0.9|0.99"}
+
+# Health
+gate_healthy{component="mincut|conformal|eprocess"}
+gate_failover_total{from="primary|standby_N"}
+
+# Coverage tracking
+gate_conformal_coverage_rate  # Should stay ≥ 0.85
+gate_eprocess_power           # Evidence accumulation rate
+```
+
+### Alerting Thresholds
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| `GateHighDenyRate` | deny_rate > 10% for 5m | Warning |
+| `GateLatencyHigh` | p99 > 100ms for 5m | Warning |
+| `GateCoverageDrift` | coverage < 0.80 for 15m | Critical |
+| `GateUnhealthy` | any component unhealthy for 1m | Critical |
+| `GateReceiptChainBroken` | hash verification fails | Critical |
+
+### Debug Query: Why Was This Denied?
+
+```bash
+# Get full decision context
+curl /api/gate/receipts/1847394/explain
+
+# Response:
+{
+  "receipt_sequence": 1847394,
+  "decision": "deny",
+  "explanation": {
+    "primary_reason": "structural",
+    "structural": {
+      "cut_value": 2.1,
+      "threshold": 5.0,
+      "failed": true,
+      "boundary_edges": [
+        {"id": "edge-17", "weight": 0.3, "endpoints": ["node-a", "node-b"]},
+        ...
+      ],
+      "partition_context": "Device router-west-03 is in partition P7 which has been unstable since 14:32:07 UTC"
+    },
+    "predictive": { "failed": false, "detail": "Set size 47 within bounds" },
+    "evidential": { "failed": true, "detail": "E-value 0.004 < τ_deny 0.01" }
+  },
+  "suggested_action": "Wait for partition P7 to stabilize or escalate to human approval",
+  "similar_past_decisions": [1847201, 1846998, 1846754]
+}
+```
+
+---
+
+## Open Questions Resolution
+
+### Q1: Graph model scope — immediate actions or multi-step lookahead?
+
+**Decision**: Immediate actions for v0, optional 1-step lookahead for v1.
+
+**Rationale**: Multi-step lookahead requires predicting action sequences, which adds latency and complexity. Start simple: evaluate the action being requested *right now*. If the current action is safe but would lead to an unsafe state, the *next* action will be denied when it's requested.
+
+### Q2: E-process null — "action safety" vs "policy consistency"?
+
+**Decision**: Action safety as primary null, policy consistency as secondary.
+
+**Rationale**:
+- Primary H₀: P(action leads to unsafe state) ≤ p₀
+- Secondary (optional): Current action consistent with established policy
+
+Action safety is more fundamental. Policy consistency can be added as a separate e-process that runs in parallel.
+
+### Q3: Threshold learning — fixed or adaptive?
+
+**Decision**: Fixed for v0, adaptive via meta-learning for v1.
+
+**Rationale**: Fixed thresholds are easier to audit and explain. Once we have production data, we can train a meta-learner to adjust thresholds based on observed false positive/negative rates.
+
+### Q4: Human-in-loop — how are DEFER decisions presented?
+
+**Decision**: Structured escalation with timeout and context link.
+
+```json
+{
+  "escalation": {
+    "to": "human_operator",
+    "channel": "slack|pagerduty|dashboard",
+    "context_url": "/receipts/{seq}/context",
+    "timeout_ns": 300000000000,
+    "default_on_timeout": "deny"
+  }
+}
+```
+
+If human doesn't respond within timeout, default to DENY (fail-safe).
+
+### Q5: Adversarial robustness — adaptive adversaries?
+
+**Decision**: Defense in depth + rate limiting + anomaly detection.
+
+**Mitigations**:
+1. Rate limit: Max N decisions per agent per minute
+2. Anomaly: Flag agents with unusually high deny rates
+3. Honeypots: Inject synthetic "trap" actions to detect probing
+4. Rotation: Periodically rotate threshold parameters within safe bounds
+
+---
+
+## Definition of Done
+
+### v0.1 Shippable Criteria
+
+| Criterion | Metric | Target |
+|-----------|--------|--------|
+| **Structural filter works** | Min-cut correctly identifies fragile partitions | 100% on test suite |
+| **Receipts are signed** | All receipts have valid Ed25519 signature | 100% |
+| **Receipts are chained** | Hash chain verifies for all receipts | 100% |
+| **Latency acceptable** | p99 gate decision time | < 50ms |
+| **No false denies** | Known-safe actions are permitted | 100% on test suite |
+| **Demo scenario runs** | Network security control plane demo | End-to-end pass |
+
+### v0.1 Minimum Viable Demo
+
+**Scenario**: Agent requests config push to network device.
+
+1. Agent calls `permit_action` with device target
+2. Gate evaluates structural coherence (min-cut)
+3. Gate returns PERMIT with signed receipt
+4. Agent presents token to device
+5. Device verifies token, accepts config
+
+**Success**: Auditor can replay decision from receipt and get same result.
+
+---
+
+## Cost Model
+
+### Memory per Tile (WASM)
+
+| Component | Size | Notes |
+|-----------|------|-------|
+| Graph shard | 32 KB | ~2000 edges at 16 bytes each |
+| Feature window | 8 KB | 2048 f32 values |
+| E-accumulator | 64 B | f64 + metadata |
+| Boundary edges | 64 B | 8 × EdgeId |
+| **Total per worker** | **~41 KB** | Fits in 64KB WASM page |
+| **Total 255 workers** | **~10.2 MB** | |
+| TileZero state | ~1 MB | Supergraph + receipt log head |
+| **Total fabric** | **~12 MB** | |
+
+### Network Bandwidth
+
+| Flow | Frequency | Size | Bandwidth |
+|------|-----------|------|-----------|
+| Worker → TileZero reports | 1/tick (10ms) | 64 B × 255 | ~1.6 MB/s |
+| Receipt log append | per decision | ~512 B | Variable |
+| Gossip (distributed) | 1/100ms | ~1 KB × peers | ~10 KB/s × P |
+
+### Storage Growth
+
+| Item | Size | Retention | Growth |
+|------|------|-----------|--------|
+| Receipt | ~512 B | 90 days | ~44 MB/day @ 1000 decisions/s |
+| E-process checkpoint | ~128 B | Forever | ~11 MB/day @ 1000 decisions/s |
+| Audit log | ~256 B | 1 year | ~22 MB/day @ 1000 decisions/s |
+
+**90-day storage**: ~7 GB receipts + ~1 GB checkpoints ≈ **8 GB**
+
+---
+
 ## Consequences
 
 ### Benefits
