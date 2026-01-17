@@ -870,6 +870,398 @@ impl FaultTolerantGate {
 
 ---
 
+## Hardware Mapping: 256-Tile WASM Fabric
+
+The coherence gate is an ideal workload for event-driven WASM hardware: **mostly silent, then extremely decisive when boundaries move**.
+
+### Tile Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         256-TILE COGNITUM FABRIC                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                        TILE ZERO (Arbiter)                       │   │
+│  │                                                                  │   │
+│  │  • Merge worker reports      • Hierarchical min-cut             │   │
+│  │  • Global gate decision      • Permit token issuance            │   │
+│  │  • Witness receipt log       • Hash-chained eventlog            │   │
+│  └──────────────────────────────┬───────────────────────────────────┘   │
+│                                 │                                       │
+│            ┌────────────────────┼────────────────────┐                 │
+│            │                    │                    │                  │
+│            ▼                    ▼                    ▼                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐             │
+│  │  Workers     │    │  Workers     │    │  Workers     │   ...       │
+│  │  [1-85]      │    │  [86-170]    │    │  [171-255]   │             │
+│  │              │    │              │    │              │             │
+│  │  Shard A     │    │  Shard B     │    │  Shard C     │             │
+│  │  Local cuts  │    │  Local cuts  │    │  Local cuts  │             │
+│  │  E-accum     │    │  E-accum     │    │  E-accum     │             │
+│  └──────────────┘    └──────────────┘    └──────────────┘             │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Worker Tile Responsibilities
+
+Each of the 255 worker tiles maintains a **local shard**:
+
+```rust
+/// Worker tile state (fits in ~64KB WASM memory)
+#[repr(C)]
+pub struct WorkerTileState {
+    /// Compact neighborhood graph (edges + weights)
+    graph_shard: CompactGraph,          // ~32KB
+
+    /// Rolling feature window for normality scores
+    feature_window: RingBuffer<f32>,    // ~8KB
+
+    /// Local coherence score
+    coherence: f32,
+
+    /// Local boundary candidates (top-k edges)
+    boundary_edges: [EdgeId; 8],
+
+    /// Local e-value accumulator
+    e_accumulator: f64,
+
+    /// Tick counter
+    tick: u64,
+}
+
+/// Per-tick processing: only deltas
+impl WorkerTileState {
+    /// Process incoming delta (edge add/remove/weight update)
+    pub fn ingest_delta(&mut self, delta: &Delta) -> Status {
+        match delta {
+            Delta::EdgeAdd(e) => self.graph_shard.add_edge(e),
+            Delta::EdgeRemove(e) => self.graph_shard.remove_edge(e),
+            Delta::WeightUpdate(e, w) => self.graph_shard.update_weight(e, *w),
+            Delta::Observation(score) => self.feature_window.push(*score),
+        }
+        self.update_local_coherence();
+        Status::Ok
+    }
+
+    /// Tick: compute and emit report
+    pub fn tick(&mut self, now_ns: u64) -> TileReport {
+        self.tick = now_ns;
+
+        // Tiny math: update e-accumulator
+        self.e_accumulator = self.compute_local_evalue();
+
+        TileReport {
+            tile_id: self.id,
+            coherence: self.coherence,
+            boundary_moved: self.detect_boundary_movement(),
+            suspicious_edges: self.top_k_suspicious(),
+            e_value: self.e_accumulator as f32,
+            witness_fragment: self.extract_witness_fragment(),
+        }
+    }
+}
+
+/// Fixed-size report (fits in single cache line)
+#[repr(C, align(64))]
+pub struct TileReport {
+    tile_id: u8,
+    coherence: f32,
+    boundary_moved: bool,
+    suspicious_edges: [EdgeId; 4],
+    e_value: f32,
+    witness_fragment: WitnessFragment,
+}
+```
+
+### TileZero Responsibilities
+
+TileZero acts as the **arbiter** that issues final decisions:
+
+```rust
+/// TileZero: Global gate decision and permit issuance
+pub struct TileZero {
+    /// Merged supergraph (reduced from worker summaries)
+    supergraph: ReducedGraph,
+
+    /// Canonical permit token state
+    permit_state: PermitState,
+
+    /// Hash-chained witness receipt log
+    receipt_log: ReceiptLog,
+
+    /// Threshold configuration
+    thresholds: GateThresholds,
+}
+
+impl TileZero {
+    /// Collect reports from all worker tiles
+    pub fn collect_reports(&mut self, reports: &[TileReport; 255]) {
+        // Merge worker summaries into supergraph
+        for report in reports {
+            if report.boundary_moved {
+                self.supergraph.update_from_fragment(&report.witness_fragment);
+            }
+            self.supergraph.update_coherence(report.tile_id, report.coherence);
+        }
+    }
+
+    /// Issue gate decision (microsecond latency)
+    pub fn decide(&mut self, action_ctx: &ActionContext) -> PermitToken {
+        // Three stacked filters:
+
+        // 1. Structural filter (global cut on reduced graph)
+        let structural_ok = self.supergraph.global_cut() >= self.thresholds.min_cut;
+
+        // 2. Shift filter (aggregated shift pressure)
+        let shift_pressure = self.aggregate_shift_pressure();
+        let shift_ok = shift_pressure < self.thresholds.max_shift;
+
+        // 3. Evidence filter (can stop immediately if enough evidence)
+        let e_aggregate = self.aggregate_evidence();
+        let evidence_decision = self.evidence_decision(e_aggregate);
+
+        // Combined decision
+        let decision = match (structural_ok, shift_ok, evidence_decision) {
+            (false, _, _) => GateDecision::Deny,  // Structure broken
+            (_, false, _) => GateDecision::Defer, // Shift detected
+            (_, _, EvidenceDecision::Reject) => GateDecision::Deny,
+            (_, _, EvidenceDecision::Continue) => GateDecision::Defer,
+            (true, true, EvidenceDecision::Accept) => GateDecision::Permit,
+        };
+
+        // Issue token
+        self.issue_permit_token(action_ctx, decision)
+    }
+
+    /// Issue permit token (a signed capability)
+    fn issue_permit_token(
+        &mut self,
+        ctx: &ActionContext,
+        decision: GateDecision,
+    ) -> PermitToken {
+        let witness_hash = self.compute_witness_hash();
+
+        let token = PermitToken {
+            decision,
+            action_id: ctx.action_id,
+            timestamp: now_ns(),
+            ttl_ns: self.thresholds.permit_ttl,
+            witness_hash,
+            sequence: self.permit_state.next_sequence(),
+        };
+
+        // MAC or sign the token
+        let mac = self.permit_state.sign(&token);
+
+        // Emit receipt
+        self.emit_receipt(&token, &mac);
+
+        PermitToken { mac, ..token }
+    }
+
+    /// Emit witness receipt (hash-chained)
+    fn emit_receipt(&mut self, token: &PermitToken, mac: &[u8; 32]) {
+        let receipt = WitnessReceipt {
+            token: token.clone(),
+            mac: *mac,
+            previous_hash: self.receipt_log.last_hash(),
+            witness_summary: self.supergraph.witness_summary(),
+        };
+
+        self.receipt_log.append(receipt);
+    }
+}
+
+/// Permit token: a capability that agents must present
+#[repr(C)]
+pub struct PermitToken {
+    pub decision: GateDecision,
+    pub action_id: ActionId,
+    pub timestamp: u64,
+    pub ttl_ns: u64,
+    pub witness_hash: [u8; 32],
+    pub sequence: u64,
+    pub mac: [u8; 32],  // HMAC or signature
+}
+
+impl PermitToken {
+    /// Agents must present valid token to perform actions
+    pub fn is_valid(&self, verifier: &Verifier) -> bool {
+        // Check TTL
+        if now_ns() > self.timestamp + self.ttl_ns {
+            return false;
+        }
+
+        // Verify MAC/signature
+        verifier.verify(self, &self.mac)
+    }
+}
+```
+
+### WASM Kernel API
+
+Each tile runs a minimal WASM kernel:
+
+```rust
+/// Worker tile WASM exports
+#[no_mangle]
+pub extern "C" fn ingest_delta(delta_ptr: *const u8, len: usize) -> u32 {
+    let delta = unsafe { core::slice::from_raw_parts(delta_ptr, len) };
+    TILE_STATE.with(|state| state.borrow_mut().ingest_delta(delta))
+}
+
+#[no_mangle]
+pub extern "C" fn tick(now_ns: u64) -> *const TileReport {
+    TILE_STATE.with(|state| state.borrow_mut().tick(now_ns))
+}
+
+#[no_mangle]
+pub extern "C" fn get_witness_fragment(id: u32) -> *const u8 {
+    TILE_STATE.with(|state| state.borrow().get_witness_fragment(id))
+}
+
+/// TileZero WASM/native exports
+#[no_mangle]
+pub extern "C" fn collect_reports(reports_ptr: *const TileReport, count: usize) {
+    TILEZERO.with(|tz| tz.borrow_mut().collect_reports(reports_ptr, count))
+}
+
+#[no_mangle]
+pub extern "C" fn decide(action_ctx_ptr: *const ActionContext) -> *const PermitToken {
+    TILEZERO.with(|tz| tz.borrow_mut().decide(action_ctx_ptr))
+}
+
+#[no_mangle]
+pub extern "C" fn get_receipt(sequence: u64) -> *const WitnessReceipt {
+    TILEZERO.with(|tz| tz.borrow().get_receipt(sequence))
+}
+```
+
+### v0 Implementation Strategy
+
+Ship fast by layering:
+
+| Phase | Components | Skip Initially |
+|-------|------------|----------------|
+| **v0.1** | Structural coherence + witness receipt | Shift filter, evidence filter |
+| **v0.2** | Add shift filter (normality scores) | CORE RL adaptation |
+| **v0.3** | Add evidence filter (e-values) | Mixture e-values |
+| **v1.0** | Full three-filter stack | - |
+
+### Rust Deliverables
+
+| Crate | Description | Dependencies |
+|-------|-------------|--------------|
+| `cognitum-gate-kernel` | `no_std` WASM kernel for worker tiles | `ruvector-mincut` (core algorithms) |
+| `cognitum-gate-tilezero` | Native arbiter for TileZero | `ruvector-mincut`, `blake3`, `ed25519` |
+| `mcp-gate` | MCP server for agent integration | `cognitum-gate-tilezero` |
+
+```
+cognitum-gate/
+├── cognitum-gate-kernel/      # no_std WASM
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs             # WASM exports
+│       ├── shard.rs           # Compact graph shard
+│       ├── evidence.rs        # Local e-accumulator
+│       └── report.rs          # TileReport generation
+│
+├── cognitum-gate-tilezero/    # Native arbiter
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs
+│       ├── merge.rs           # Report merging
+│       ├── supergraph.rs      # Reduced global graph
+│       ├── permit.rs          # Token issuance
+│       └── receipt.rs         # Hash-chained log
+│
+└── mcp-gate/                  # MCP integration
+    ├── Cargo.toml
+    └── src/
+        ├── lib.rs
+        ├── tools.rs           # permit_action, get_receipt, replay_decision
+        └── server.rs          # MCP server
+```
+
+### MCP Gate Tools
+
+```rust
+/// MCP tool: Request permission for an action
+#[mcp_tool]
+pub async fn permit_action(
+    action_id: String,
+    action_type: String,
+    context: serde_json::Value,
+) -> Result<PermitResponse, McpError> {
+    let ctx = ActionContext::from_json(&context)?;
+    let token = TILEZERO.decide(&ctx);
+
+    Ok(PermitResponse {
+        decision: token.decision.to_string(),
+        token: token.encode_base64(),
+        witness_hash: hex::encode(&token.witness_hash),
+        valid_until_ns: token.timestamp + token.ttl_ns,
+    })
+}
+
+/// MCP tool: Get witness receipt for audit
+#[mcp_tool]
+pub async fn get_receipt(sequence: u64) -> Result<ReceiptResponse, McpError> {
+    let receipt = TILEZERO.get_receipt(sequence)?;
+
+    Ok(ReceiptResponse {
+        sequence,
+        decision: receipt.token.decision.to_string(),
+        timestamp: receipt.token.timestamp,
+        witness_summary: receipt.witness_summary.to_json(),
+        previous_hash: hex::encode(&receipt.previous_hash),
+        receipt_hash: hex::encode(&receipt.hash()),
+    })
+}
+
+/// MCP tool: Replay decision for debugging/audit
+#[mcp_tool]
+pub async fn replay_decision(
+    sequence: u64,
+    verify_chain: bool,
+) -> Result<ReplayResponse, McpError> {
+    let receipt = TILEZERO.get_receipt(sequence)?;
+
+    // Optionally verify hash chain
+    if verify_chain {
+        TILEZERO.verify_chain_to(sequence)?;
+    }
+
+    // Replay the decision with logged state
+    let replayed = TILEZERO.replay(&receipt)?;
+
+    Ok(ReplayResponse {
+        original_decision: receipt.token.decision.to_string(),
+        replayed_decision: replayed.decision.to_string(),
+        match_confirmed: receipt.token.decision == replayed.decision,
+        state_snapshot: replayed.state_snapshot.to_json(),
+    })
+}
+```
+
+### The Practical Win
+
+This gives Cognitum a clear job that buyers understand:
+
+> **"We do not just detect issues, we prevent unsafe actions."**
+> **"We can prove why we blocked or allowed it."**
+> **"We stay calm until structure breaks."**
+
+The permit token as a capability means:
+- Agents cannot act without presenting a valid token
+- Tokens expire (TTL-bounded)
+- Every token is backed by a witness receipt
+- The entire chain is cryptographically verifiable
+
+---
+
 ## Consequences
 
 ### Benefits
