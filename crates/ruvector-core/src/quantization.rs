@@ -425,22 +425,28 @@ fn scalar_distance_scalar(a: &[u8], b: &[u8]) -> f32 {
 }
 
 /// NEON SIMD distance for scalar quantization
+///
+/// # Safety
+/// Caller must ensure a.len() == b.len()
 #[cfg(target_arch = "aarch64")]
-#[inline]
+#[inline(always)]
 unsafe fn scalar_distance_neon(a: &[u8], b: &[u8]) -> f32 {
     use std::arch::aarch64::*;
 
     let len = a.len();
+    let a_ptr = a.as_ptr();
+    let b_ptr = b.as_ptr();
+
     let mut sum = vdupq_n_s32(0);
 
     // Process 8 bytes at a time
     let chunks = len / 8;
-    for i in 0..chunks {
-        let idx = i * 8;
+    let mut idx = 0usize;
 
+    for _ in 0..chunks {
         // Load 8 u8 values
-        let va = vld1_u8(a.as_ptr().add(idx));
-        let vb = vld1_u8(b.as_ptr().add(idx));
+        let va = vld1_u8(a_ptr.add(idx));
+        let vb = vld1_u8(b_ptr.add(idx));
 
         // Zero-extend u8 to u16
         let va_u16 = vmovl_u8(va);
@@ -459,13 +465,15 @@ unsafe fn scalar_distance_neon(a: &[u8], b: &[u8]) -> f32 {
 
         sum = vaddq_s32(sum, prod_lo);
         sum = vaddq_s32(sum, prod_hi);
+
+        idx += 8;
     }
 
     let mut total = vaddvq_s32(sum);
 
-    // Handle remainder
+    // Handle remainder with bounds-check elimination
     for i in (chunks * 8)..len {
-        let diff = (a[i] as i32) - (b[i] as i32);
+        let diff = (*a.get_unchecked(i) as i32) - (*b.get_unchecked(i) as i32);
         total += diff * diff;
     }
 
@@ -629,39 +637,46 @@ unsafe fn hamming_distance_simd_x86(a: &[u8], b: &[u8]) -> u32 {
 }
 
 /// NEON-optimized hamming distance for ARM64
+///
+/// # Safety
+/// Caller must ensure a.len() == b.len()
 #[cfg(target_arch = "aarch64")]
-#[inline]
+#[inline(always)]
 unsafe fn hamming_distance_neon(a: &[u8], b: &[u8]) -> u32 {
     use std::arch::aarch64::*;
 
     let len = a.len();
+    let a_ptr = a.as_ptr();
+    let b_ptr = b.as_ptr();
+
     let chunks = len / 16;
+    let mut idx = 0usize;
 
     let mut sum = vdupq_n_u8(0);
 
-    for i in 0..chunks {
-        let idx = i * 16;
-
+    for _ in 0..chunks {
         // Load 16 bytes
-        let a_vec = vld1q_u8(a.as_ptr().add(idx));
-        let b_vec = vld1q_u8(b.as_ptr().add(idx));
+        let a_vec = vld1q_u8(a_ptr.add(idx));
+        let b_vec = vld1q_u8(b_ptr.add(idx));
 
-        // XOR and count bits
+        // XOR and count bits using vcntq_u8 (population count)
         let xor_result = veorq_u8(a_vec, b_vec);
         let bits = vcntq_u8(xor_result);
 
         // Accumulate
         sum = vaddq_u8(sum, bits);
+
+        idx += 16;
     }
 
     // Horizontal sum
     let sum_val = vaddvq_u8(sum) as u32;
 
-    // Handle remainder
+    // Handle remainder with bounds-check elimination
     let mut remainder_sum = 0u32;
     let start = chunks * 16;
     for i in start..len {
-        remainder_sum += (a[i] ^ b[i]).count_ones();
+        remainder_sum += (*a.get_unchecked(i) ^ *b.get_unchecked(i)).count_ones();
     }
 
     sum_val + remainder_sum

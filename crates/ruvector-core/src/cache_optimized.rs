@@ -186,7 +186,7 @@ impl SoAVectorStorage {
 
     /// Compute distance from query to all stored vectors using dimension-wise operations
     /// This takes advantage of the SoA layout for better cache utilization
-    #[inline]
+    #[inline(always)]
     pub fn batch_euclidean_distances(&self, query: &[f32], output: &mut [f32]) {
         assert_eq!(query.len(), self.dimensions);
         assert_eq!(output.len(), self.count);
@@ -213,20 +213,22 @@ impl SoAVectorStorage {
     }
 
     /// Scalar implementation of batch euclidean distances
-    #[inline]
+    #[inline(always)]
     fn batch_euclidean_distances_scalar(&self, query: &[f32], output: &mut [f32]) {
         // Initialize output with zeros
         output.fill(0.0);
 
-        // Process dimension by dimension
+        // Process dimension by dimension for cache-friendly access
         for dim_idx in 0..self.dimensions {
             let dim_slice = self.dimension_slice(dim_idx);
-            let query_val = query[dim_idx];
+            // Safety: dim_idx is bounded by self.dimensions which is validated in constructor
+            let query_val = unsafe { *query.get_unchecked(dim_idx) };
 
             // Compute squared differences for this dimension
+            // Use unchecked access since vec_idx is bounded by self.count
             for vec_idx in 0..self.count {
-                let diff = dim_slice[vec_idx] - query_val;
-                output[vec_idx] += diff * diff;
+                let diff = unsafe { *dim_slice.get_unchecked(vec_idx) } - query_val;
+                unsafe { *output.get_unchecked_mut(vec_idx) += diff * diff };
             }
         }
 
@@ -237,57 +239,65 @@ impl SoAVectorStorage {
     }
 
     /// NEON-optimized batch euclidean distances
+    ///
+    /// # Safety
+    /// Caller must ensure query.len() == self.dimensions and output.len() == self.count
     #[cfg(target_arch = "aarch64")]
-    #[inline]
+    #[inline(always)]
     unsafe fn batch_euclidean_distances_neon(&self, query: &[f32], output: &mut [f32]) {
         use std::arch::aarch64::*;
 
+        let out_ptr = output.as_mut_ptr();
+        let query_ptr = query.as_ptr();
+
         // Initialize output with zeros
         let chunks = self.count / 4;
-        let remainder = self.count % 4;
 
         // Zero initialize using SIMD
+        let zero = vdupq_n_f32(0.0);
         for i in 0..chunks {
             let idx = i * 4;
-            vst1q_f32(output.as_mut_ptr().add(idx), vdupq_n_f32(0.0));
+            vst1q_f32(out_ptr.add(idx), zero);
         }
         for i in (chunks * 4)..self.count {
-            output[i] = 0.0;
+            *output.get_unchecked_mut(i) = 0.0;
         }
 
-        // Process dimension by dimension
+        // Process dimension by dimension for cache-friendly access
         for dim_idx in 0..self.dimensions {
             let dim_slice = self.dimension_slice(dim_idx);
-            let query_val = vdupq_n_f32(query[dim_idx]);
+            let dim_ptr = dim_slice.as_ptr();
+            let query_val = vdupq_n_f32(*query_ptr.add(dim_idx));
 
             // SIMD processing of 4 vectors at a time
             for i in 0..chunks {
                 let idx = i * 4;
-                let dim_vals = vld1q_f32(dim_slice.as_ptr().add(idx));
-                let out_vals = vld1q_f32(output.as_ptr().add(idx));
+                let dim_vals = vld1q_f32(dim_ptr.add(idx));
+                let out_vals = vld1q_f32(out_ptr.add(idx));
 
                 let diff = vsubq_f32(dim_vals, query_val);
                 let result = vfmaq_f32(out_vals, diff, diff);
 
-                vst1q_f32(output.as_mut_ptr().add(idx), result);
+                vst1q_f32(out_ptr.add(idx), result);
             }
 
-            // Handle remainder
+            // Handle remainder with bounds-check elimination
+            let query_val_scalar = *query_ptr.add(dim_idx);
             for i in (chunks * 4)..self.count {
-                let diff = dim_slice[i] - query[dim_idx];
-                output[i] += diff * diff;
+                let diff = *dim_slice.get_unchecked(i) - query_val_scalar;
+                *output.get_unchecked_mut(i) += diff * diff;
             }
         }
 
-        // Take square root using SIMD
+        // Take square root using SIMD vsqrtq_f32
         for i in 0..chunks {
             let idx = i * 4;
-            let vals = vld1q_f32(output.as_ptr().add(idx));
+            let vals = vld1q_f32(out_ptr.add(idx));
             let sqrt_vals = vsqrtq_f32(vals);
-            vst1q_f32(output.as_mut_ptr().add(idx), sqrt_vals);
+            vst1q_f32(out_ptr.add(idx), sqrt_vals);
         }
         for i in (chunks * 4)..self.count {
-            output[i] = output[i].sqrt();
+            *output.get_unchecked_mut(i) = output.get_unchecked(i).sqrt();
         }
     }
 
