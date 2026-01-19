@@ -84,13 +84,13 @@ pub use attention::{
     paged_attention_neon, PagedKvCache,
     select_block_size, BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_LARGE,
 };
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub use attention::{
     multi_query_attention_parallel, grouped_query_attention_parallel,
     multi_head_attention_parallel,
 };
 pub use matmul::{batched_gemm_neon, gemm_neon, gemv_neon};
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub use matmul::{
     gemm_parallel, gemv_parallel, batched_gemm_parallel,
     configure_thread_pool, get_physical_cores,

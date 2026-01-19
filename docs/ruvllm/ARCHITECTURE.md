@@ -1,6 +1,18 @@
-# RuvLLM Architecture
+# RuvLLM Architecture (v2.0.0)
 
 This document describes the system architecture of RuvLLM, a high-performance LLM inference engine optimized for Apple Silicon.
+
+## v2.0.0 New Features
+
+| Feature | Description | Performance Impact |
+|---------|-------------|-------------------|
+| Multi-threaded GEMM/GEMV | Rayon parallelization | 12.7x speedup on M4 Pro |
+| Flash Attention 2 | Auto block sizing | +10% throughput |
+| Quantized Inference | INT8/INT4/Q4_K kernels | 4-8x memory reduction |
+| Metal GPU Shaders | simdgroup_matrix ops | 3x speedup |
+| Memory Pool | Arena allocator | Zero-alloc inference |
+| WASM Support | Browser inference | ~2.5x overhead |
+| npm Integration | @ruvector/ruvllm | JavaScript/TypeScript API |
 
 ## System Overview
 

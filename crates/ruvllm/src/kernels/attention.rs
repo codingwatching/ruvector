@@ -46,7 +46,7 @@ use std::arch::aarch64::*;
 
 use super::{AttentionConfig, NEON_LANE_WIDTH, UNROLL_FACTOR};
 
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 use rayon::prelude::*;
 
 // =============================================================================
@@ -718,7 +718,7 @@ pub fn multi_query_attention_neon(
     let kv_len = key.len() / head_dim;
 
     // Auto-select parallel vs sequential based on workload
-    #[cfg(feature = "parallel")]
+    #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
     if num_heads >= 4 && kv_len >= PARALLEL_THRESHOLD {
         return multi_query_attention_parallel(queries, key, value, config);
     }
@@ -746,7 +746,7 @@ pub fn multi_query_attention_neon(
 /// # Performance
 /// - 4-8x speedup on M4 Pro (12 P-cores + 4 E-cores)
 /// - Best for num_heads >= 4 and kv_len >= 256
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn multi_query_attention_parallel(
     queries: &[f32],
     key: &[f32],
@@ -805,7 +805,7 @@ pub fn grouped_query_attention_neon(
     let kv_len = keys.len() / (num_kv_heads * head_dim);
 
     // Auto-select parallel vs sequential based on workload
-    #[cfg(feature = "parallel")]
+    #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
     if num_heads >= 4 && kv_len >= PARALLEL_THRESHOLD {
         return grouped_query_attention_parallel(queries, keys, values, config);
     }
@@ -844,7 +844,7 @@ pub fn grouped_query_attention_neon(
 /// # Performance
 /// - 4-8x speedup on M4 Pro
 /// - Particularly effective for large GQA ratios (8:1, 4:1)
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn grouped_query_attention_parallel(
     queries: &[f32],
     keys: &[f32],
@@ -911,7 +911,7 @@ pub fn grouped_query_attention_parallel(
 /// * `keys` - Key tensor (num_heads * kv_len * head_dim,)
 /// * `values` - Value tensor (num_heads * kv_len * head_dim,)
 /// * `config` - Attention configuration
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn multi_head_attention_parallel(
     queries: &[f32],
     keys: &[f32],

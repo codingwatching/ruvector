@@ -64,11 +64,12 @@ members = [
     "crates/ruQu",
     "crates/ruvllm",
     "crates/ruvllm-cli",
+    "crates/ruvllm-wasm",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.32"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.77"
 license = "MIT"

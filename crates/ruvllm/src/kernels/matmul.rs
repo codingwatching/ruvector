@@ -817,7 +817,7 @@ pub fn batched_gemm_neon(
     let b_batch_stride = k * n;
     let c_batch_stride = m * n;
 
-    #[cfg(feature = "parallel")]
+    #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
     {
         use rayon::prelude::*;
 
@@ -1383,7 +1383,7 @@ const _: usize = PREFETCH_DISTANCE;
 ///
 /// # Returns
 /// `true` if configuration succeeded, `false` if pool was already initialized
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn configure_thread_pool(num_threads: usize) -> bool {
     use rayon::ThreadPoolBuilder;
 
@@ -1403,7 +1403,7 @@ pub fn configure_thread_pool(num_threads: usize) -> bool {
 ///
 /// Returns the number of physical cores (not hyperthreads) on the system.
 /// On Apple Silicon, this returns the total P+E core count.
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn get_physical_cores() -> usize {
     // rayon's default is usually good, but we can be more specific
     std::thread::available_parallelism()
@@ -1424,7 +1424,7 @@ pub fn get_physical_cores() -> usize {
 /// * `m` - Rows in each A and C matrix
 /// * `k` - Columns in A, rows in B
 /// * `n` - Columns in each B and C matrix
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub fn batched_gemm_parallel(
     a: &[f32],
     b: &[f32],

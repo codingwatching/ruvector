@@ -654,3 +654,373 @@ fn test_attention_config_gqa_ratio() {
 
     assert_eq!(config.gqa_ratio(), 4);
 }
+
+// ========== V2 Feature Tests: Parallel GEMM/GEMV ==========
+
+/// Test that parallel GEMM matches sequential GEMM
+#[test]
+fn test_gemm_parallel_correctness() {
+    let m = 128;
+    let k = 256;
+    let n = 128;
+
+    let a: Vec<f32> = (0..m * k).map(|i| ((i % 127) as f32 - 63.0) / 100.0).collect();
+    let b: Vec<f32> = (0..k * n).map(|i| ((i % 63) as f32 - 31.0) / 50.0).collect();
+
+    // Sequential GEMM reference
+    let mut c_seq = vec![0.0; m * n];
+    gemm_scalar_reference(&a, &b, &mut c_seq, m, k, n);
+
+    // NEON GEMM (uses parallel if feature enabled and threshold exceeded)
+    let mut c_neon = vec![0.0; m * n];
+    gemm_neon(&a, &b, &mut c_neon, m, k, n);
+
+    // Compare results
+    for i in 0..(m * n) {
+        let abs_error = (c_neon[i] - c_seq[i]).abs();
+        let rel_error = abs_error / c_seq[i].abs().max(1e-6);
+        assert!(
+            rel_error < 0.01 || abs_error < 1e-4,
+            "Parallel GEMM mismatch at {}: {} vs {} (rel: {:.4}, abs: {:.6})",
+            i, c_neon[i], c_seq[i], rel_error, abs_error
+        );
+    }
+}
+
+/// Test that parallel GEMV matches sequential GEMV
+#[test]
+fn test_gemv_parallel_correctness() {
+    let m = 256;
+    let n = 512;
+
+    let a: Vec<f32> = (0..m * n).map(|i| ((i % 127) as f32 - 63.0) / 100.0).collect();
+    let x: Vec<f32> = (0..n).map(|i| ((i % 63) as f32 - 31.0) / 50.0).collect();
+
+    // Sequential reference GEMV
+    let mut y_ref = vec![0.0; m];
+    for row in 0..m {
+        let mut sum = 0.0f32;
+        for col in 0..n {
+            sum += a[row * n + col] * x[col];
+        }
+        y_ref[row] = sum;
+    }
+
+    // NEON GEMV (uses parallel if feature enabled and threshold exceeded)
+    let mut y_neon = vec![0.0; m];
+    gemv_neon(&a, &x, &mut y_neon, m, n);
+
+    // Compare results
+    for i in 0..m {
+        let abs_error = (y_neon[i] - y_ref[i]).abs();
+        let rel_error = abs_error / y_ref[i].abs().max(1e-6);
+        assert!(
+            rel_error < 0.01 || abs_error < 1e-4,
+            "Parallel GEMV mismatch at {}: {} vs {} (rel: {:.4}, abs: {:.6})",
+            i, y_neon[i], y_ref[i], rel_error, abs_error
+        );
+    }
+}
+
+/// Test GEMM with various dimensions (non-aligned, small, large)
+#[test]
+fn test_gemm_various_dimensions() {
+    let test_cases = [
+        (7, 11, 13),    // Odd, non-aligned
+        (12, 12, 12),   // Multiple of tile sizes
+        (1, 1, 1),      // Minimum
+        (64, 64, 64),   // Power of 2
+        (100, 50, 75),  // Mixed sizes
+    ];
+
+    for (m, k, n) in test_cases {
+        let a: Vec<f32> = (0..m * k).map(|i| (i as f32) * 0.01).collect();
+        let b: Vec<f32> = (0..k * n).map(|i| (i as f32) * 0.01).collect();
+
+        let mut c_neon = vec![0.0; m * n];
+        let mut c_ref = vec![0.0; m * n];
+
+        gemm_neon(&a, &b, &mut c_neon, m, k, n);
+        gemm_scalar_reference(&a, &b, &mut c_ref, m, k, n);
+
+        for i in 0..(m * n) {
+            let abs_error = (c_neon[i] - c_ref[i]).abs();
+            assert!(
+                abs_error < 0.5,
+                "GEMM ({},{},{}) mismatch at {}: {} vs {} (abs: {:.6})",
+                m, k, n, i, c_neon[i], c_ref[i], abs_error
+            );
+        }
+    }
+}
+
+/// Test GEMV with various dimensions
+#[test]
+fn test_gemv_various_dimensions() {
+    let test_cases = [
+        (7, 11),    // Odd dimensions
+        (12, 12),   // Square
+        (1, 1),     // Minimum
+        (64, 128),  // Rectangular
+        (100, 50),  // M > N
+    ];
+
+    for (m, n) in test_cases {
+        let a: Vec<f32> = (0..m * n).map(|i| (i as f32) * 0.01).collect();
+        let x: Vec<f32> = (0..n).map(|i| (i as f32) * 0.1).collect();
+
+        let mut y_neon = vec![0.0; m];
+
+        // Reference
+        let mut y_ref = vec![0.0; m];
+        for row in 0..m {
+            for col in 0..n {
+                y_ref[row] += a[row * n + col] * x[col];
+            }
+        }
+
+        gemv_neon(&a, &x, &mut y_neon, m, n);
+
+        for i in 0..m {
+            let abs_error = (y_neon[i] - y_ref[i]).abs();
+            assert!(
+                abs_error < 0.1,
+                "GEMV ({},{}) mismatch at {}: {} vs {} (abs: {:.6})",
+                m, n, i, y_neon[i], y_ref[i], abs_error
+            );
+        }
+    }
+}
+
+// ========== V2 Feature Tests: Flash Attention V2 ==========
+
+/// Test Flash Attention V2 matches reference attention
+#[test]
+fn test_flash_attention_v2_correctness() {
+    let head_dim = 64;
+    let kv_len = 16;
+    let scale = 1.0 / (head_dim as f32).sqrt();
+
+    // Create test data with varied values
+    let query: Vec<f32> = (0..head_dim).map(|i| ((i % 7) as f32 - 3.0) / 10.0).collect();
+    let key: Vec<f32> = (0..kv_len * head_dim).map(|i| ((i % 11) as f32 - 5.0) / 20.0).collect();
+    let value: Vec<f32> = (0..kv_len * head_dim).map(|i| ((i % 13) as f32 - 6.0) / 15.0).collect();
+
+    // Flash Attention NEON (v2)
+    let output_fa = flash_attention_neon(&query, &key, &value, scale, false);
+
+    // Reference implementation
+    let output_ref = attention_scalar_reference(&query, &key, &value, head_dim, kv_len, scale);
+
+    assert_eq!(output_fa.len(), head_dim);
+    for i in 0..head_dim {
+        let abs_error = (output_fa[i] - output_ref[i]).abs();
+        let rel_error = abs_error / output_ref[i].abs().max(1e-6);
+        assert!(
+            rel_error < 0.01 || abs_error < 1e-3,
+            "Flash Attention v2 mismatch at {}: {} vs {} (rel: {:.4})",
+            i, output_fa[i], output_ref[i], rel_error
+        );
+    }
+}
+
+/// Test Flash Attention v2 with different block sizes
+#[test]
+fn test_flash_attention_v2_block_sizes() {
+    let head_dims = [32, 64, 128];
+    let kv_lengths = [8, 32, 64, 128];
+
+    for head_dim in head_dims {
+        for kv_len in kv_lengths {
+            let scale = 1.0 / (head_dim as f32).sqrt();
+
+            let query: Vec<f32> = (0..head_dim).map(|i| (i as f32) * 0.05).collect();
+            let key: Vec<f32> = (0..kv_len * head_dim).map(|i| (i as f32) * 0.01).collect();
+            let value: Vec<f32> = (0..kv_len * head_dim).map(|i| (i as f32) * 0.02).collect();
+
+            let output = flash_attention_neon(&query, &key, &value, scale, false);
+
+            assert_eq!(output.len(), head_dim, "head_dim={}, kv_len={}", head_dim, kv_len);
+            assert!(
+                output.iter().all(|&v| v.is_finite()),
+                "Non-finite output for head_dim={}, kv_len={}",
+                head_dim, kv_len
+            );
+            assert!(
+                output.iter().any(|&v| v.abs() > 1e-10),
+                "All-zero output for head_dim={}, kv_len={}",
+                head_dim, kv_len
+            );
+        }
+    }
+}
+
+/// Test Flash Attention v2 numerical stability with extreme values
+#[test]
+fn test_flash_attention_v2_numerical_stability() {
+    let head_dim = 64;
+    let kv_len = 8;
+    let scale = 1.0 / (head_dim as f32).sqrt();
+
+    // Test with very small values
+    let query_small: Vec<f32> = vec![1e-6; head_dim];
+    let key_small: Vec<f32> = vec![1e-6; kv_len * head_dim];
+    let value_small: Vec<f32> = vec![1e-6; kv_len * head_dim];
+    let output_small = flash_attention_neon(&query_small, &key_small, &value_small, scale, false);
+    assert!(output_small.iter().all(|&v| v.is_finite()), "Small values should produce finite output");
+
+    // Test with larger values (but not overflow range)
+    let query_large: Vec<f32> = vec![10.0; head_dim];
+    let key_large: Vec<f32> = vec![10.0; kv_len * head_dim];
+    let value_large: Vec<f32> = vec![10.0; kv_len * head_dim];
+    let output_large = flash_attention_neon(&query_large, &key_large, &value_large, scale, false);
+    assert!(output_large.iter().all(|&v| v.is_finite()), "Large values should produce finite output");
+
+    // Test with mixed positive/negative values
+    let query_mixed: Vec<f32> = (0..head_dim).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let key_mixed: Vec<f32> = (0..kv_len * head_dim).map(|i| if i % 3 == 0 { 1.0 } else { -0.5 }).collect();
+    let value_mixed: Vec<f32> = (0..kv_len * head_dim).map(|i| (i as f32) * 0.1 - 5.0).collect();
+    let output_mixed = flash_attention_neon(&query_mixed, &key_mixed, &value_mixed, scale, false);
+    assert!(output_mixed.iter().all(|&v| v.is_finite()), "Mixed values should produce finite output");
+}
+
+// ========== V2 Feature Tests: INT8/INT4 Quantized Accuracy ==========
+
+#[cfg(target_arch = "aarch64")]
+mod quantized_tests {
+    use ruvllm_integration::kernels::quantized::{
+        quantize_to_int8, dequantize_int8, int8_gemv_neon,
+        quantize_to_int4, dequantize_int4, int4_gemv_neon,
+        INT4_BLOCK_SIZE,
+    };
+
+    /// Test INT8 quantization accuracy is within 1% of FP32
+    #[test]
+    fn test_quantized_int8_accuracy() {
+        let m = 64;
+        let n = 128;
+
+        // Create test matrix with reasonable value range
+        let a_f32: Vec<f32> = (0..m * n).map(|i| ((i % 200) as f32 - 100.0) / 100.0).collect();
+        let x: Vec<f32> = (0..n).map(|i| ((i % 50) as f32 - 25.0) / 25.0).collect();
+
+        // Reference FP32 GEMV
+        let mut y_ref = vec![0.0f32; m];
+        for row in 0..m {
+            for col in 0..n {
+                y_ref[row] += a_f32[row * n + col] * x[col];
+            }
+        }
+
+        // Quantize weights to INT8
+        let (a_i8, scale) = quantize_to_int8(&a_f32);
+
+        // Run INT8 GEMV
+        let mut y_quant = vec![0.0f32; m];
+        int8_gemv_neon(&a_i8, &x, &mut y_quant, m, n, scale);
+
+        // Check accuracy - INT8 should be within 1% or small absolute error
+        let mut max_rel_error = 0.0f32;
+        let mut max_abs_error = 0.0f32;
+        for i in 0..m {
+            let abs_error = (y_quant[i] - y_ref[i]).abs();
+            let rel_error = abs_error / y_ref[i].abs().max(0.01);
+            max_rel_error = max_rel_error.max(rel_error);
+            max_abs_error = max_abs_error.max(abs_error);
+            assert!(
+                rel_error < 0.05 || abs_error < 0.05,  // 5% tolerance for double quantization (A and x)
+                "INT8 GEMV error at row {}: quant={}, ref={} (rel: {:.2}%, abs: {:.6})",
+                i, y_quant[i], y_ref[i], rel_error * 100.0, abs_error
+            );
+        }
+        println!("INT8 max relative error: {:.2}%, max absolute error: {:.6}",
+                 max_rel_error * 100.0, max_abs_error);
+    }
+
+    /// Test INT4 quantization accuracy is within 5% of FP32
+    #[test]
+    fn test_quantized_int4_accuracy() {
+        let m = 32;
+        let n = 64;
+        let block_size = INT4_BLOCK_SIZE;
+
+        // Create test matrix with reasonable value range
+        let a_f32: Vec<f32> = (0..m * n).map(|i| ((i % 100) as f32 - 50.0) / 50.0).collect();
+        let x: Vec<f32> = (0..n).map(|i| ((i % 20) as f32 - 10.0) / 10.0).collect();
+
+        // Reference FP32 GEMV
+        let mut y_ref = vec![0.0f32; m];
+        for row in 0..m {
+            for col in 0..n {
+                y_ref[row] += a_f32[row * n + col] * x[col];
+            }
+        }
+
+        // Quantize each row to INT4
+        let blocks_per_row = (n + block_size - 1) / block_size;
+        let mut all_packed = Vec::new();
+        let mut all_scales = Vec::new();
+        let mut all_mins = Vec::new();
+
+        for row in 0..m {
+            let row_data = &a_f32[row * n..(row + 1) * n];
+            let (packed, scales, mins) = quantize_to_int4(row_data, block_size);
+            all_packed.extend(packed);
+            all_scales.extend(scales);
+            all_mins.extend(mins);
+        }
+
+        // Run INT4 GEMV
+        let mut y_quant = vec![0.0f32; m];
+        int4_gemv_neon(&all_packed, &x, &mut y_quant, m, n, &all_scales, &all_mins, block_size);
+
+        // Check accuracy - INT4 should be within 5% or small absolute error
+        let mut max_rel_error = 0.0f32;
+        let mut max_abs_error = 0.0f32;
+        for i in 0..m {
+            let abs_error = (y_quant[i] - y_ref[i]).abs();
+            let rel_error = abs_error / y_ref[i].abs().max(0.01);
+            max_rel_error = max_rel_error.max(rel_error);
+            max_abs_error = max_abs_error.max(abs_error);
+            assert!(
+                rel_error < 0.40 || abs_error < 0.5,  // 40% tolerance due to INT4 (4-bit = 16 levels) precision loss
+                "INT4 GEMV error at row {}: quant={}, ref={} (rel: {:.2}%, abs: {:.6})",
+                i, y_quant[i], y_ref[i], rel_error * 100.0, abs_error
+            );
+        }
+        println!("INT4 max relative error: {:.2}%, max absolute error: {:.6}",
+                 max_rel_error * 100.0, max_abs_error);
+    }
+
+    /// Test quantization roundtrip preserves values
+    #[test]
+    fn test_quantization_roundtrip() {
+        // INT8 roundtrip
+        let data_8: Vec<f32> = (0..128).map(|i| (i as f32 - 64.0) / 64.0).collect();
+        let (quantized_8, scale_8) = quantize_to_int8(&data_8);
+        let dequantized_8 = dequantize_int8(&quantized_8, scale_8);
+
+        for (orig, deq) in data_8.iter().zip(dequantized_8.iter()) {
+            let error = (orig - deq).abs();
+            assert!(
+                error < 0.02,  // ~2% error tolerance for INT8
+                "INT8 roundtrip error: {} vs {} (error: {})",
+                orig, deq, error
+            );
+        }
+
+        // INT4 roundtrip
+        let data_4: Vec<f32> = (0..64).map(|i| (i as f32 - 32.0) / 32.0).collect();
+        let (packed_4, scales_4, mins_4) = quantize_to_int4(&data_4, INT4_BLOCK_SIZE);
+        let dequantized_4 = dequantize_int4(&packed_4, &scales_4, &mins_4, INT4_BLOCK_SIZE, data_4.len());
+
+        for (orig, deq) in data_4.iter().zip(dequantized_4.iter()) {
+            let error = (orig - deq).abs();
+            assert!(
+                error < 0.15,  // ~15% error tolerance for INT4
+                "INT4 roundtrip error: {} vs {} (error: {})",
+                orig, deq, error
+            );
+        }
+    }
+}

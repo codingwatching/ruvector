@@ -42,7 +42,9 @@ use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread::ThreadId;
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
 
 /// Cache line size for M4 Pro and most modern CPUs (64 bytes)
@@ -813,7 +815,8 @@ pub struct BufferPoolStats {
 // Scratch Space Manager
 // ============================================================================
 
-/// Per-thread scratch buffer.
+/// Per-thread scratch buffer (non-WASM only).
+#[cfg(not(target_arch = "wasm32"))]
 struct ThreadScratch {
     /// Buffer data
     data: Box<[u8]>,
@@ -821,6 +824,7 @@ struct ThreadScratch {
     used: usize,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ThreadScratch {
     fn new(size: usize) -> Self {
         let layout = Layout::from_size_align(size, DEFAULT_ALIGNMENT)
@@ -843,7 +847,7 @@ impl ThreadScratch {
     }
 }
 
-/// Manager for per-thread scratch space.
+/// Manager for per-thread scratch space (non-WASM version).
 ///
 /// Provides each thread with its own scratch buffer for temporary computations
 /// during inference, avoiding allocation on the hot path.
@@ -854,6 +858,7 @@ impl ThreadScratch {
 /// - Buffers are sized based on model dimensions
 /// - Scratch is reset at the start of each generation step
 /// - Thread-safe lazy initialization
+#[cfg(not(target_arch = "wasm32"))]
 pub struct ScratchSpaceManager {
     /// Per-thread scratch buffers
     scratches: RwLock<HashMap<ThreadId, UnsafeCell<ThreadScratch>>>,
@@ -864,9 +869,12 @@ pub struct ScratchSpaceManager {
 }
 
 // SAFETY: ThreadScratch is only accessed by its owning thread
+#[cfg(not(target_arch = "wasm32"))]
 unsafe impl Send for ScratchSpaceManager {}
+#[cfg(not(target_arch = "wasm32"))]
 unsafe impl Sync for ScratchSpaceManager {}
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ScratchSpaceManager {
     /// Create a new scratch space manager.
     ///
@@ -989,6 +997,7 @@ impl ScratchSpaceManager {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl std::fmt::Debug for ScratchSpaceManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScratchSpaceManager")
@@ -999,11 +1008,137 @@ impl std::fmt::Debug for ScratchSpaceManager {
     }
 }
 
-/// Handle to a thread's scratch space.
+// ============================================================================
+// WASM-compatible Scratch Space Manager (single-threaded)
+// ============================================================================
+
+/// Scratch buffer for WASM (single-threaded).
+#[cfg(target_arch = "wasm32")]
+struct WasmScratch {
+    /// Buffer data
+    data: Box<[u8]>,
+    /// Current usage within the buffer
+    used: usize,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl WasmScratch {
+    fn new(size: usize) -> Self {
+        let layout = Layout::from_size_align(size, DEFAULT_ALIGNMENT)
+            .expect("Invalid scratch layout");
+
+        // SAFETY: Layout is valid
+        let data = unsafe {
+            let ptr = alloc_zeroed(layout);
+            if ptr.is_null() {
+                panic!("Failed to allocate scratch buffer of {} bytes", size);
+            }
+            Box::from_raw(std::slice::from_raw_parts_mut(ptr, size))
+        };
+
+        Self { data, used: 0 }
+    }
+
+    fn reset(&mut self) {
+        self.used = 0;
+    }
+}
+
+/// Manager for scratch space on WASM (single-threaded version).
+///
+/// WASM is single-threaded, so we only need one scratch buffer.
+#[cfg(target_arch = "wasm32")]
+pub struct ScratchSpaceManager {
+    /// Single scratch buffer (WASM is single-threaded)
+    scratch: UnsafeCell<WasmScratch>,
+    /// Size of the scratch buffer
+    scratch_size: usize,
+    /// Max threads (always 1 on WASM)
+    max_threads: usize,
+}
+
+// SAFETY: WASM is single-threaded
+#[cfg(target_arch = "wasm32")]
+unsafe impl Send for ScratchSpaceManager {}
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for ScratchSpaceManager {}
+
+#[cfg(target_arch = "wasm32")]
+impl ScratchSpaceManager {
+    /// Create a new scratch space manager.
+    pub fn new(scratch_size: usize, _max_threads: usize) -> Self {
+        Self {
+            scratch: UnsafeCell::new(WasmScratch::new(scratch_size)),
+            scratch_size,
+            max_threads: 1, // WASM is single-threaded
+        }
+    }
+
+    /// Create a scratch manager sized for model dimensions.
+    pub fn for_model(hidden_dim: usize, _max_threads: usize) -> Self {
+        let scratch_size = hidden_dim * 4 * std::mem::size_of::<f32>();
+        Self::new(scratch_size, 1)
+    }
+
+    /// Get the scratch buffer.
+    pub fn get_scratch(&self) -> ScratchSpace<'_> {
+        // SAFETY: WASM is single-threaded
+        ScratchSpace {
+            scratch: unsafe { &mut *self.scratch.get() },
+        }
+    }
+
+    /// Reset the scratch buffer.
+    pub fn reset_all(&self) {
+        // SAFETY: WASM is single-threaded
+        unsafe {
+            (*self.scratch.get()).reset();
+        }
+    }
+
+    /// Get the configured scratch size.
+    pub fn scratch_size(&self) -> usize {
+        self.scratch_size
+    }
+
+    /// Get the number of active threads (always 1 on WASM).
+    pub fn active_threads(&self) -> usize {
+        1
+    }
+
+    /// Get statistics about scratch usage.
+    pub fn stats(&self) -> ScratchStats {
+        // SAFETY: WASM is single-threaded
+        let used = unsafe { (*self.scratch.get()).used };
+        ScratchStats {
+            scratch_size: self.scratch_size,
+            active_threads: 1,
+            max_threads: 1,
+            total_allocated: self.scratch_size,
+            total_used: used,
+            max_thread_usage: used,
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl std::fmt::Debug for ScratchSpaceManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScratchSpaceManager")
+            .field("scratch_size", &self.scratch_size)
+            .field("max_threads", &self.max_threads)
+            .field("active_threads", &1)
+            .finish()
+    }
+}
+
+/// Handle to a thread's scratch space (non-WASM version).
+#[cfg(not(target_arch = "wasm32"))]
 pub struct ScratchSpace<'a> {
     scratch: &'a mut ThreadScratch,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> ScratchSpace<'a> {
     /// Get a typed slice of the scratch buffer.
     ///
@@ -1014,6 +1149,67 @@ impl<'a> ScratchSpace<'a> {
     /// # Returns
     ///
     /// A mutable slice of the requested type, or None if insufficient space.
+    pub fn get<T: Copy + Default>(&mut self, count: usize) -> Option<&mut [T]> {
+        let size = count * std::mem::size_of::<T>();
+        let align = std::mem::align_of::<T>().max(DEFAULT_ALIGNMENT);
+
+        let aligned_used = (self.scratch.used + align - 1) & !(align - 1);
+        let new_used = aligned_used + size;
+
+        if new_used > self.scratch.data.len() {
+            return None;
+        }
+
+        self.scratch.used = new_used;
+
+        // SAFETY: We've checked bounds and alignment
+        unsafe {
+            let ptr = self.scratch.data.as_mut_ptr().add(aligned_used) as *mut T;
+            std::ptr::write_bytes(ptr, 0, count);
+            Some(std::slice::from_raw_parts_mut(ptr, count))
+        }
+    }
+
+    /// Get the raw scratch buffer.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.scratch.data
+    }
+
+    /// Get the mutable raw scratch buffer.
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.scratch.data
+    }
+
+    /// Reset the scratch buffer for reuse.
+    pub fn reset(&mut self) {
+        self.scratch.reset();
+    }
+
+    /// Get current usage in bytes.
+    pub fn used(&self) -> usize {
+        self.scratch.used
+    }
+
+    /// Get remaining capacity in bytes.
+    pub fn remaining(&self) -> usize {
+        self.scratch.data.len() - self.scratch.used
+    }
+
+    /// Get total capacity in bytes.
+    pub fn capacity(&self) -> usize {
+        self.scratch.data.len()
+    }
+}
+
+/// Handle to scratch space (WASM version).
+#[cfg(target_arch = "wasm32")]
+pub struct ScratchSpace<'a> {
+    scratch: &'a mut WasmScratch,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl<'a> ScratchSpace<'a> {
+    /// Get a typed slice of the scratch buffer.
     pub fn get<T: Copy + Default>(&mut self, count: usize) -> Option<&mut [T]> {
         let size = count * std::mem::size_of::<T>();
         let align = std::mem::align_of::<T>().max(DEFAULT_ALIGNMENT);

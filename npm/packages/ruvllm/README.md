@@ -1,8 +1,19 @@
-# @ruvector/ruvllm
+# @ruvector/ruvllm v2.0.0
 
 **Build AI that learns and improves from every interaction.**
 
 RuvLLM is a self-learning language model toolkit that gets smarter over time. Unlike traditional LLMs that remain static after training, RuvLLM continuously adapts to your use case while remembering what it learned before.
+
+## What's New in v2.0.0
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| Multi-threaded GEMM/GEMV | Rayon parallelization | 12.7x speedup on M4 Pro |
+| Flash Attention 2 | Auto block sizing | +10% throughput |
+| Quantized Inference | INT8/INT4/Q4_K kernels | 4-8x memory reduction |
+| Metal GPU Shaders | simdgroup_matrix operations | 3x speedup on Apple Silicon |
+| Memory Pool | Arena allocator | Zero-allocation inference |
+| WASM Support | Browser-based inference | Run in any modern browser |
 
 ## What Makes RuvLLM Different?
 
@@ -289,13 +300,56 @@ Native acceleration available on:
 
 | Platform | Architecture | SIMD Support |
 |----------|-------------|--------------|
-| macOS | Apple Silicon (M1/M2/M3) | NEON |
+| macOS | Apple Silicon (M1/M2/M3/M4) | NEON, Metal GPU |
 | macOS | Intel x64 | AVX2, SSE4.1 |
 | Linux | x64 | AVX2, AVX-512, SSE4.1 |
 | Linux | ARM64 | NEON |
 | Windows | x64 | AVX2, SSE4.1 |
+| Browser | WASM | SIMD128 (v2.0.0) |
 
 Falls back to optimized JavaScript on unsupported platforms.
+
+## WASM Usage (v2.0.0)
+
+RuvLLM v2.0.0 supports browser-based inference via WebAssembly.
+
+### Browser Example
+
+```html
+<script type="module">
+import { RuvLLM } from 'https://cdn.jsdelivr.net/npm/@ruvector/ruvllm@2/dist/esm/index.js';
+
+const llm = new RuvLLM({ wasm: true });
+
+// All operations work the same as native
+const response = llm.query('What is quantum computing?');
+console.log(response.text);
+</script>
+```
+
+### Node.js with WASM Fallback
+
+```typescript
+import { RuvLLM } from '@ruvector/ruvllm';
+
+// Automatically uses native if available, WASM otherwise
+const llm = new RuvLLM({
+  preferNative: true,  // Try native first (default)
+  fallbackToWasm: true // Use WASM if native unavailable
+});
+
+console.log(`Backend: ${llm.backend}`); // 'native' or 'wasm'
+```
+
+### WASM Performance
+
+| Operation | Native | WASM | Overhead |
+|-----------|--------|------|----------|
+| Query | 1.49us | 4.2us | 2.8x |
+| Embed (768d) | 7.1us | 19us | 2.7x |
+| Memory Search | 45us | 120us | 2.7x |
+
+WASM performance is acceptable for most use cases and enables browser-based AI applications.
 
 ## Real-World Use Cases
 

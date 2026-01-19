@@ -408,3 +408,225 @@ mod candle_tests {
         // assert!(result.is_ok());
     }
 }
+
+// ========== V2 Feature Tests: Memory Pool Integration ==========
+
+mod memory_pool_tests {
+    use ruvllm_integration::memory_pool::{
+        InferenceArena, BufferPool, BufferSize, ScratchSpaceManager,
+        MemoryManager, MemoryManagerConfig,
+    };
+
+    /// Test memory pool integration with streaming generation
+    #[test]
+    fn test_memory_pool_integration() {
+        let pool = BufferPool::new();
+
+        // Pre-warm the pool
+        pool.prewarm_all(4);
+
+        // Simulate multiple generation steps
+        for step in 0..10 {
+            // Acquire buffers for KV cache
+            let kv_buffer = pool.acquire(BufferSize::KB64);
+            assert_eq!(kv_buffer.capacity(), 65536);
+
+            // Simulate processing
+            let data = kv_buffer.as_slice::<f32>();
+            assert!(!data.is_empty());
+
+            // Buffer returns to pool when dropped
+        }
+
+        // Check pool statistics
+        let stats = pool.stats();
+        assert!(stats.hits + stats.misses > 0, "Pool should have been used");
+
+        // Hit rate should be decent after warm-up
+        if stats.hits + stats.misses >= 10 {
+            assert!(
+                stats.hit_rate > 0.5,
+                "Pool hit rate should be decent: {:.2}",
+                stats.hit_rate
+            );
+        }
+    }
+
+    /// Test streaming with memory pool
+    #[test]
+    fn test_streaming_with_pool() {
+        let manager = MemoryManager::new();
+
+        // Simulate streaming generation
+        for token_idx in 0..100 {
+            // Reset arena at start of each step
+            manager.reset_step();
+
+            // Allocate temporary buffers from arena
+            let activations: &mut [f32] = manager.arena.alloc(1024).expect("arena alloc failed");
+            activations[0] = token_idx as f32;
+
+            let logits: &mut [f32] = manager.arena.alloc(32000).expect("arena alloc for logits");
+            logits[0] = token_idx as f32 * 0.1;
+
+            // Acquire KV cache buffer from pool
+            let kv_buf = manager.pool.acquire(BufferSize::KB16);
+            assert!(kv_buf.capacity() >= 16384);
+
+            // Use scratch space for intermediate computations
+            let mut scratch = manager.scratch.get_scratch();
+            if let Some(temp) = scratch.get::<f32>(256) {
+                temp.fill(1.0);
+                assert_eq!(temp.len(), 256);
+            }
+
+            // Verify arena usage grows
+            assert!(manager.arena.used() > 0);
+        }
+
+        // Verify final statistics
+        let stats = manager.stats();
+        assert!(stats.pool.hits + stats.pool.misses > 0);
+        assert!(stats.arena.high_water_mark > 0);
+    }
+
+    /// Test arena allocation and reset cycle
+    #[test]
+    fn test_arena_allocation_cycle() {
+        let arena = InferenceArena::new(4 * 1024 * 1024); // 4MB
+
+        for cycle in 0..50 {
+            // Allocate various buffer sizes
+            let buf1: &mut [f32] = arena.alloc(4096).expect("alloc 4096");
+            let buf2: &mut [f32] = arena.alloc(8192).expect("alloc 8192");
+            let buf3: &mut [f32] = arena.alloc(1024).expect("alloc 1024");
+
+            // Write to buffers
+            buf1[0] = cycle as f32;
+            buf2[0] = cycle as f32 * 2.0;
+            buf3[0] = cycle as f32 * 3.0;
+
+            // Verify allocations
+            assert_eq!(arena.allocation_count(), 3);
+            assert!(arena.used() > 0);
+
+            // Reset for next cycle
+            arena.reset();
+            assert_eq!(arena.used(), 0);
+            assert_eq!(arena.allocation_count(), 0);
+        }
+
+        // High water mark should be set
+        assert!(arena.high_water_mark() > 0);
+    }
+
+    /// Test buffer pool reuse efficiency
+    #[test]
+    fn test_buffer_pool_reuse() {
+        let pool = BufferPool::with_capacity(8);
+
+        // Acquire and release same size multiple times
+        for _ in 0..20 {
+            let buf = pool.acquire(BufferSize::KB4);
+            assert_eq!(buf.capacity(), 4096);
+            // Buffer returns to pool on drop
+        }
+
+        let stats = pool.stats();
+        // After first allocation, subsequent ones should hit the pool
+        assert!(
+            stats.hits >= 19,
+            "Expected at least 19 hits, got {}",
+            stats.hits
+        );
+    }
+
+    /// Test scratch space thread isolation
+    #[test]
+    fn test_scratch_space_isolation() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let manager = Arc::new(ScratchSpaceManager::new(8192, 8));
+
+        let handles: Vec<_> = (0..4)
+            .map(|thread_id| {
+                let manager = Arc::clone(&manager);
+                thread::spawn(move || {
+                    for _ in 0..10 {
+                        let mut scratch = manager.get_scratch();
+
+                        // Each thread writes its ID
+                        if let Some(buf) = scratch.get::<u32>(100) {
+                            buf.fill(thread_id);
+                            // Verify no cross-thread contamination
+                            assert!(buf.iter().all(|&v| v == thread_id));
+                        }
+
+                        scratch.reset();
+                    }
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
+
+        // Verify 4 threads were tracked
+        assert_eq!(manager.active_threads(), 4);
+    }
+
+    /// Test memory manager configuration for model
+    #[test]
+    fn test_memory_manager_for_model() {
+        // Configure for a small LLM (e.g., Phi-2)
+        let config = MemoryManagerConfig::for_model(
+            2560,   // hidden_dim
+            51200,  // vocab_size
+            1,      // batch_size
+        );
+
+        let manager = MemoryManager::with_config(config);
+
+        // Verify adequate capacity
+        assert!(manager.arena.capacity() > 2560 * 4 * 4); // At least hidden_dim * 4 * sizeof(f32)
+
+        // Simulate inference
+        let activations: &mut [f32] = manager.arena.alloc(2560).expect("alloc activations");
+        let logits: &mut [f32] = manager.arena.alloc(51200).expect("alloc logits");
+
+        assert_eq!(activations.len(), 2560);
+        assert_eq!(logits.len(), 51200);
+
+        // Reset for next step
+        manager.reset_step();
+        assert_eq!(manager.arena.used(), 0);
+    }
+
+    /// Test buffer size class selection
+    #[test]
+    fn test_buffer_size_selection() {
+        let pool = BufferPool::new();
+
+        // Test automatic size class selection
+        if let Some(buf) = pool.acquire_for_size(500) {
+            assert!(buf.capacity() >= 500);
+            assert_eq!(buf.size_class(), BufferSize::KB1);
+        }
+
+        if let Some(buf) = pool.acquire_for_size(3000) {
+            assert!(buf.capacity() >= 3000);
+            assert_eq!(buf.size_class(), BufferSize::KB4);
+        }
+
+        if let Some(buf) = pool.acquire_for_size(100000) {
+            assert!(buf.capacity() >= 100000);
+            assert_eq!(buf.size_class(), BufferSize::KB256);
+        }
+
+        // Size too large should return None
+        let too_large = pool.acquire_for_size(500000);
+        assert!(too_large.is_none(), "Should not find buffer for 500KB");
+    }
+}
