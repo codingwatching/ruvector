@@ -48,7 +48,15 @@ pub use pipelines::{MetalPipelines, PipelineCache};
 #[cfg(target_os = "macos")]
 pub use buffers::{MetalBuffer, MetalBufferPool};
 #[cfg(target_os = "macos")]
-pub use operations::*;
+pub use operations::{
+    // FP16/Quantization utilities
+    fp32_to_fp16, fp16_to_fp32, quantize_int8, dequantize_int8,
+    verify_speculative_tokens,
+    // GEMV Metal GPU functions
+    GemvParams, gemv_metal, gemv_metal_with_params, gemv_metal_f16, gemv_batched_metal,
+    // GEMM Metal GPU functions
+    batched_gemm_metal,
+};
 
 use crate::error::{Result, RuvLLMError};
 use crate::kernels::AttentionConfig;

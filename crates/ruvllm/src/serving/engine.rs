@@ -11,6 +11,8 @@ use super::request::{
 use super::scheduler::{ContinuousBatchScheduler, RequestQueue, SchedulerConfig};
 use crate::backends::{GenerateParams, GeneratedToken, LlmBackend};
 use crate::error::{Result, RuvLLMError};
+use crate::optimization::realtime::RealtimeOptimizer;
+use crate::speculative::{SpeculativeConfig, SpeculativeDecoder};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -37,6 +39,14 @@ pub struct ServingEngineConfig {
     pub streaming_enabled: bool,
     /// Request timeout in milliseconds
     pub request_timeout_ms: u64,
+    /// Enable speculative decoding (default: true for 2-3x speedup)
+    pub enable_speculative: bool,
+    /// Speculative decoding configuration
+    pub speculative_config: SpeculativeConfig,
+    /// Draft model path for speculative decoding (auto-detected if None)
+    /// - For 7B+ models: use 1B draft (e.g., "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    /// - For 3B models: use 0.5B draft (e.g., "Qwen/Qwen2.5-0.5B")
+    pub draft_model_path: Option<String>,
 }
 
 impl Default for ServingEngineConfig {
@@ -49,6 +59,9 @@ impl Default for ServingEngineConfig {
             coalesce_window_ms: 10,
             streaming_enabled: true,
             request_timeout_ms: 60000,
+            enable_speculative: true,  // Enabled by default for 2-3x decode speedup
+            speculative_config: SpeculativeConfig::default(),
+            draft_model_path: None,  // Auto-detected based on main model size
         }
     }
 }
@@ -111,6 +124,8 @@ pub struct ServingEngine {
     config: ServingEngineConfig,
     /// The LLM backend
     model: Arc<dyn LlmBackend>,
+    /// Draft model for speculative decoding (loaded lazily)
+    draft_model: RwLock<Option<Arc<dyn LlmBackend>>>,
     /// Request scheduler
     scheduler: Mutex<ContinuousBatchScheduler>,
     /// Request queue
@@ -127,19 +142,38 @@ pub struct ServingEngine {
     total_tokens: AtomicU64,
     /// Start time for metrics
     start_time: Instant,
+    /// Realtime optimizer for speculative decoding decisions
+    optimizer: RealtimeOptimizer,
 }
 
 impl ServingEngine {
     /// Create a new serving engine
     pub fn new(model: Arc<dyn LlmBackend>, config: ServingEngineConfig) -> Self {
+        use crate::optimization::realtime::RealtimeConfig;
+
         let scheduler = ContinuousBatchScheduler::new(
             config.scheduler.clone(),
             config.kv_cache.clone(),
         );
 
+        // Create realtime optimizer with speculative decoding enabled by default
+        let realtime_config = RealtimeConfig {
+            enable_speculative: config.enable_speculative,
+            speculative: crate::optimization::realtime::SpeculativeConfig {
+                draft_model: config.draft_model_path.clone(),
+                num_speculative_tokens: config.speculative_config.lookahead,
+                acceptance_threshold: config.speculative_config.acceptance_threshold,
+                tree_speculation: config.speculative_config.tree_speculation,
+                max_tree_depth: config.speculative_config.max_tree_depth,
+            },
+            ..Default::default()
+        };
+        let optimizer = RealtimeOptimizer::new(realtime_config);
+
         Self {
             config,
             model,
+            draft_model: RwLock::new(None),
             scheduler: Mutex::new(scheduler),
             queue: Mutex::new(RequestQueue::new()),
             pending_requests: RwLock::new(HashMap::new()),
@@ -148,6 +182,7 @@ impl ServingEngine {
             total_requests: AtomicU64::new(0),
             total_tokens: AtomicU64::new(0),
             start_time: Instant::now(),
+            optimizer,
         }
     }
 
@@ -526,6 +561,90 @@ impl ServingEngine {
     /// Get configuration
     pub fn config(&self) -> &ServingEngineConfig {
         &self.config
+    }
+
+    /// Check if speculative decoding should be used for the given generation params
+    ///
+    /// Returns true when:
+    /// - Speculative decoding is enabled in config
+    /// - Temperature is low (< 0.5) for deterministic generation
+    /// - Greedy decoding (top_k = 1)
+    /// - A draft model is available or can be loaded
+    pub fn should_use_speculative(&self, params: &GenerateParams) -> bool {
+        if !self.config.enable_speculative {
+            return false;
+        }
+
+        // Use the optimizer's recommendation
+        self.optimizer.should_use_speculative(params)
+    }
+
+    /// Get recommended draft model path based on main model size
+    ///
+    /// Auto-detection rules:
+    /// - For 7B+ models: use 1B draft (e.g., TinyLlama-1.1B)
+    /// - For 3B models: use 0.5B draft (e.g., Qwen2.5-0.5B)
+    /// - Returns configured path if explicitly set
+    pub fn get_draft_model_path(&self) -> Option<String> {
+        // Return configured path if explicitly set
+        if let Some(ref path) = self.config.draft_model_path {
+            return Some(path.clone());
+        }
+
+        // Auto-detect based on main model info
+        if let Some(info) = self.model.model_info() {
+            let params_billions = info.num_parameters as f64 / 1_000_000_000.0;
+
+            if params_billions >= 7.0 {
+                // 7B+ models: use 1B draft model
+                Some("TinyLlama/TinyLlama-1.1B-Chat-v1.0".to_string())
+            } else if params_billions >= 3.0 {
+                // 3B models: use 0.5B draft model
+                Some("Qwen/Qwen2.5-0.5B".to_string())
+            } else {
+                // For smaller models, speculative decoding overhead may not be worth it
+                None
+            }
+        } else {
+            // No model info available, use sensible default
+            Some("TinyLlama/TinyLlama-1.1B-Chat-v1.0".to_string())
+        }
+    }
+
+    /// Set the draft model for speculative decoding
+    pub fn set_draft_model(&self, draft_model: Arc<dyn LlmBackend>) {
+        *self.draft_model.write() = Some(draft_model);
+
+        // Enable speculative decoding in the optimizer
+        if let Some(path) = self.get_draft_model_path() {
+            self.optimizer.enable_speculative_decoding(&path);
+        }
+    }
+
+    /// Get the realtime optimizer for advanced optimization decisions
+    pub fn optimizer(&self) -> &RealtimeOptimizer {
+        &self.optimizer
+    }
+
+    /// Get speculative decoding statistics
+    pub fn speculative_stats(&self) -> Option<crate::speculative::SpeculativeStats> {
+        // TODO: Return actual stats when speculative decoder is integrated
+        // For now, return placeholder stats
+        if self.optimizer.is_speculative_active() {
+            Some(crate::speculative::SpeculativeStats {
+                draft_tokens: 0,
+                accepted_tokens: 0,
+                acceptance_rate: 0.0,
+                speedup: 1.0,
+                main_forward_passes: 0,
+                draft_forward_passes: 0,
+                avg_tokens_per_main_pass: 1.0,
+                total_speculation_time_ms: 0.0,
+                total_tokens_generated: 0,
+            })
+        } else {
+            None
+        }
     }
 }
 

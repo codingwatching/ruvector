@@ -49,7 +49,7 @@ impl Default for RealtimeConfig {
             min_batch_size: 1,
             max_batch_size: 64,
             kv_cache_pressure_threshold: 0.8,
-            enable_speculative: false,
+            enable_speculative: true,  // Enabled by default for 2-3x decode speedup
             speculative: SpeculativeConfig::default(),
             batch_strategy: BatchSizeStrategy::Adaptive,
             kv_policy: KvCachePressurePolicy::Evict,

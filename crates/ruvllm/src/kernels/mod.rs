@@ -77,6 +77,10 @@ pub mod norm;
 pub mod quantized;
 pub mod rope;
 
+// Apple Accelerate framework integration (macOS only)
+#[cfg(any(target_os = "macos", doc))]
+pub mod accelerate;
+
 // Re-exports for convenience
 pub use attention::{
     flash_attention_neon, flash_attention_v2, flash_attention_auto,
@@ -104,6 +108,18 @@ pub use quantized::{
     INT4_BLOCK_SIZE, Q4K_SUPER_BLOCK_SIZE,
 };
 pub use rope::{apply_rope_neon, precompute_rope_tables, RopeConfig};
+
+// Accelerate framework exports (macOS only)
+#[cfg(all(target_os = "macos", feature = "accelerate"))]
+pub use accelerate::{
+    gemv_accelerate, gemv_transpose_accelerate, gemv_scaled_accelerate,
+    gemm_accelerate, dot_accelerate, scal_accelerate, axpy_accelerate,
+    is_accelerate_available, should_use_accelerate, MatrixLayout,
+};
+
+// Re-export availability check for all platforms
+#[cfg(not(all(target_os = "macos", feature = "accelerate")))]
+pub use accelerate::is_accelerate_available;
 
 /// SIMD lane width for NEON (128-bit = 4 floats).
 ///

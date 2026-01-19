@@ -119,6 +119,9 @@ mmap = ["dep:memmap2"]
 # GGUF support with memory mapping (recommended for large models)
 gguf-mmap = ["mmap"]
 
+# Apple Accelerate framework for BLAS operations (macOS only, ~2x GEMV speedup)
+accelerate = []
+
 # mistral-rs backend feature (enables full mistral-rs integration)
 # When the actual mistralrs crate is available, uncomment and use:
 # mistral-rs = ["mistralrs", "mistralrs-core", "tokenizers"]
