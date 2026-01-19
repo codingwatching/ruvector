@@ -686,6 +686,50 @@ impl RealtimeOptimizer {
     }
 }
 
+impl RealtimeOptimizer {
+    /// Check if speculative decoding should be used for these generation parameters
+    ///
+    /// Returns true when:
+    /// - Temperature is low (< 0.5) - deterministic generation benefits most
+    /// - Greedy decoding (top_k = 1)
+    /// - Speculative decoding is enabled in config
+    pub fn should_use_speculative(&self, params: &crate::backends::GenerateParams) -> bool {
+        let config = self.config.read();
+        if !config.enable_speculative {
+            return false;
+        }
+
+        // Speculative decoding is most effective for:
+        // 1. Low temperature (more deterministic)
+        // 2. Greedy decoding
+        // 3. When not using high top-p sampling
+        params.temperature < 0.5 || params.top_k == 1
+    }
+
+    /// Get recommended speculative decoding configuration based on current metrics
+    pub fn get_speculative_config(&self) -> SpeculativeConfig {
+        let config = self.config.read();
+        let avg_latency = self.average_latency();
+        let memory_pressure = self.memory_pressure();
+
+        // Adjust speculative config based on system state
+        let mut spec_config = config.speculative.clone();
+
+        // Reduce lookahead under memory pressure
+        if memory_pressure > 0.8 {
+            spec_config.num_speculative_tokens = (spec_config.num_speculative_tokens / 2).max(2);
+        }
+
+        // Increase acceptance threshold when latency is high
+        if avg_latency > config.latency_target_ms {
+            spec_config.acceptance_threshold =
+                (spec_config.acceptance_threshold + 0.1).min(0.95);
+        }
+
+        spec_config
+    }
+}
+
 impl Default for RealtimeOptimizer {
     fn default() -> Self {
         Self::new(RealtimeConfig::default())

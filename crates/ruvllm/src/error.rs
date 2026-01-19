@@ -86,6 +86,14 @@ pub enum RuvLLMError {
     /// Generation errors
     #[error("Generation error: {0}")]
     Generation(String),
+
+    /// Metal GPU errors (macOS only)
+    #[error("Metal error: {0}")]
+    Metal(String),
+
+    /// Shader compilation errors
+    #[error("Shader error: {0}")]
+    Shader(String),
 }
 
 impl From<ruvector_core::RuvectorError> for RuvLLMError {

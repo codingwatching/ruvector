@@ -6,7 +6,7 @@
 use ruvllm_integration::{
     backends::{
         create_backend, DeviceType, DType, GenerateParams, LlmBackend, ModelArchitecture,
-        ModelConfig, ModelInfo, Quantization, SpecialTokens, Tokenizer,
+        ModelConfig, ModelInfo, Quantization, SpecialTokens, TokenStream, Tokenizer,
     },
     error::Result,
 };
@@ -87,6 +87,19 @@ impl LlmBackend for MockBackend {
         ];
 
         Ok(Box::new(tokens.into_iter().map(Ok)))
+    }
+
+    fn generate_stream_v2(&self, _prompt: &str, _params: GenerateParams) -> Result<TokenStream> {
+        if !self.loaded {
+            return Err(ruvllm_integration::RuvLLMError::Backend(
+                "Model not loaded".to_string(),
+            ));
+        }
+        // Return a mock stream using channel
+        let (tx, stream) = TokenStream::channel();
+        // Drop tx immediately since we don't need to send anything for this mock
+        drop(tx);
+        Ok(stream)
     }
 
     fn get_embeddings(&self, _text: &str) -> Result<Vec<f32>> {

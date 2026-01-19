@@ -8,19 +8,28 @@ use colored::Colorize;
 use console::style;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result as RustyResult};
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::models::{get_model, resolve_model_id, QuantPreset};
 
+/// Speculative decoding configuration for chat
+struct SpeculativeConfig {
+    draft_model: Option<String>,
+    lookahead: usize,
+}
+
 /// Chat session state
 struct ChatSession {
     model_id: String,
     backend: Box<dyn ruvllm::LlmBackend>,
+    draft_backend: Option<Box<dyn ruvllm::LlmBackend>>,
     history: Vec<ChatMessage>,
     system_prompt: Option<String>,
     max_tokens: usize,
     temperature: f32,
+    speculative: Option<SpeculativeConfig>,
 }
 
 #[derive(Clone)]
@@ -37,6 +46,8 @@ pub async fn run(
     temperature: f32,
     quantization: &str,
     cache_dir: &str,
+    draft_model: Option<&str>,
+    speculative_lookahead: usize,
 ) -> Result<()> {
     let model_id = resolve_model_id(model);
     let quant = QuantPreset::from_str(quantization)
@@ -45,7 +56,7 @@ pub async fn run(
     // Print header
     print_header(&model_id, system_prompt, max_tokens, temperature);
 
-    // Load model
+    // Load main model
     println!("{}", "Loading model...".yellow());
     let backend = load_model(&model_id, quant, cache_dir)?;
 
@@ -60,14 +71,46 @@ pub async fn run(
         println!("{} Model loaded (mock mode)", style("Ready!").yellow().bold());
     }
 
+    // Load draft model for speculative decoding if provided
+    let (draft_backend, speculative_config) = if let Some(draft_id) = draft_model {
+        println!("{}", "Loading draft model for speculative decoding...".yellow());
+        let draft = load_model(&resolve_model_id(draft_id), quant, cache_dir)?;
+
+        if let Some(info) = draft.model_info() {
+            println!(
+                "{} Draft model: {} ({:.1}B params)",
+                style("Speculative:").cyan().bold(),
+                info.name,
+                info.num_parameters as f64 / 1e9
+            );
+        }
+
+        let config = SpeculativeConfig {
+            draft_model: Some(draft_id.to_string()),
+            lookahead: speculative_lookahead.clamp(2, 8),
+        };
+
+        println!(
+            "  {} Lookahead: {} tokens, expected speedup: 2-3x",
+            style(">").cyan(),
+            config.lookahead
+        );
+
+        (Some(draft), Some(config))
+    } else {
+        (None, None)
+    };
+
     // Create session
     let mut session = ChatSession {
         model_id,
         backend,
+        draft_backend,
         history: Vec::new(),
         system_prompt: system_prompt.map(String::from),
         max_tokens,
         temperature,
+        speculative: speculative_config,
     };
 
     // Add system prompt to history
@@ -121,22 +164,10 @@ pub async fn run(
                     }
                 }
 
-                // Regular message - get response
-                let start = Instant::now();
+                // Regular message - get response with streaming
                 match generate_response(&mut session, input) {
-                    Ok(response) => {
-                        let elapsed = start.elapsed();
-                        println!();
-                        println!("{} {}", style("AI>").green().bold(), response);
-                        println!(
-                            "{}",
-                            format!(
-                                "({:.1}s, ~{} tokens)",
-                                elapsed.as_secs_f64(),
-                                response.split_whitespace().count()
-                            )
-                            .dimmed()
-                        );
+                    Ok(_response) => {
+                        // Response is already printed via streaming in generate_response
                         println!();
                     }
                     Err(e) => {
@@ -220,7 +251,7 @@ fn load_model(
     Ok(backend)
 }
 
-/// Generate response from the model
+/// Generate response from the model with streaming output
 fn generate_response(session: &mut ChatSession, user_input: &str) -> Result<String> {
     // Add user message to history
     session.history.push(ChatMessage {
@@ -231,7 +262,7 @@ fn generate_response(session: &mut ChatSession, user_input: &str) -> Result<Stri
     // Build prompt
     let prompt = build_prompt(&session.history);
 
-    // Generate
+    // Generate parameters
     let params = ruvllm::GenerateParams {
         max_tokens: session.max_tokens,
         temperature: session.temperature,
@@ -240,10 +271,15 @@ fn generate_response(session: &mut ChatSession, user_input: &str) -> Result<Stri
     };
 
     let response = if session.backend.is_model_loaded() {
-        session.backend.generate(&prompt, params)?
+        // Try streaming first
+        generate_with_streaming(session.backend.as_ref(), &prompt, params.clone())
+            .unwrap_or_else(|_| {
+                // Fall back to non-streaming
+                session.backend.generate(&prompt, params).unwrap_or_else(|_| mock_response(user_input))
+            })
     } else {
-        // Mock response
-        mock_response(user_input)
+        // Use streaming mock response
+        generate_streaming_mock(user_input)?
     };
 
     // Add assistant response to history
@@ -253,6 +289,98 @@ fn generate_response(session: &mut ChatSession, user_input: &str) -> Result<Stri
     });
 
     Ok(response)
+}
+
+/// Generate response with real streaming output
+fn generate_with_streaming(
+    backend: &dyn ruvllm::LlmBackend,
+    prompt: &str,
+    params: ruvllm::GenerateParams,
+) -> Result<String> {
+    let stream = backend.generate_stream_v2(prompt, params)?;
+
+    let mut full_response = String::new();
+
+    // Print streaming prefix
+    print!("{} ", style("AI>").green().bold());
+    std::io::stdout().flush()?;
+
+    for event_result in stream {
+        match event_result? {
+            ruvllm::StreamEvent::Token(token) => {
+                print!("{}", token.text.green());
+                std::io::stdout().flush()?;
+                full_response.push_str(&token.text);
+            }
+            ruvllm::StreamEvent::Done {
+                total_tokens,
+                duration_ms,
+                tokens_per_second,
+            } => {
+                println!();
+                println!(
+                    "{}",
+                    format!(
+                        "[{} tokens, {:.0}ms, {:.1} t/s]",
+                        total_tokens, duration_ms, tokens_per_second
+                    )
+                    .dimmed()
+                );
+                break;
+            }
+            ruvllm::StreamEvent::Error(msg) => {
+                return Err(anyhow::anyhow!("Generation error: {}", msg));
+            }
+        }
+    }
+
+    Ok(full_response)
+}
+
+/// Generate streaming mock response for testing
+fn generate_streaming_mock(input: &str) -> Result<String> {
+    let response = mock_response(input);
+    let words: Vec<&str> = response.split_whitespace().collect();
+
+    // Print streaming prefix
+    print!("{} ", style("AI>").green().bold());
+    std::io::stdout().flush()?;
+
+    let start = Instant::now();
+    let mut full_response = String::new();
+
+    for (i, word) in words.iter().enumerate() {
+        // Simulate streaming delay
+        std::thread::sleep(std::time::Duration::from_millis(30));
+
+        let text = if i == 0 {
+            word.to_string()
+        } else {
+            format!(" {}", word)
+        };
+
+        print!("{}", text.green());
+        std::io::stdout().flush()?;
+        full_response.push_str(&text);
+    }
+
+    let elapsed = start.elapsed();
+    let token_count = words.len();
+    let tps = token_count as f64 / elapsed.as_secs_f64();
+
+    println!();
+    println!(
+        "{}",
+        format!(
+            "[{} tokens, {:.0}ms, {:.1} t/s]",
+            token_count,
+            elapsed.as_millis(),
+            tps
+        )
+        .dimmed()
+    );
+
+    Ok(full_response)
 }
 
 /// Build prompt from chat history

@@ -47,12 +47,16 @@ pub mod error;
 pub mod kernels;
 pub mod kv_cache;
 pub mod lora;
+#[cfg(all(target_os = "macos", feature = "metal-compute"))]
+pub mod metal;
 pub mod optimization;
 pub mod paged_attention;
 pub mod policy_store;
 pub mod session;
 pub mod session_index;
 pub mod sona;
+pub mod speculative;
+pub mod tokenizer;
 pub mod types;
 pub mod witness_log;
 
@@ -66,10 +70,12 @@ pub use lora::{
 pub use backends::{
     create_backend, DeviceType, DType, GenerateParams, GeneratedToken, LlmBackend,
     ModelArchitecture, ModelConfig, ModelInfo, Quantization, SharedBackend, SpecialTokens,
-    Tokenizer,
+    StreamEvent, TokenStream, Tokenizer,
 };
 #[cfg(feature = "candle")]
 pub use backends::CandleBackend;
+#[cfg(feature = "async-runtime")]
+pub use backends::{AsyncTokenStream, LlmBackendAsync};
 pub use error::{RuvLLMError, Result};
 pub use kv_cache::{TwoTierKvCache, KvCacheConfig, CacheTier, CacheQuantization};
 pub use paged_attention::{PagedAttention, PagedAttentionConfig, PageTable, PageBlock};
@@ -84,10 +90,53 @@ pub use optimization::{
     SonaLlm, SonaLlmConfig, TrainingSample, AdaptationResult, LearningLoopStats,
     ConsolidationStrategy, OptimizationTrigger,
 };
+pub use tokenizer::{
+    RuvTokenizer, ChatMessage, ChatTemplate, Role, TokenizerSpecialTokens,
+    StreamingDecodeBuffer,
+};
+pub use speculative::{
+    SpeculativeDecoder, SpeculativeConfig as SpeculativeDecodingConfig,
+    SpeculativeStats, AtomicSpeculativeStats, VerificationResult,
+    SpeculationTree, TreeNode,
+    softmax, log_softmax, sample_from_probs, top_k_filter, top_p_filter,
+};
 pub use types::*;
 pub use witness_log::{WitnessLog, WitnessEntry, LatencyBreakdown, RoutingDecision};
 
-/// RuvLLM engine configuration
+// Metal GPU acceleration exports (macOS only)
+#[cfg(all(target_os = "macos", feature = "metal-compute"))]
+pub use metal::{
+    MetalContext, MetalConfig, MetalPipelines, MetalBuffer, MetalBufferPool,
+    AttentionParams, GemmParams, NormParams, RopeParams,
+    is_metal_available, get_device_info, MetalDeviceInfo,
+    tile_sizes, shader_source,
+};
+
+/// RuvLLM engine configuration.
+///
+/// This configuration struct controls all aspects of the RuvLLM engine,
+/// including storage paths, attention mechanisms, KV cache settings,
+/// session management, and SONA learning parameters.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ruvllm::{RuvLLMConfig, PagedAttentionConfig, KvCacheConfig};
+///
+/// let config = RuvLLMConfig {
+///     storage_path: "/var/ruvllm".to_string(),
+///     max_sessions: 500,
+///     embedding_dim: 1024,
+///     ..Default::default()
+/// };
+/// ```
+///
+/// # Performance Tuning
+///
+/// | Parameter | Default | High Throughput | Low Latency |
+/// |-----------|---------|-----------------|-------------|
+/// | `max_sessions` | 1000 | 2000 | 500 |
+/// | `embedding_dim` | 768 | 1024 | 512 |
 #[derive(Debug, Clone)]
 pub struct RuvLLMConfig {
     /// Path to Ruvector storage
@@ -120,7 +169,53 @@ impl Default for RuvLLMConfig {
     }
 }
 
-/// Main RuvLLM engine
+/// Main RuvLLM engine for LLM inference with intelligent memory.
+///
+/// The `RuvLLMEngine` is the primary entry point for RuvLLM, providing:
+///
+/// - **Session Management**: Create and manage user sessions with state persistence
+/// - **Policy Storage**: Ruvector-backed semantic search for runtime policies
+/// - **Adapter Management**: Hot-swapping LoRA adapters for task-specific tuning
+/// - **Witness Logging**: Audit trail with HNSW-indexed semantic search
+/// - **SONA Learning**: Three-tier continuous learning integration
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ruvllm::{RuvLLMEngine, RuvLLMConfig};
+///
+/// // Create engine with configuration
+/// let config = RuvLLMConfig::default();
+/// let engine = RuvLLMEngine::new(config)?;
+///
+/// // Create a session for a user
+/// let session = engine.create_session(Some("user-123"))?;
+///
+/// // Search for relevant policies
+/// let embedding = compute_embedding("code completion task");
+/// let policies = engine.search_policies(&embedding, 5)?;
+///
+/// // Record audit entry
+/// let entry = WitnessEntry::new("completion", latency, routing);
+/// engine.record_witness(entry)?;
+/// ```
+///
+/// # Architecture
+///
+/// ```text
+/// +-------------------+     +-------------------+
+/// | RuvLLMEngine      |---->| PolicyStore       |
+/// |                   |     | (Ruvector)        |
+/// |                   |     +-------------------+
+/// |                   |
+/// |                   |---->| SessionIndex      |
+/// |                   |     | (Ruvector)        |
+/// |                   |     +-------------------+
+/// |                   |
+/// |                   |---->| WitnessLog        |
+/// |                   |     | (HNSW search)     |
+/// +-------------------+     +-------------------+
+/// ```
 pub struct RuvLLMEngine {
     /// Configuration
     config: RuvLLMConfig,
@@ -139,7 +234,29 @@ pub struct RuvLLMEngine {
 }
 
 impl RuvLLMEngine {
-    /// Create a new RuvLLM engine
+    /// Create a new RuvLLM engine with the given configuration.
+    ///
+    /// This initializes all subsystems including:
+    /// - Policy store for learned thresholds
+    /// - Session index for conversation state
+    /// - Witness log for audit trails
+    /// - SONA integration for learning loops
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Engine configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if storage paths cannot be created or initialized.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ruvllm::{RuvLLMEngine, RuvLLMConfig};
+    ///
+    /// let engine = RuvLLMEngine::new(RuvLLMConfig::default())?;
+    /// ```
     pub fn new(config: RuvLLMConfig) -> Result<Self> {
         let storage_path = &config.storage_path;
 
@@ -173,7 +290,30 @@ impl RuvLLMEngine {
         })
     }
 
-    /// Create a new session
+    /// Create a new session for a user.
+    ///
+    /// Sessions track conversation state, KV cache references, and enable
+    /// multi-turn interactions. Each session is automatically indexed in
+    /// Ruvector for semantic retrieval.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - Optional user identifier for session tracking
+    ///
+    /// # Returns
+    ///
+    /// A new `Session` instance with a unique ID.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Anonymous session
+    /// let session = engine.create_session(None)?;
+    ///
+    /// // User-identified session
+    /// let session = engine.create_session(Some("user-123"))?;
+    /// println!("Session ID: {}", session.id());
+    /// ```
     pub fn create_session(&self, user_id: Option<&str>) -> Result<Session> {
         let session = self.session_manager.create_session(user_id)?;
 
@@ -189,12 +329,64 @@ impl RuvLLMEngine {
         self.session_manager.get_session(session_id)
     }
 
-    /// Search for policies matching context
+    /// Search for policies matching the given context embedding.
+    ///
+    /// Uses HNSW-indexed semantic search to find relevant policies
+    /// (quantization settings, routing rules, etc.) based on the
+    /// current request context.
+    ///
+    /// # Arguments
+    ///
+    /// * `context_embedding` - Vector embedding of the current context
+    /// * `limit` - Maximum number of policies to return
+    ///
+    /// # Returns
+    ///
+    /// Vector of matching `PolicyEntry` items, sorted by relevance.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let context = compute_embedding("code completion for Python");
+    /// let policies = engine.search_policies(&context, 5)?;
+    ///
+    /// for policy in policies {
+    ///     println!("Policy: {:?}, score: {}", policy.policy_type, policy.score);
+    /// }
+    /// ```
     pub fn search_policies(&self, context_embedding: &[f32], limit: usize) -> Result<Vec<PolicyEntry>> {
         self.policy_store.search(context_embedding, limit)
     }
 
-    /// Record a witness entry for audit
+    /// Record a witness entry for audit logging.
+    ///
+    /// Witness entries provide an audit trail of inference decisions,
+    /// including latency breakdowns, routing decisions, and quality scores.
+    /// All entries are HNSW-indexed for semantic search.
+    ///
+    /// # Arguments
+    ///
+    /// * `entry` - The witness entry to record
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ruvllm::{WitnessEntry, LatencyBreakdown, RoutingDecision};
+    ///
+    /// let entry = WitnessEntry {
+    ///     session_id: session.id().to_string(),
+    ///     request_type: "completion".to_string(),
+    ///     latency: LatencyBreakdown {
+    ///         prefill_ms: 45.0,
+    ///         decode_ms: 120.0,
+    ///         total_ms: 165.0,
+    ///     },
+    ///     routing: RoutingDecision::default(),
+    ///     ..Default::default()
+    /// };
+    ///
+    /// engine.record_witness(entry)?;
+    /// ```
     pub fn record_witness(&self, entry: WitnessEntry) -> Result<()> {
         self.witness_log.record(entry)
     }

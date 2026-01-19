@@ -8092,6 +8092,7 @@ version = "0.1.32"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-stream",
  "axum",
  "bytesize",
  "chrono",
@@ -8125,6 +8126,7 @@ name = "ruvllm-integration"
 version = "0.1.32"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode 1.3.3",
  "candle-core",
  "candle-nn",
@@ -8133,8 +8135,12 @@ dependencies = [
  "criterion",
  "dashmap 6.1.0",
  "dirs 5.0.1",
+ "futures-core",
+ "half 2.7.1",
  "hf-hub 0.3.2",
+ "metal 0.29.0",
  "ndarray 0.16.1",
+ "objc",
  "once_cell",
  "parking_lot 0.12.5",
  "rand 0.8.5",

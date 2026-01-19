@@ -130,6 +130,19 @@ enum Commands {
         /// Quantization format
         #[arg(short, long, default_value = "q4k")]
         quantization: String,
+
+        /// Enable speculative decoding with a draft model
+        ///
+        /// Provide the draft model path/ID. Recommended pairings:
+        /// - Qwen2.5-14B + Qwen2.5-0.5B
+        /// - Mistral-7B + TinyLlama-1.1B
+        /// - Llama-3.2-3B + Llama-3.2-1B
+        #[arg(long)]
+        speculative: Option<String>,
+
+        /// Number of speculative tokens to generate ahead (2-8)
+        #[arg(long, default_value = "4")]
+        speculative_lookahead: usize,
     },
 
     /// Run performance benchmarks
@@ -237,6 +250,8 @@ async fn main() -> anyhow::Result<()> {
             max_tokens,
             temperature,
             quantization,
+            speculative,
+            speculative_lookahead,
         } => {
             chat::run(
                 &model,
@@ -245,6 +260,8 @@ async fn main() -> anyhow::Result<()> {
                 temperature,
                 &quantization,
                 &cache_dir,
+                speculative.as_deref(),
+                speculative_lookahead,
             )
             .await
         }

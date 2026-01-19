@@ -4,10 +4,11 @@
 //! Currently supported backends:
 //!
 //! - **Candle** (Rust-native HuggingFace): Full Rust implementation with Metal acceleration
+//! - **mistral-rs**: High-performance inference with PagedAttention and X-LoRA
 //!
 //! ## Architecture Support
 //!
-//! The Candle backend supports the following model architectures:
+//! Both backends support the following model architectures:
 //! - Mistral (7B, Codestral)
 //! - Llama (1B-70B, Llama 2, Llama 3)
 //! - Phi (1.5, 2, 3)
@@ -19,7 +20,10 @@
 //! - Q8_0, Q8_1 (8-bit quantization)
 //! - F16, F32 (full precision)
 //!
-//! ## Example
+//! The mistral-rs backend also supports ISQ (In-Situ Quantization) for runtime
+//! quantization with AWQ, GPTQ, and SmoothQuant methods.
+//!
+//! ## Candle Backend Example
 //!
 //! ```rust,ignore
 //! use ruvllm::backends::{CandleBackend, ModelConfig, GenerateParams};
@@ -41,6 +45,27 @@
 //!
 //! let response = backend.generate("Hello, world!", params)?;
 //! ```
+//!
+//! ## mistral-rs Backend Example
+//!
+//! ```rust,ignore
+//! use ruvllm::backends::{MistralBackend, MistralBackendConfig, ModelConfig, GenerateParams};
+//! use std::path::Path;
+//!
+//! // Create backend with PagedAttention and X-LoRA support
+//! let config = MistralBackendConfig::default()
+//!     .with_paged_attention(16, 4096)
+//!     .with_xlora_adapters(vec!["code", "chat"]);
+//!
+//! let mut backend = MistralBackend::with_config(config)?;
+//! backend.load_model("mistralai/Mistral-7B-v0.3", ModelConfig::default())?;
+//!
+//! // Load and activate X-LoRA adapters
+//! backend.load_xlora_adapter("code", Path::new("./adapters/code"))?;
+//! backend.set_xlora_adapters(vec![("code", 0.7), ("chat", 0.3)])?;
+//!
+//! let response = backend.generate("Hello, world!", GenerateParams::default())?;
+//! ```
 
 #[cfg(feature = "candle")]
 mod candle_backend;
@@ -48,11 +73,43 @@ mod candle_backend;
 #[cfg(feature = "candle")]
 pub use candle_backend::*;
 
-use crate::error::{Result, RuvLLMError};
-use std::sync::Arc;
+// mistral-rs backend - always available, but full functionality requires the feature
+mod mistral_backend;
 
-/// Model architecture types supported by RuvLLM
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub use mistral_backend::{
+    IsqConfig, IsqMethod, MistralBackend, MistralBackendConfig, MistralTokenizer,
+    PagedAttentionConfigExt, XLoraConfig, XLoraManager, XLoraManagerStats, XLoraMixingMode,
+};
+
+use crate::error::{Result, RuvLLMError};
+use serde::{Deserialize, Serialize};
+use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
+
+/// Model architecture types supported by RuvLLM.
+///
+/// RuvLLM supports multiple transformer architectures with varying
+/// characteristics optimized for different use cases.
+///
+/// # Supported Architectures
+///
+/// | Architecture | Parameter Sizes | Best For |
+/// |--------------|-----------------|----------|
+/// | `Llama` | 1B-70B | General purpose, chat |
+/// | `Mistral` | 7B | Code, instruction following |
+/// | `Phi` | 1.5-3B | Efficient edge deployment |
+/// | `Qwen` | 0.5B-72B | Multilingual, reasoning |
+/// | `Gemma` | 2B-7B | Efficient, instruction-tuned |
+///
+/// # Example
+///
+/// ```rust
+/// use ruvllm::backends::ModelArchitecture;
+///
+/// let arch = ModelArchitecture::Mistral;
+/// assert_eq!(arch.config_name(), "mistral");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModelArchitecture {
     /// Mistral architecture (7B, Codestral)
     Mistral,
@@ -85,8 +142,33 @@ impl ModelArchitecture {
     }
 }
 
-/// Quantization formats for model weights
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Quantization formats for model weights.
+///
+/// Quantization reduces model memory footprint and can improve inference
+/// speed at the cost of some quality. RuvLLM supports multiple formats
+/// with different tradeoffs.
+///
+/// # Memory vs Quality Tradeoff
+///
+/// | Format | Bytes/Weight | Memory (7B) | Quality |
+/// |--------|--------------|-------------|---------|
+/// | `None` (F32) | 4.0 | 28 GB | Best |
+/// | `F16` | 2.0 | 14 GB | Excellent |
+/// | `Q8` | 1.0 | 7 GB | Very Good |
+/// | `Q4K` | 0.5 | 3.5 GB | Good |
+/// | `Q4` | 0.5 | 3.5 GB | Acceptable |
+/// | `Q2K` | 0.25 | 1.75 GB | Experimental |
+///
+/// # Example
+///
+/// ```rust
+/// use ruvllm::backends::Quantization;
+///
+/// let quant = Quantization::Q4K;
+/// assert_eq!(quant.bytes_per_weight(), 0.5);
+/// assert!(quant.is_gguf());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Quantization {
     /// No quantization (FP32)
     None,
@@ -128,7 +210,31 @@ impl Quantization {
     }
 }
 
-/// Configuration for loading and running a model
+/// Configuration for loading and running a model.
+///
+/// This struct controls all aspects of model loading including architecture,
+/// quantization, attention mechanisms, and device placement.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ruvllm::backends::{ModelConfig, ModelArchitecture, Quantization, DeviceType};
+///
+/// let config = ModelConfig {
+///     architecture: ModelArchitecture::Mistral,
+///     quantization: Some(Quantization::Q4K),
+///     use_flash_attention: true,
+///     max_sequence_length: 8192,
+///     device: DeviceType::Metal,
+///     ..Default::default()
+/// };
+/// ```
+///
+/// # Architecture Detection
+///
+/// When loading from HuggingFace Hub, the architecture is automatically
+/// detected from the model's `config.json`. The `architecture` field
+/// is only used as a hint when auto-detection fails.
 #[derive(Debug, Clone)]
 pub struct ModelConfig {
     /// Model architecture
@@ -177,7 +283,7 @@ impl Default for ModelConfig {
 }
 
 /// Device type for inference
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum DeviceType {
     /// CPU inference
     Cpu,
@@ -189,7 +295,7 @@ pub enum DeviceType {
 }
 
 /// Data type for tensor operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum DType {
     /// 32-bit floating point
     F32,
@@ -200,7 +306,45 @@ pub enum DType {
     Bf16,
 }
 
-/// Parameters for text generation
+/// Parameters for text generation.
+///
+/// Controls the sampling strategy and output constraints for text generation.
+/// Supports temperature scaling, nucleus sampling, top-k filtering, and
+/// repetition penalties.
+///
+/// # Example
+///
+/// ```rust
+/// use ruvllm::backends::GenerateParams;
+///
+/// // Creative writing (high temperature, diverse sampling)
+/// let creative = GenerateParams::default()
+///     .with_max_tokens(512)
+///     .with_temperature(0.9)
+///     .with_top_p(0.95)
+///     .with_top_k(50);
+///
+/// // Code completion (low temperature, focused sampling)
+/// let code = GenerateParams::default()
+///     .with_max_tokens(256)
+///     .with_temperature(0.2)
+///     .with_top_p(0.9)
+///     .with_repetition_penalty(1.2);
+///
+/// // Deterministic (greedy decoding)
+/// let deterministic = GenerateParams::default()
+///     .with_temperature(0.0)
+///     .with_seed(42);
+/// ```
+///
+/// # Sampling Parameters
+///
+/// | Parameter | Range | Effect |
+/// |-----------|-------|--------|
+/// | `temperature` | 0.0-2.0 | Higher = more random |
+/// | `top_p` | 0.0-1.0 | Nucleus sampling threshold |
+/// | `top_k` | 0-vocab_size | Limit to top K tokens |
+/// | `repetition_penalty` | 1.0-2.0 | Penalize repeated tokens |
 #[derive(Debug, Clone)]
 pub struct GenerateParams {
     /// Maximum number of tokens to generate
@@ -296,10 +440,236 @@ pub struct GeneratedToken {
     pub is_special: bool,
 }
 
-/// Backend trait for LLM inference
+/// Stream events emitted during token generation
+#[derive(Debug, Clone)]
+pub enum StreamEvent {
+    /// A new token has been generated
+    Token(GeneratedToken),
+    /// Generation is complete
+    Done {
+        /// Total number of tokens generated
+        total_tokens: usize,
+        /// Total generation duration in milliseconds
+        duration_ms: u64,
+        /// Tokens per second
+        tokens_per_second: f64,
+    },
+    /// An error occurred during generation
+    Error(String),
+}
+
+/// Streaming token iterator.
+///
+/// Provides an iterator interface over generated tokens, allowing
+/// real-time processing of model output as it's generated. Includes
+/// built-in metrics tracking for throughput monitoring.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ruvllm::backends::{TokenStream, StreamEvent};
+///
+/// let stream = backend.generate_stream_v2("Hello", params)?;
+///
+/// // Iterate with metrics
+/// for event in stream {
+///     match event? {
+///         StreamEvent::Token(token) => {
+///             print!("{}", token.text);
+///         }
+///         StreamEvent::Done { total_tokens, tokens_per_second, .. } => {
+///             println!("\n\nGenerated {} tokens at {:.1} tok/s",
+///                 total_tokens, tokens_per_second);
+///         }
+///         StreamEvent::Error(e) => {
+///             eprintln!("Generation error: {}", e);
+///             break;
+///         }
+///     }
+/// }
+///
+/// // Check metrics during generation
+/// println!("Current rate: {:.1} tok/s", stream.tokens_per_second());
+/// ```
+///
+/// # Non-blocking Usage
+///
+/// ```rust,ignore
+/// // Poll without blocking
+/// while let Some(event) = stream.try_next() {
+///     handle_event(event?);
+/// }
+///
+/// // Poll with timeout
+/// while let Some(event) = stream.recv_timeout(Duration::from_millis(100)) {
+///     handle_event(event?);
+/// }
+/// ```
+pub struct TokenStream {
+    /// Channel receiver for stream events
+    receiver: mpsc::Receiver<StreamEvent>,
+    /// Whether the stream has completed
+    finished: bool,
+    /// Generation start time for metrics
+    start_time: Instant,
+    /// Number of tokens received so far
+    token_count: usize,
+}
+
+impl TokenStream {
+    /// Create a new token stream from a channel receiver
+    pub fn new(receiver: mpsc::Receiver<StreamEvent>) -> Self {
+        Self {
+            receiver,
+            finished: false,
+            start_time: Instant::now(),
+            token_count: 0,
+        }
+    }
+
+    /// Create a channel pair for streaming
+    pub fn channel() -> (mpsc::Sender<StreamEvent>, Self) {
+        let (tx, rx) = mpsc::channel();
+        (tx, Self::new(rx))
+    }
+
+    /// Check if the stream has finished
+    pub fn is_finished(&self) -> bool {
+        self.finished
+    }
+
+    /// Get the number of tokens received so far
+    pub fn tokens_received(&self) -> usize {
+        self.token_count
+    }
+
+    /// Get elapsed time since stream started
+    pub fn elapsed(&self) -> Duration {
+        self.start_time.elapsed()
+    }
+
+    /// Calculate current tokens per second
+    pub fn tokens_per_second(&self) -> f64 {
+        let elapsed = self.elapsed().as_secs_f64();
+        if elapsed > 0.0 {
+            self.token_count as f64 / elapsed
+        } else {
+            0.0
+        }
+    }
+
+    /// Try to receive the next event without blocking
+    pub fn try_next(&mut self) -> Option<Result<StreamEvent>> {
+        if self.finished {
+            return None;
+        }
+
+        match self.receiver.try_recv() {
+            Ok(event) => {
+                match &event {
+                    StreamEvent::Token(_) => self.token_count += 1,
+                    StreamEvent::Done { .. } => self.finished = true,
+                    StreamEvent::Error(_) => self.finished = true,
+                }
+                Some(Ok(event))
+            }
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.finished = true;
+                None
+            }
+        }
+    }
+
+    /// Receive the next event with a timeout
+    pub fn recv_timeout(&mut self, timeout: Duration) -> Option<Result<StreamEvent>> {
+        if self.finished {
+            return None;
+        }
+
+        match self.receiver.recv_timeout(timeout) {
+            Ok(event) => {
+                match &event {
+                    StreamEvent::Token(_) => self.token_count += 1,
+                    StreamEvent::Done { .. } => self.finished = true,
+                    StreamEvent::Error(_) => self.finished = true,
+                }
+                Some(Ok(event))
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => None,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                self.finished = true;
+                None
+            }
+        }
+    }
+}
+
+impl Iterator for TokenStream {
+    type Item = Result<StreamEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+
+        match self.receiver.recv() {
+            Ok(event) => {
+                match &event {
+                    StreamEvent::Token(_) => self.token_count += 1,
+                    StreamEvent::Done { .. } => self.finished = true,
+                    StreamEvent::Error(_) => self.finished = true,
+                }
+                Some(Ok(event))
+            }
+            Err(_) => {
+                self.finished = true;
+                None
+            }
+        }
+    }
+}
+
+/// Backend trait for LLM inference.
 ///
 /// This trait defines the interface that all inference backends must implement.
 /// It provides methods for model loading, text generation, and embedding extraction.
+///
+/// # Implementations
+///
+/// - [`CandleBackend`]: Rust-native backend using HuggingFace Candle
+/// - [`MistralBackend`]: High-performance backend with PagedAttention and X-LoRA
+/// - [`NoopBackend`]: Placeholder when no backend is enabled
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ruvllm::backends::{LlmBackend, ModelConfig, GenerateParams, create_backend};
+///
+/// // Create backend (auto-selects based on features)
+/// let mut backend = create_backend();
+///
+/// // Load a model
+/// let config = ModelConfig::default();
+/// backend.load_model("mistralai/Mistral-7B-v0.1", config)?;
+///
+/// // Generate text
+/// let params = GenerateParams::default().with_max_tokens(100);
+/// let response = backend.generate("Hello, ", params)?;
+/// println!("{}", response);
+///
+/// // Stream tokens
+/// let stream = backend.generate_stream_v2("Hello, ", params)?;
+/// for event in stream {
+///     match event? {
+///         StreamEvent::Token(t) => print!("{}", t.text),
+///         StreamEvent::Done { tokens_per_second, .. } => {
+///             println!("\n[{:.1} tok/s]", tokens_per_second);
+///         }
+///         StreamEvent::Error(e) => eprintln!("Error: {}", e),
+///     }
+/// }
+/// ```
 pub trait LlmBackend: Send + Sync {
     /// Load a model from path or HuggingFace Hub
     ///
@@ -325,7 +695,7 @@ pub trait LlmBackend: Send + Sync {
     /// Generated text (excluding the input prompt)
     fn generate(&self, prompt: &str, params: GenerateParams) -> Result<String>;
 
-    /// Generate text with streaming output
+    /// Generate text with streaming output (legacy interface)
     ///
     /// # Arguments
     ///
@@ -340,6 +710,21 @@ pub trait LlmBackend: Send + Sync {
         prompt: &str,
         params: GenerateParams,
     ) -> Result<Box<dyn Iterator<Item = Result<GeneratedToken>> + Send + '_>>;
+
+    /// Generate text with streaming output using TokenStream
+    ///
+    /// This is the preferred streaming interface that provides real-time
+    /// token generation with progress tracking and metrics.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - Input text prompt
+    /// * `params` - Generation parameters
+    ///
+    /// # Returns
+    ///
+    /// A TokenStream that yields StreamEvents as tokens are generated
+    fn generate_stream_v2(&self, prompt: &str, params: GenerateParams) -> Result<TokenStream>;
 
     /// Extract embeddings from text
     ///
@@ -444,6 +829,12 @@ impl LlmBackend for NoopBackend {
         ))
     }
 
+    fn generate_stream_v2(&self, _prompt: &str, _params: GenerateParams) -> Result<TokenStream> {
+        Err(RuvLLMError::Config(
+            "No inference backend enabled.".to_string(),
+        ))
+    }
+
     fn get_embeddings(&self, _text: &str) -> Result<Vec<f32>> {
         Err(RuvLLMError::Config(
             "No inference backend enabled.".to_string(),
@@ -480,6 +871,106 @@ pub fn create_backend() -> Box<dyn LlmBackend> {
 
 /// Thread-safe backend wrapper
 pub type SharedBackend = Arc<dyn LlmBackend>;
+
+// ============================================================================
+// Async streaming support
+// ============================================================================
+
+/// Async token stream for tokio compatibility
+///
+/// This provides an async-compatible wrapper around the synchronous TokenStream,
+/// allowing it to be used with async/await and tokio runtime.
+#[cfg(feature = "async-runtime")]
+pub mod async_stream {
+    use super::*;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    /// Async wrapper around TokenStream
+    pub struct AsyncTokenStream {
+        inner: TokenStream,
+    }
+
+    impl AsyncTokenStream {
+        /// Create a new async token stream from a sync token stream
+        pub fn new(inner: TokenStream) -> Self {
+            Self { inner }
+        }
+
+        /// Check if the stream is finished
+        pub fn is_finished(&self) -> bool {
+            self.inner.is_finished()
+        }
+
+        /// Get the number of tokens received
+        pub fn tokens_received(&self) -> usize {
+            self.inner.tokens_received()
+        }
+
+        /// Get tokens per second
+        pub fn tokens_per_second(&self) -> f64 {
+            self.inner.tokens_per_second()
+        }
+    }
+
+    impl futures_core::Stream for AsyncTokenStream {
+        type Item = Result<StreamEvent>;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            // Try to receive without blocking
+            match self.inner.try_next() {
+                Some(result) => Poll::Ready(Some(result)),
+                None => {
+                    if self.inner.is_finished() {
+                        Poll::Ready(None)
+                    } else {
+                        // Schedule a wake-up and try again later
+                        // In a real implementation, you'd want to use a proper async channel
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                }
+            }
+        }
+    }
+
+    /// Async trait for LLM backends with streaming support
+    #[async_trait::async_trait]
+    pub trait LlmBackendAsync: Send + Sync {
+        /// Generate text with async streaming output
+        ///
+        /// # Arguments
+        ///
+        /// * `prompt` - Input text prompt
+        /// * `params` - Generation parameters
+        ///
+        /// # Returns
+        ///
+        /// An async stream that yields StreamEvents as tokens are generated
+        async fn generate_stream_async(
+            &self,
+            prompt: &str,
+            params: GenerateParams,
+        ) -> Result<AsyncTokenStream>;
+    }
+
+    /// Blanket implementation for any LlmBackend
+    #[async_trait::async_trait]
+    impl<T: LlmBackend + ?Sized> LlmBackendAsync for T {
+        async fn generate_stream_async(
+            &self,
+            prompt: &str,
+            params: GenerateParams,
+        ) -> Result<AsyncTokenStream> {
+            // Use the sync streaming method and wrap it
+            let stream = self.generate_stream_v2(prompt, params)?;
+            Ok(AsyncTokenStream::new(stream))
+        }
+    }
+}
+
+#[cfg(feature = "async-runtime")]
+pub use async_stream::{AsyncTokenStream, LlmBackendAsync};
 
 #[cfg(test)]
 mod tests {

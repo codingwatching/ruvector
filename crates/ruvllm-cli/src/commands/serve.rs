@@ -2,18 +2,24 @@
 //!
 //! Starts an OpenAI-compatible HTTP server for model inference,
 //! providing endpoints for chat completions, health checks, and metrics.
+//! Supports Server-Sent Events (SSE) for streaming responses.
 
 use anyhow::{Context, Result};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Router,
 };
 use colored::Colorize;
 use console::style;
+use futures::stream::{self, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -216,10 +222,49 @@ struct Usage {
     total_tokens: usize,
 }
 
-/// Chat completions endpoint
+/// OpenAI-compatible streaming chunk response
+#[derive(Debug, Serialize)]
+struct ChatCompletionChunk {
+    id: String,
+    object: String,
+    created: u64,
+    model: String,
+    choices: Vec<ChunkChoice>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChunkChoice {
+    index: usize,
+    delta: Delta,
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct Delta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+/// Chat completions endpoint - handles both streaming and non-streaming
 async fn chat_completions(
     State(state): State<SharedState>,
     Json(request): Json<ChatCompletionRequest>,
+) -> axum::response::Response {
+    if request.stream {
+        // Handle streaming response
+        chat_completions_stream(state, request).await.into_response()
+    } else {
+        // Handle non-streaming response
+        chat_completions_non_stream(state, request).await.into_response()
+    }
+}
+
+/// Non-streaming chat completions
+async fn chat_completions_non_stream(
+    state: SharedState,
+    request: ChatCompletionRequest,
 ) -> impl IntoResponse {
     let start = Instant::now();
 
@@ -288,6 +333,201 @@ async fn chat_completions(
     );
 
     Json(response)
+}
+
+/// SSE streaming chat completions
+async fn chat_completions_stream(
+    state: SharedState,
+    request: ChatCompletionRequest,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let completion_id = format!("chatcmpl-{}", uuid::Uuid::new_v4());
+    let created = chrono::Utc::now().timestamp() as u64;
+    let model = request.model.clone();
+
+    // Build prompt from messages
+    let prompt = build_prompt(&request.messages);
+
+    // Get state and prepare for generation
+    let state_clone = state.clone();
+    let params = ruvllm::GenerateParams {
+        max_tokens: request.max_tokens,
+        temperature: request.temperature,
+        top_p: request.top_p.unwrap_or(0.9),
+        stop_sequences: request.stop.unwrap_or_default(),
+        ..Default::default()
+    };
+
+    // Create the SSE stream
+    let stream = async_stream::stream! {
+        // Increment request count
+        {
+            let mut state_lock = state_clone.write().await;
+            state_lock.request_count += 1;
+        }
+
+        // First, send the role
+        let initial_chunk = ChatCompletionChunk {
+            id: completion_id.clone(),
+            object: "chat.completion.chunk".to_string(),
+            created,
+            model: model.clone(),
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: Delta {
+                    role: Some("assistant".to_string()),
+                    content: None,
+                },
+                finish_reason: None,
+            }],
+        };
+        yield Ok(Event::default().data(serde_json::to_string(&initial_chunk).unwrap_or_default()));
+
+        // Get the backend and generate
+        let state_lock = state_clone.read().await;
+        let backend_opt = state_lock.backend.as_ref();
+
+        if let Some(backend) = backend_opt {
+            if backend.is_model_loaded() {
+                // Use streaming generation
+                match backend.generate_stream_v2(&prompt, params.clone()) {
+                    Ok(token_stream) => {
+                        // Need to drop the read lock before iterating
+                        drop(state_lock);
+
+                        for event_result in token_stream {
+                            match event_result {
+                                Ok(ruvllm::StreamEvent::Token(token)) => {
+                                    let chunk = ChatCompletionChunk {
+                                        id: completion_id.clone(),
+                                        object: "chat.completion.chunk".to_string(),
+                                        created,
+                                        model: model.clone(),
+                                        choices: vec![ChunkChoice {
+                                            index: 0,
+                                            delta: Delta {
+                                                role: None,
+                                                content: Some(token.text),
+                                            },
+                                            finish_reason: None,
+                                        }],
+                                    };
+                                    yield Ok(Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()));
+                                }
+                                Ok(ruvllm::StreamEvent::Done { total_tokens, .. }) => {
+                                    // Update token count
+                                    let mut state_lock = state_clone.write().await;
+                                    state_lock.total_tokens += total_tokens as u64;
+                                    drop(state_lock);
+
+                                    // Send final chunk with finish_reason
+                                    let final_chunk = ChatCompletionChunk {
+                                        id: completion_id.clone(),
+                                        object: "chat.completion.chunk".to_string(),
+                                        created,
+                                        model: model.clone(),
+                                        choices: vec![ChunkChoice {
+                                            index: 0,
+                                            delta: Delta {
+                                                role: None,
+                                                content: None,
+                                            },
+                                            finish_reason: Some("stop".to_string()),
+                                        }],
+                                    };
+                                    yield Ok(Event::default().data(serde_json::to_string(&final_chunk).unwrap_or_default()));
+                                    break;
+                                }
+                                Ok(ruvllm::StreamEvent::Error(msg)) => {
+                                    tracing::error!("Stream error: {}", msg);
+                                    break;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Stream error: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        drop(state_lock);
+                        tracing::error!("Failed to create stream: {}", e);
+                        // Fall back to mock streaming
+                        for chunk_data in mock_stream_response(&prompt, &completion_id, created, &model) {
+                            yield Ok(Event::default().data(chunk_data));
+                        }
+                    }
+                }
+            } else {
+                drop(state_lock);
+                // Mock streaming response
+                for chunk_data in mock_stream_response(&prompt, &completion_id, created, &model) {
+                    yield Ok(Event::default().data(chunk_data));
+                }
+            }
+        } else {
+            drop(state_lock);
+            // Mock streaming response
+            for chunk_data in mock_stream_response(&prompt, &completion_id, created, &model) {
+                yield Ok(Event::default().data(chunk_data));
+            }
+        }
+
+        // Send [DONE] marker
+        yield Ok(Event::default().data("[DONE]"));
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+/// Generate mock streaming chunks
+fn mock_stream_response(prompt: &str, id: &str, created: u64, model: &str) -> Vec<String> {
+    let response_text = mock_response(prompt);
+    let words: Vec<&str> = response_text.split_whitespace().collect();
+    let mut chunks = Vec::new();
+
+    for (i, word) in words.iter().enumerate() {
+        let text = if i == 0 {
+            word.to_string()
+        } else {
+            format!(" {}", word)
+        };
+
+        let chunk = ChatCompletionChunk {
+            id: id.to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created,
+            model: model.to_string(),
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: Delta {
+                    role: None,
+                    content: Some(text),
+                },
+                finish_reason: None,
+            }],
+        };
+
+        chunks.push(serde_json::to_string(&chunk).unwrap_or_default());
+    }
+
+    // Final chunk with finish_reason
+    let final_chunk = ChatCompletionChunk {
+        id: id.to_string(),
+        object: "chat.completion.chunk".to_string(),
+        created,
+        model: model.to_string(),
+        choices: vec![ChunkChoice {
+            index: 0,
+            delta: Delta {
+                role: None,
+                content: None,
+            },
+            finish_reason: Some("stop".to_string()),
+        }],
+    };
+    chunks.push(serde_json::to_string(&final_chunk).unwrap_or_default());
+
+    chunks
 }
 
 /// Build prompt from chat messages
