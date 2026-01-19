@@ -43,6 +43,7 @@
 //! - [`rope`]: Rotary Position Embeddings (RoPE)
 //! - [`norm`]: RMSNorm, LayerNorm
 //! - [`matmul`]: Batched GEMM operations
+//! - [`quantized`]: INT8/INT4 quantized inference kernels
 //!
 //! ## Performance Characteristics
 //!
@@ -73,15 +74,35 @@
 pub mod attention;
 pub mod matmul;
 pub mod norm;
+pub mod quantized;
 pub mod rope;
 
 // Re-exports for convenience
 pub use attention::{
-    flash_attention_neon, grouped_query_attention_neon, multi_query_attention_neon,
+    flash_attention_neon, flash_attention_v2, flash_attention_auto,
+    grouped_query_attention_neon, multi_query_attention_neon,
     paged_attention_neon, PagedKvCache,
+    select_block_size, BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_LARGE,
+};
+#[cfg(feature = "parallel")]
+pub use attention::{
+    multi_query_attention_parallel, grouped_query_attention_parallel,
+    multi_head_attention_parallel,
 };
 pub use matmul::{batched_gemm_neon, gemm_neon, gemv_neon};
+#[cfg(feature = "parallel")]
+pub use matmul::{
+    gemm_parallel, gemv_parallel, batched_gemm_parallel,
+    configure_thread_pool, get_physical_cores,
+};
 pub use norm::{layer_norm_neon, rms_norm_neon};
+pub use quantized::{
+    int4_gemv_neon, int8_gemv_neon, q4k_gemv_neon,
+    quantize_to_int4, quantize_to_int8, quantize_to_q4k,
+    dequantize_int4, dequantize_int8,
+    BlockQ4K, QuantizedInt4, QuantizedInt8,
+    INT4_BLOCK_SIZE, Q4K_SUPER_BLOCK_SIZE,
+};
 pub use rope::{apply_rope_neon, precompute_rope_tables, RopeConfig};
 
 /// SIMD lane width for NEON (128-bit = 4 floats).

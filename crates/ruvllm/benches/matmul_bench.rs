@@ -2,11 +2,28 @@
 //!
 //! Benchmarks for GEMV, GEMM, and batched GEMM implementations.
 //!
-//! Performance targets for M4 Pro:
-//! - GEMV (4096 x 4096): <500us
-//! - GEMM (1024 x 1024): <2ms
-//! - GEMM (4096 x 4096): <5ms
-//! - Batched GEMM (32 x 128 x 128): <2ms
+//! ## Running Benchmarks
+//!
+//! Single-threaded baseline:
+//! ```bash
+//! cargo bench -p ruvllm-integration --features candle --bench matmul_bench -- gemm/512
+//! ```
+//!
+//! Parallel (with rayon):
+//! ```bash
+//! cargo bench -p ruvllm-integration --features candle,parallel --bench matmul_bench -- gemm/512
+//! ```
+//!
+//! ## Performance Targets for M4 Pro
+//!
+//! | Operation | Size | Single-thread | Parallel (10 cores) |
+//! |-----------|------|---------------|---------------------|
+//! | GEMV | 4096x4096 | <500us | <150us |
+//! | GEMM | 1024x1024 | <2ms | <500us |
+//! | GEMM | 2048x2048 | <15ms | <3ms |
+//! | Batched | 32x128x128 | <2ms | <500us |
+//!
+//! Target speedup: 4-6x on 10-core M4 Pro for large matrices.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use rand::Rng;
@@ -696,7 +713,419 @@ fn bench_llm_projection_sizes(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(target_arch = "aarch64")]
+// ============================================================================
+// Parallel benchmarks (enabled with `parallel` feature)
+// ============================================================================
+
+#[cfg(feature = "parallel")]
+mod parallel_benches {
+    use super::*;
+
+    /// Get physical core count
+    fn get_physical_cores() -> usize {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+    }
+
+    /// Configure thread pool once at start
+    fn init_thread_pool() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(get_physical_cores())
+                .thread_name(|i| format!("bench-gemm-{}", i))
+                .build_global()
+                .ok();
+        });
+    }
+
+    // ========================================================================
+    // Parallel GEMM implementations (mirrors single-threaded versions)
+    // ========================================================================
+
+    fn gemm_parallel(a: &[f32], b: &[f32], c: &mut [f32], m: usize, k: usize, n: usize) {
+        use rayon::prelude::*;
+
+        const MIN_ROWS_PER_THREAD: usize = 32;
+        const PARALLEL_THRESHOLD: usize = 128;
+
+        if m < PARALLEL_THRESHOLD || (m * k * n) < 1_000_000 {
+            return gemm_neon(a, b, c, m, k, n);
+        }
+
+        c.fill(0.0);
+
+        let num_threads = get_physical_cores();
+        let chunk_size = (m / num_threads).max(MIN_ROWS_PER_THREAD);
+
+        c.par_chunks_mut(chunk_size * n)
+            .enumerate()
+            .for_each(|(chunk_idx, c_chunk)| {
+                let row_start = chunk_idx * chunk_size;
+                let actual_rows = c_chunk.len() / n;
+                let row_end = row_start + actual_rows;
+
+                let a_start = row_start * k;
+                let a_end = row_end * k;
+                let a_chunk = &a[a_start..a_end];
+
+                gemm_chunk(a_chunk, b, c_chunk, actual_rows, k, n);
+            });
+    }
+
+    fn gemm_chunk(a: &[f32], b: &[f32], c: &mut [f32], m: usize, k: usize, n: usize) {
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            gemm_chunk_neon(a, b, c, m, k, n);
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            for i in 0..m {
+                for j in 0..n {
+                    let mut sum = 0.0f32;
+                    for kk in 0..k {
+                        sum += a[i * k + kk] * b[kk * n + j];
+                    }
+                    c[i * n + j] = sum;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn gemm_chunk_neon(a: &[f32], b: &[f32], c: &mut [f32], m: usize, k: usize, n: usize) {
+        use std::arch::aarch64::*;
+
+        let a_ptr = a.as_ptr();
+        let b_ptr = b.as_ptr();
+        let c_ptr = c.as_mut_ptr();
+
+        let mut i = 0usize;
+        while i + 4 <= m {
+            let mut j = 0usize;
+            while j + 8 <= n {
+                let mut c00 = vdupq_n_f32(0.0);
+                let mut c01 = vdupq_n_f32(0.0);
+                let mut c10 = vdupq_n_f32(0.0);
+                let mut c11 = vdupq_n_f32(0.0);
+                let mut c20 = vdupq_n_f32(0.0);
+                let mut c21 = vdupq_n_f32(0.0);
+                let mut c30 = vdupq_n_f32(0.0);
+                let mut c31 = vdupq_n_f32(0.0);
+
+                for kk in 0..k {
+                    let b0 = vld1q_f32(b_ptr.add(kk * n + j));
+                    let b1 = vld1q_f32(b_ptr.add(kk * n + j + 4));
+
+                    let a0 = vdupq_n_f32(*a_ptr.add(i * k + kk));
+                    let a1 = vdupq_n_f32(*a_ptr.add((i + 1) * k + kk));
+                    let a2 = vdupq_n_f32(*a_ptr.add((i + 2) * k + kk));
+                    let a3 = vdupq_n_f32(*a_ptr.add((i + 3) * k + kk));
+
+                    c00 = vfmaq_f32(c00, a0, b0);
+                    c01 = vfmaq_f32(c01, a0, b1);
+                    c10 = vfmaq_f32(c10, a1, b0);
+                    c11 = vfmaq_f32(c11, a1, b1);
+                    c20 = vfmaq_f32(c20, a2, b0);
+                    c21 = vfmaq_f32(c21, a2, b1);
+                    c30 = vfmaq_f32(c30, a3, b0);
+                    c31 = vfmaq_f32(c31, a3, b1);
+                }
+
+                vst1q_f32(c_ptr.add(i * n + j), c00);
+                vst1q_f32(c_ptr.add(i * n + j + 4), c01);
+                vst1q_f32(c_ptr.add((i + 1) * n + j), c10);
+                vst1q_f32(c_ptr.add((i + 1) * n + j + 4), c11);
+                vst1q_f32(c_ptr.add((i + 2) * n + j), c20);
+                vst1q_f32(c_ptr.add((i + 2) * n + j + 4), c21);
+                vst1q_f32(c_ptr.add((i + 3) * n + j), c30);
+                vst1q_f32(c_ptr.add((i + 3) * n + j + 4), c31);
+
+                j += 8;
+            }
+
+            while j + 4 <= n {
+                let mut c0 = vdupq_n_f32(0.0);
+                let mut c1 = vdupq_n_f32(0.0);
+                let mut c2 = vdupq_n_f32(0.0);
+                let mut c3 = vdupq_n_f32(0.0);
+
+                for kk in 0..k {
+                    let b_v = vld1q_f32(b_ptr.add(kk * n + j));
+                    c0 = vfmaq_f32(c0, vdupq_n_f32(*a_ptr.add(i * k + kk)), b_v);
+                    c1 = vfmaq_f32(c1, vdupq_n_f32(*a_ptr.add((i + 1) * k + kk)), b_v);
+                    c2 = vfmaq_f32(c2, vdupq_n_f32(*a_ptr.add((i + 2) * k + kk)), b_v);
+                    c3 = vfmaq_f32(c3, vdupq_n_f32(*a_ptr.add((i + 3) * k + kk)), b_v);
+                }
+
+                vst1q_f32(c_ptr.add(i * n + j), c0);
+                vst1q_f32(c_ptr.add((i + 1) * n + j), c1);
+                vst1q_f32(c_ptr.add((i + 2) * n + j), c2);
+                vst1q_f32(c_ptr.add((i + 3) * n + j), c3);
+
+                j += 4;
+            }
+
+            while j < n {
+                for row in i..i + 4 {
+                    let mut sum = 0.0f32;
+                    for kk in 0..k {
+                        sum += *a_ptr.add(row * k + kk) * *b_ptr.add(kk * n + j);
+                    }
+                    *c_ptr.add(row * n + j) = sum;
+                }
+                j += 1;
+            }
+
+            i += 4;
+        }
+
+        while i < m {
+            let mut j = 0usize;
+            while j + 4 <= n {
+                let mut acc = vdupq_n_f32(0.0);
+                for kk in 0..k {
+                    let a_val = vdupq_n_f32(*a_ptr.add(i * k + kk));
+                    let b_v = vld1q_f32(b_ptr.add(kk * n + j));
+                    acc = vfmaq_f32(acc, a_val, b_v);
+                }
+                vst1q_f32(c_ptr.add(i * n + j), acc);
+                j += 4;
+            }
+
+            while j < n {
+                let mut sum = 0.0f32;
+                for kk in 0..k {
+                    sum += *a_ptr.add(i * k + kk) * *b_ptr.add(kk * n + j);
+                }
+                *c_ptr.add(i * n + j) = sum;
+                j += 1;
+            }
+
+            i += 1;
+        }
+    }
+
+    fn gemv_parallel(a: &[f32], x: &[f32], y: &mut [f32], m: usize, n: usize) {
+        use rayon::prelude::*;
+
+        const MIN_ROWS_PER_THREAD: usize = 32;
+        const PARALLEL_THRESHOLD: usize = 256;
+
+        if m < PARALLEL_THRESHOLD {
+            return gemv_neon(a, x, y, m, n);
+        }
+
+        let num_threads = get_physical_cores();
+        let chunk_size = (m / num_threads).max(MIN_ROWS_PER_THREAD);
+
+        y.par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_idx, y_chunk)| {
+                let row_start = chunk_idx * chunk_size;
+                let row_end = (row_start + y_chunk.len()).min(m);
+                let chunk_rows = row_end - row_start;
+
+                let a_start = row_start * n;
+                let a_end = row_end * n;
+                let a_chunk = &a[a_start..a_end];
+
+                gemv_neon(a_chunk, x, y_chunk, chunk_rows, n);
+            });
+    }
+
+    fn batched_gemm_parallel(
+        a: &[f32],
+        b: &[f32],
+        c: &mut [f32],
+        batch_size: usize,
+        m: usize,
+        k: usize,
+        n: usize,
+    ) {
+        use rayon::prelude::*;
+
+        const PARALLEL_THRESHOLD: usize = 128;
+
+        let a_batch_stride = m * k;
+        let b_batch_stride = k * n;
+        let c_batch_stride = m * n;
+
+        if batch_size <= 4 && m >= PARALLEL_THRESHOLD {
+            for batch in 0..batch_size {
+                let a_offset = batch * a_batch_stride;
+                let b_offset = batch * b_batch_stride;
+                let c_offset = batch * c_batch_stride;
+
+                gemm_parallel(
+                    &a[a_offset..a_offset + a_batch_stride],
+                    &b[b_offset..b_offset + b_batch_stride],
+                    &mut c[c_offset..c_offset + c_batch_stride],
+                    m,
+                    k,
+                    n,
+                );
+            }
+        } else {
+            c.par_chunks_mut(c_batch_stride)
+                .enumerate()
+                .for_each(|(batch, c_batch)| {
+                    let a_offset = batch * a_batch_stride;
+                    let b_offset = batch * b_batch_stride;
+
+                    gemm_neon(
+                        &a[a_offset..a_offset + a_batch_stride],
+                        &b[b_offset..b_offset + b_batch_stride],
+                        c_batch,
+                        m,
+                        k,
+                        n,
+                    );
+                });
+        }
+    }
+
+    // ========================================================================
+    // Benchmark functions
+    // ========================================================================
+
+    pub fn bench_gemm_parallel(c: &mut Criterion) {
+        init_thread_pool();
+
+        let mut group = c.benchmark_group("gemm_parallel");
+        group.sample_size(30);
+
+        for size in [256, 512, 1024, 2048] {
+            let m = size;
+            let k = size;
+            let n = size;
+
+            let mat_a = random_tensor(m * k);
+            let mat_b = random_tensor(k * n);
+            let mut c_out = vec![0.0; m * n];
+
+            let flops = 2 * m * k * n;
+
+            let id = BenchmarkId::new(format!("{}x{}x{}", m, k, n), m * k * n);
+
+            group.throughput(Throughput::Elements(flops as u64));
+            group.bench_function(id, |bencher| {
+                bencher.iter(|| {
+                    gemm_parallel(black_box(&mat_a), black_box(&mat_b), black_box(&mut c_out), m, k, n);
+                })
+            });
+        }
+
+        group.finish();
+    }
+
+    pub fn bench_gemv_parallel(c: &mut Criterion) {
+        init_thread_pool();
+
+        let mut group = c.benchmark_group("gemv_parallel");
+        group.sample_size(50);
+
+        for (m, n) in [(512, 512), (1024, 1024), (2048, 2048), (4096, 4096)] {
+            let a = random_tensor(m * n);
+            let x = random_tensor(n);
+            let mut y = vec![0.0; m];
+
+            let flops = 2 * m * n;
+
+            let id = BenchmarkId::new(format!("{}x{}", m, n), m * n);
+
+            group.throughput(Throughput::Elements(flops as u64));
+            group.bench_function(id, |b| {
+                b.iter(|| {
+                    gemv_parallel(black_box(&a), black_box(&x), black_box(&mut y), m, n);
+                })
+            });
+        }
+
+        group.finish();
+    }
+
+    pub fn bench_batched_gemm_parallel(c: &mut Criterion) {
+        init_thread_pool();
+
+        let mut group = c.benchmark_group("batched_gemm_parallel");
+        group.sample_size(30);
+
+        for batch_size in [8, 16, 32] {
+            for (m, k, n) in [(128, 128, 128), (256, 256, 256)] {
+                let mat_a = random_tensor(batch_size * m * k);
+                let mat_b = random_tensor(batch_size * k * n);
+                let mut c_out = vec![0.0; batch_size * m * n];
+
+                let flops = 2 * batch_size * m * k * n;
+
+                let id = BenchmarkId::new(
+                    format!("batch_{}_{}x{}x{}", batch_size, m, k, n),
+                    batch_size,
+                );
+
+                group.throughput(Throughput::Elements(flops as u64));
+                group.bench_function(id, |bencher| {
+                    bencher.iter(|| {
+                        batched_gemm_parallel(
+                            black_box(&mat_a),
+                            black_box(&mat_b),
+                            black_box(&mut c_out),
+                            batch_size,
+                            m,
+                            k,
+                            n,
+                        );
+                    })
+                });
+            }
+        }
+
+        group.finish();
+    }
+
+    /// Compare single-threaded vs parallel for large matrices
+    pub fn bench_parallel_speedup(c: &mut Criterion) {
+        init_thread_pool();
+
+        let mut group = c.benchmark_group("parallel_speedup");
+        group.sample_size(20);
+
+        let size = 512;
+        let m = size;
+        let k = size;
+        let n = size;
+
+        let mat_a = random_tensor(m * k);
+        let mat_b = random_tensor(k * n);
+        let mut c_out = vec![0.0; m * n];
+
+        let flops = 2 * m * k * n;
+
+        group.throughput(Throughput::Elements(flops as u64));
+
+        group.bench_function("single_thread", |bencher| {
+            bencher.iter(|| {
+                gemm_neon(black_box(&mat_a), black_box(&mat_b), black_box(&mut c_out), m, k, n);
+            })
+        });
+
+        group.bench_function("parallel", |bencher| {
+            bencher.iter(|| {
+                gemm_parallel(black_box(&mat_a), black_box(&mat_b), black_box(&mut c_out), m, k, n);
+            })
+        });
+
+        group.finish();
+    }
+}
+
+#[cfg(feature = "parallel")]
+use parallel_benches::*;
+
+#[cfg(all(target_arch = "aarch64", not(feature = "parallel")))]
 criterion_group!(
     benches,
     bench_gemv,
@@ -710,7 +1139,25 @@ criterion_group!(
     bench_llm_projection_sizes,
 );
 
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(all(target_arch = "aarch64", feature = "parallel"))]
+criterion_group!(
+    benches,
+    bench_gemv,
+    bench_gemm,
+    bench_gemm_non_square,
+    bench_batched_gemm,
+    bench_gemm_nt,
+    bench_dot_product,
+    bench_tiling_efficiency,
+    bench_memory_bandwidth,
+    bench_llm_projection_sizes,
+    bench_gemm_parallel,
+    bench_gemv_parallel,
+    bench_batched_gemm_parallel,
+    bench_parallel_speedup,
+);
+
+#[cfg(all(not(target_arch = "aarch64"), not(feature = "parallel")))]
 criterion_group!(
     benches,
     bench_gemv,
@@ -721,6 +1168,23 @@ criterion_group!(
     bench_tiling_efficiency,
     bench_memory_bandwidth,
     bench_llm_projection_sizes,
+);
+
+#[cfg(all(not(target_arch = "aarch64"), feature = "parallel"))]
+criterion_group!(
+    benches,
+    bench_gemv,
+    bench_gemm,
+    bench_gemm_non_square,
+    bench_batched_gemm,
+    bench_gemm_nt,
+    bench_tiling_efficiency,
+    bench_memory_bandwidth,
+    bench_llm_projection_sizes,
+    bench_gemm_parallel,
+    bench_gemv_parallel,
+    bench_batched_gemm_parallel,
+    bench_parallel_speedup,
 );
 
 criterion_main!(benches);

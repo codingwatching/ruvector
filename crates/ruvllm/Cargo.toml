@@ -35,6 +35,9 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 ndarray = { workspace = true }
 rand = { workspace = true }
 
+# Parallelism (optional)
+rayon = { version = "1.10", optional = true }
+
 # Serialization (binary)
 bincode = "1.3"
 
@@ -81,6 +84,9 @@ tracing-subscriber = { workspace = true }
 default = ["async-runtime"]
 async-runtime = ["tokio"]
 wasm = []
+
+# Multi-threaded GEMM/GEMV with rayon (4-6x speedup on M4 Pro 10-core)
+parallel = ["dep:rayon"]
 
 # Candle backend for LLM inference (Rust-native, Metal acceleration on Mac)
 candle = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]

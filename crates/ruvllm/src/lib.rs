@@ -47,6 +47,7 @@ pub mod error;
 pub mod kernels;
 pub mod kv_cache;
 pub mod lora;
+pub mod memory_pool;
 #[cfg(all(target_os = "macos", feature = "metal-compute"))]
 pub mod metal;
 pub mod optimization;
@@ -77,7 +78,17 @@ pub use backends::CandleBackend;
 #[cfg(feature = "async-runtime")]
 pub use backends::{AsyncTokenStream, LlmBackendAsync};
 pub use error::{RuvLLMError, Result};
-pub use kv_cache::{TwoTierKvCache, KvCacheConfig, CacheTier, CacheQuantization};
+pub use kv_cache::{
+    TwoTierKvCache, KvCacheConfig, CacheTier, CacheQuantization, KvCacheStats,
+    PooledKvCache, PooledKvBlock, PooledKvCacheStats,
+};
+pub use memory_pool::{
+    InferenceArena, ArenaStats,
+    BufferPool, BufferSize, PooledBuffer, BufferPoolStats,
+    ScratchSpaceManager, ScratchSpace, ScratchStats,
+    MemoryManager, MemoryManagerConfig, MemoryManagerStats,
+    CACHE_LINE_SIZE, DEFAULT_ALIGNMENT,
+};
 pub use paged_attention::{PagedAttention, PagedAttentionConfig, PageTable, PageBlock};
 pub use policy_store::{PolicyStore, PolicyEntry, PolicyType, QuantizationPolicy, RouterPolicy};
 pub use session::{SessionManager, Session, SessionConfig};
