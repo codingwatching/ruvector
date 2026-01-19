@@ -509,6 +509,42 @@ impl RealtimeOptimizer {
         self.speculative_active.store(false, Ordering::Relaxed);
     }
 
+    /// Update speculation statistics for learning/monitoring
+    ///
+    /// This records the acceptance rate of speculative decoding rounds
+    /// to help tune the lookahead parameter adaptively.
+    ///
+    /// # Arguments
+    /// * `accepted_count` - Number of draft tokens that were accepted
+    /// * `total_drafted` - Total number of draft tokens generated
+    pub fn update_speculation_stats(&self, accepted_count: usize, total_drafted: usize) {
+        if total_drafted == 0 {
+            return;
+        }
+
+        // Calculate acceptance rate
+        let acceptance_rate = accepted_count as f32 / total_drafted as f32;
+
+        // Use acceptance rate to adjust future speculative decoding behavior
+        // High acceptance (>0.8) suggests we can increase lookahead
+        // Low acceptance (<0.5) suggests we should reduce lookahead or disable
+        let mut config = self.config.write();
+
+        if acceptance_rate > 0.9 && config.speculative.num_speculative_tokens < 8 {
+            // Excellent acceptance, try more tokens
+            config.speculative.num_speculative_tokens += 1;
+        } else if acceptance_rate < 0.3 && config.speculative.num_speculative_tokens > 2 {
+            // Poor acceptance, reduce speculation
+            config.speculative.num_speculative_tokens -= 1;
+        }
+
+        // Update acceptance threshold based on recent performance
+        // This implements a simple exponential moving average
+        let alpha = 0.1; // Learning rate
+        config.speculative.acceptance_threshold =
+            config.speculative.acceptance_threshold * (1.0 - alpha) + acceptance_rate * alpha;
+    }
+
     /// Check if speculative decoding is active
     pub fn is_speculative_active(&self) -> bool {
         self.speculative_active.load(Ordering::Relaxed)

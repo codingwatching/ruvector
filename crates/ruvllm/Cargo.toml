@@ -26,6 +26,7 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
 once_cell = { workspace = true }
+smallvec = "1.13"
 
 # Time and UUID
 chrono = { workspace = true, features = ["serde"] }

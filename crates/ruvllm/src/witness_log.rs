@@ -10,6 +10,31 @@
 //! - Analyze routing decision patterns
 //! - Track quality metrics over time
 //! - Identify latency bottlenecks
+//!
+//! ## Async Write Architecture
+//!
+//! The witness log uses a non-blocking async write system with:
+//!
+//! - **Write batching**: Batches up to 100 entries or 1 second before flushing
+//! - **Background flush task**: Periodic flush every second via tokio
+//! - **Backpressure handling**: Queue size limit with graceful degradation
+//! - **Durability**: Optional fsync for critical writes
+//!
+//! ## Example
+//!
+//! ```rust,ignore
+//! let log = WitnessLog::new("./witness", 768)?;
+//!
+//! // Start the background flush task
+//! log.start_background_flush().await;
+//!
+//! // Record entries (non-blocking)
+//! let entry = WitnessEntry::new(session_id, query_embedding, routing_decision);
+//! log.record_async(entry).await?;
+//!
+//! // Force flush on shutdown
+//! log.flush_async().await?;
+//! ```
 
 use crate::error::{Result, RuvLLMError};
 use crate::types::{ErrorInfo, ModelSize, QualityMetrics};
@@ -18,10 +43,15 @@ use ruvector_core::{AgenticDB, SearchQuery, VectorEntry};
 use ruvector_core::types::DbOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use parking_lot::Mutex;
 use uuid::Uuid;
+
+#[cfg(feature = "async-runtime")]
+use tokio::sync::{oneshot, Notify};
+#[cfg(feature = "async-runtime")]
+use tokio::time::{Duration, interval};
 
 /// Latency breakdown for profiling
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -188,44 +218,90 @@ impl WitnessEntry {
     }
 }
 
-/// Write-back queue for batching writes
+/// Configuration for async write behavior
+#[derive(Debug, Clone)]
+pub struct AsyncWriteConfig {
+    /// Maximum batch size before forcing flush (default: 100)
+    pub max_batch_size: usize,
+    /// Maximum wait time before flush in milliseconds (default: 1000)
+    pub max_wait_ms: u64,
+    /// Maximum queue depth for backpressure (default: 10000)
+    pub max_queue_depth: usize,
+    /// Enable fsync on critical writes (default: false for performance)
+    pub fsync_critical: bool,
+    /// Background flush interval in milliseconds (default: 1000)
+    pub flush_interval_ms: u64,
+}
+
+impl Default for AsyncWriteConfig {
+    fn default() -> Self {
+        Self {
+            max_batch_size: 100,
+            max_wait_ms: 1000,
+            max_queue_depth: 10000,
+            fsync_critical: false,
+            flush_interval_ms: 1000,
+        }
+    }
+}
+
+/// Write-back queue for batching writes with backpressure support
 struct WritebackQueue {
     /// Pending entries
     entries: Vec<WitnessEntry>,
-    /// Maximum batch size
-    max_batch: usize,
-    /// Maximum wait time (ms)
-    max_wait_ms: u64,
+    /// Configuration
+    config: AsyncWriteConfig,
     /// Last flush timestamp
     last_flush: DateTime<Utc>,
+    /// Total entries dropped due to backpressure
+    dropped_count: usize,
 }
 
 impl WritebackQueue {
-    fn new(max_batch: usize, max_wait_ms: u64) -> Self {
+    fn new(config: AsyncWriteConfig) -> Self {
         Self {
-            entries: Vec::with_capacity(max_batch),
-            max_batch,
-            max_wait_ms,
+            entries: Vec::with_capacity(config.max_batch_size),
+            config,
             last_flush: Utc::now(),
+            dropped_count: 0,
         }
     }
 
     fn should_flush(&self) -> bool {
-        if self.entries.len() >= self.max_batch {
+        if self.entries.len() >= self.config.max_batch_size {
             return true;
         }
 
         let elapsed = (Utc::now() - self.last_flush).num_milliseconds() as u64;
-        elapsed >= self.max_wait_ms && !self.entries.is_empty()
+        elapsed >= self.config.max_wait_ms && !self.entries.is_empty()
     }
 
-    fn push(&mut self, entry: WitnessEntry) {
+    /// Push an entry with backpressure handling
+    /// Returns true if entry was accepted, false if dropped due to backpressure
+    fn push(&mut self, entry: WitnessEntry) -> bool {
+        if self.entries.len() >= self.config.max_queue_depth {
+            self.dropped_count += 1;
+            return false;
+        }
         self.entries.push(entry);
+        true
     }
 
     fn drain(&mut self) -> Vec<WitnessEntry> {
         self.last_flush = Utc::now();
         std::mem::take(&mut self.entries)
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn dropped_count(&self) -> usize {
+        self.dropped_count
     }
 }
 
@@ -243,11 +319,28 @@ pub struct WitnessLog {
     success_count: AtomicUsize,
     /// Error count
     error_count: AtomicUsize,
+    /// Async write configuration
+    async_config: AsyncWriteConfig,
+    /// Storage path for fsync operations
+    storage_path: String,
+    /// Flag to indicate if background task is running
+    background_running: Arc<AtomicBool>,
+    /// Notify signal for flush requests
+    #[cfg(feature = "async-runtime")]
+    flush_notify: Arc<Notify>,
+    /// Shutdown signal sender
+    #[cfg(feature = "async-runtime")]
+    shutdown_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 impl WitnessLog {
-    /// Create a new witness log
+    /// Create a new witness log with default async write configuration
     pub fn new(storage_path: &str, embedding_dim: usize) -> Result<Self> {
+        Self::with_config(storage_path, embedding_dim, AsyncWriteConfig::default())
+    }
+
+    /// Create a new witness log with custom async write configuration
+    pub fn with_config(storage_path: &str, embedding_dim: usize, async_config: AsyncWriteConfig) -> Result<Self> {
         let mut options = DbOptions::default();
         options.storage_path = storage_path.to_string();
         options.dimensions = embedding_dim;
@@ -258,14 +351,24 @@ impl WitnessLog {
         Ok(Self {
             db,
             embedding_dim,
-            writeback_queue: Arc::new(Mutex::new(WritebackQueue::new(100, 1000))),
+            writeback_queue: Arc::new(Mutex::new(WritebackQueue::new(async_config.clone()))),
             total_entries: AtomicUsize::new(0),
             success_count: AtomicUsize::new(0),
             error_count: AtomicUsize::new(0),
+            async_config,
+            storage_path: storage_path.to_string(),
+            background_running: Arc::new(AtomicBool::new(false)),
+            #[cfg(feature = "async-runtime")]
+            flush_notify: Arc::new(Notify::new()),
+            #[cfg(feature = "async-runtime")]
+            shutdown_tx: Arc::new(Mutex::new(None)),
         })
     }
 
-    /// Record a witness entry (async, non-blocking)
+    /// Record a witness entry (non-blocking, batched writes)
+    ///
+    /// This method adds the entry to a write-back queue for batched writes.
+    /// Returns Ok(()) if the entry was accepted, or an error if dropped due to backpressure.
     pub fn record(&self, entry: WitnessEntry) -> Result<()> {
         // Update counters
         self.total_entries.fetch_add(1, Ordering::SeqCst);
@@ -275,17 +378,69 @@ impl WitnessLog {
             self.error_count.fetch_add(1, Ordering::SeqCst);
         }
 
-        // Add to writeback queue
+        // Add to writeback queue with backpressure handling
         let mut queue = self.writeback_queue.lock();
-        queue.push(entry);
+        if !queue.push(entry) {
+            return Err(RuvLLMError::OutOfMemory(
+                "Witness log queue full, entry dropped due to backpressure".to_string(),
+            ));
+        }
 
-        // Flush if needed
-        if queue.should_flush() {
+        // Flush if needed (synchronous fallback when background task not running)
+        if !self.background_running.load(Ordering::SeqCst) && queue.should_flush() {
             let entries = queue.drain();
             drop(queue); // Release lock before writing
             self.flush_entries(entries)?;
         }
 
+        // If background task is running, notify it
+        #[cfg(feature = "async-runtime")]
+        if self.background_running.load(Ordering::SeqCst) {
+            self.flush_notify.notify_one();
+        }
+
+        Ok(())
+    }
+
+    /// Record a witness entry with critical durability (fsync)
+    ///
+    /// Use this for entries that must be persisted immediately (e.g., errors, critical events).
+    /// This bypasses batching and writes directly with fsync.
+    pub fn record_critical(&self, entry: WitnessEntry) -> Result<()> {
+        // Update counters
+        self.total_entries.fetch_add(1, Ordering::SeqCst);
+        if entry.is_success() {
+            self.success_count.fetch_add(1, Ordering::SeqCst);
+        } else {
+            self.error_count.fetch_add(1, Ordering::SeqCst);
+        }
+
+        // Write immediately
+        self.flush_entries(vec![entry])?;
+
+        // Sync to disk if configured
+        if self.async_config.fsync_critical {
+            self.fsync()?;
+        }
+
+        Ok(())
+    }
+
+    /// Force fsync to ensure durability
+    fn fsync(&self) -> Result<()> {
+        // Open the database file and sync
+        // Note: redb (used by AgenticDB) handles its own durability via WAL
+        // This is a best-effort sync for the witness log directory
+        #[cfg(feature = "async-runtime")]
+        {
+            use std::fs::OpenOptions;
+            if let Ok(file) = OpenOptions::new()
+                .read(true)
+                .open(&self.storage_path)
+            {
+                let _ = file.sync_all();
+            }
+        }
         Ok(())
     }
 
@@ -364,14 +519,27 @@ impl WitnessLog {
         let total = self.total_entries.load(Ordering::SeqCst);
         let success = self.success_count.load(Ordering::SeqCst);
         let errors = self.error_count.load(Ordering::SeqCst);
+        let queue = self.writeback_queue.lock();
 
         WitnessLogStats {
             total_entries: total,
             success_count: success,
             error_count: errors,
             success_rate: if total > 0 { success as f32 / total as f32 } else { 0.0 },
-            pending_writes: self.writeback_queue.lock().entries.len(),
+            pending_writes: queue.len(),
+            dropped_entries: queue.dropped_count(),
+            background_running: self.background_running.load(Ordering::SeqCst),
         }
+    }
+
+    /// Get the async write configuration
+    pub fn async_config(&self) -> &AsyncWriteConfig {
+        &self.async_config
+    }
+
+    /// Check if entries have been dropped due to backpressure
+    pub fn has_dropped_entries(&self) -> bool {
+        self.writeback_queue.lock().dropped_count() > 0
     }
 
     /// Reconstruct WitnessEntry from metadata
@@ -453,6 +621,170 @@ pub struct WitnessLogStats {
     pub success_rate: f32,
     /// Pending writes in queue
     pub pending_writes: usize,
+    /// Entries dropped due to backpressure
+    pub dropped_entries: usize,
+    /// Background flush task running
+    pub background_running: bool,
+}
+
+// ============================================================================
+// Async write support
+// ============================================================================
+
+#[cfg(feature = "async-runtime")]
+impl WitnessLog {
+    /// Start the background flush task
+    ///
+    /// This spawns a tokio task that periodically flushes the write-back queue.
+    /// Call this once after creating the WitnessLog.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let log = WitnessLog::new("./witness", 768)?;
+    /// log.start_background_flush();
+    /// ```
+    pub fn start_background_flush(self: &Arc<Self>) {
+        if self.background_running.swap(true, Ordering::SeqCst) {
+            // Already running
+            return;
+        }
+
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+        *self.shutdown_tx.lock() = Some(shutdown_tx);
+
+        let log = Arc::clone(self);
+        let flush_interval = Duration::from_millis(self.async_config.flush_interval_ms);
+
+        tokio::spawn(async move {
+            let mut ticker = interval(flush_interval);
+
+            loop {
+                tokio::select! {
+                    // Periodic tick
+                    _ = ticker.tick() => {
+                        log.flush_if_needed_internal();
+                    }
+                    // Notified by record()
+                    _ = log.flush_notify.notified() => {
+                        log.flush_if_needed_internal();
+                    }
+                    // Shutdown signal
+                    _ = &mut shutdown_rx => {
+                        // Final flush before shutdown
+                        if let Err(e) = log.flush() {
+                            tracing::error!("Error during final witness log flush: {}", e);
+                        }
+                        log.background_running.store(false, Ordering::SeqCst);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Stop the background flush task
+    ///
+    /// This signals the background task to stop and performs a final flush.
+    pub async fn stop_background_flush(&self) {
+        if !self.background_running.load(Ordering::SeqCst) {
+            return;
+        }
+
+        if let Some(tx) = self.shutdown_tx.lock().take() {
+            let _ = tx.send(());
+        }
+
+        // Wait a bit for the task to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    /// Record a witness entry asynchronously
+    ///
+    /// This is the preferred async method for recording entries.
+    /// It handles backpressure and notifies the background flush task.
+    pub async fn record_async(&self, entry: WitnessEntry) -> Result<()> {
+        self.record(entry)
+    }
+
+    /// Flush all pending entries asynchronously
+    ///
+    /// This performs the flush in a blocking task to avoid blocking the async runtime.
+    pub async fn flush_async(&self) -> Result<()> {
+        let queue = Arc::clone(&self.writeback_queue);
+
+        // Get entries to flush
+        let entries = {
+            let mut q = queue.lock();
+            if q.is_empty() {
+                return Ok(());
+            }
+            q.drain()
+        };
+
+        // Flush entries (this is synchronous, could be optimized with async db)
+        self.flush_entries(entries)
+    }
+
+    /// Internal method to check and flush if needed
+    fn flush_if_needed_internal(&self) {
+        let entries = {
+            let mut queue = self.writeback_queue.lock();
+            if queue.should_flush() {
+                queue.drain()
+            } else {
+                return;
+            }
+        };
+
+        if let Err(e) = self.flush_entries(entries) {
+            tracing::error!("Background witness log flush failed: {}", e);
+        }
+    }
+
+    /// Record multiple entries in a batch
+    ///
+    /// This is more efficient than calling `record_async` multiple times.
+    pub async fn record_batch(&self, entries: Vec<WitnessEntry>) -> Result<usize> {
+        let mut accepted = 0;
+
+        for entry in entries {
+            self.total_entries.fetch_add(1, Ordering::SeqCst);
+            if entry.is_success() {
+                self.success_count.fetch_add(1, Ordering::SeqCst);
+            } else {
+                self.error_count.fetch_add(1, Ordering::SeqCst);
+            }
+
+            let mut queue = self.writeback_queue.lock();
+            if queue.push(entry) {
+                accepted += 1;
+            }
+        }
+
+        // Notify background task
+        self.flush_notify.notify_one();
+
+        Ok(accepted)
+    }
+
+    /// Get detailed async statistics including background task state
+    pub fn stats_async(&self) -> WitnessLogStats {
+        let total = self.total_entries.load(Ordering::SeqCst);
+        let success = self.success_count.load(Ordering::SeqCst);
+        let errors = self.error_count.load(Ordering::SeqCst);
+        let queue = self.writeback_queue.lock();
+
+        WitnessLogStats {
+            total_entries: total,
+            success_count: success,
+            error_count: errors,
+            success_rate: if total > 0 { success as f32 / total as f32 } else { 0.0 },
+            pending_writes: queue.len(),
+            dropped_entries: queue.dropped_count(),
+            background_running: self.background_running.load(Ordering::SeqCst),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -497,5 +829,250 @@ mod tests {
         let decision = RoutingDecision::default();
         assert_eq!(decision.model, ModelSize::Small);
         assert_eq!(decision.temperature, 0.7);
+    }
+
+    #[test]
+    fn test_async_write_config_default() {
+        let config = AsyncWriteConfig::default();
+        assert_eq!(config.max_batch_size, 100);
+        assert_eq!(config.max_wait_ms, 1000);
+        assert_eq!(config.max_queue_depth, 10000);
+        assert!(!config.fsync_critical);
+        assert_eq!(config.flush_interval_ms, 1000);
+    }
+
+    #[test]
+    fn test_writeback_queue_batching() {
+        let config = AsyncWriteConfig {
+            max_batch_size: 5,
+            max_wait_ms: 1000,
+            max_queue_depth: 100,
+            fsync_critical: false,
+            flush_interval_ms: 1000,
+        };
+        let mut queue = WritebackQueue::new(config);
+
+        // Queue should not need flush initially
+        assert!(!queue.should_flush());
+        assert!(queue.is_empty());
+
+        // Add entries
+        for i in 0..4 {
+            let entry = WitnessEntry::new(
+                format!("session-{}", i),
+                vec![0.1; 768],
+                RoutingDecision::default(),
+            );
+            assert!(queue.push(entry));
+        }
+
+        // Queue has entries but not at batch size
+        assert_eq!(queue.len(), 4);
+        assert!(!queue.should_flush()); // Only 4 of 5
+
+        // Add one more to trigger batch size
+        let entry = WitnessEntry::new(
+            "session-4".to_string(),
+            vec![0.1; 768],
+            RoutingDecision::default(),
+        );
+        assert!(queue.push(entry));
+
+        // Now should flush
+        assert!(queue.should_flush());
+
+        // Drain and verify
+        let entries = queue.drain();
+        assert_eq!(entries.len(), 5);
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn test_writeback_queue_backpressure() {
+        let config = AsyncWriteConfig {
+            max_batch_size: 5,
+            max_wait_ms: 1000,
+            max_queue_depth: 10, // Small queue for testing
+            fsync_critical: false,
+            flush_interval_ms: 1000,
+        };
+        let mut queue = WritebackQueue::new(config);
+
+        // Fill up to max depth
+        for i in 0..10 {
+            let entry = WitnessEntry::new(
+                format!("session-{}", i),
+                vec![0.1; 768],
+                RoutingDecision::default(),
+            );
+            assert!(queue.push(entry), "Entry {} should be accepted", i);
+        }
+
+        // Next entry should be dropped
+        let entry = WitnessEntry::new(
+            "session-overflow".to_string(),
+            vec![0.1; 768],
+            RoutingDecision::default(),
+        );
+        assert!(!queue.push(entry), "Entry should be dropped due to backpressure");
+        assert_eq!(queue.dropped_count(), 1);
+
+        // Another dropped entry
+        let entry2 = WitnessEntry::new(
+            "session-overflow-2".to_string(),
+            vec![0.1; 768],
+            RoutingDecision::default(),
+        );
+        assert!(!queue.push(entry2));
+        assert_eq!(queue.dropped_count(), 2);
+    }
+
+    #[test]
+    fn test_witness_log_stats() {
+        let config = AsyncWriteConfig {
+            max_batch_size: 100,
+            max_wait_ms: 1000,
+            max_queue_depth: 5, // Small for testing backpressure
+            fsync_critical: false,
+            flush_interval_ms: 1000,
+        };
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage_path = temp_dir.path().join("witness_test");
+
+        let log = WitnessLog::with_config(
+            storage_path.to_str().unwrap(),
+            64,
+            config,
+        ).unwrap();
+
+        // Record some entries
+        for i in 0..3 {
+            let entry = WitnessEntry::new(
+                format!("session-{}", i),
+                vec![0.1; 64],
+                RoutingDecision::default(),
+            );
+            log.record(entry).unwrap();
+        }
+
+        let stats = log.stats();
+        assert_eq!(stats.total_entries, 3);
+        assert_eq!(stats.success_count, 3);
+        assert_eq!(stats.error_count, 0);
+        assert!(!stats.background_running);
+    }
+
+    #[cfg(feature = "async-runtime")]
+    mod async_tests {
+        use super::*;
+        use std::sync::Arc;
+
+        #[tokio::test]
+        async fn test_background_flush_task() {
+            let config = AsyncWriteConfig {
+                max_batch_size: 5,
+                max_wait_ms: 100, // Short for testing
+                max_queue_depth: 1000,
+                fsync_critical: false,
+                flush_interval_ms: 50, // Short flush interval for testing
+            };
+            let temp_dir = tempfile::tempdir().unwrap();
+            let storage_path = temp_dir.path().join("async_witness_test");
+
+            let log = Arc::new(WitnessLog::with_config(
+                storage_path.to_str().unwrap(),
+                64,
+                config,
+            ).unwrap());
+
+            // Start background flush task
+            log.start_background_flush();
+
+            // Verify it's running
+            let stats = log.stats_async();
+            assert!(stats.background_running);
+
+            // Record some entries
+            for i in 0..10 {
+                let entry = WitnessEntry::new(
+                    format!("async-session-{}", i),
+                    vec![0.1; 64],
+                    RoutingDecision::default(),
+                );
+                log.record_async(entry).await.unwrap();
+            }
+
+            // Wait for background flush
+            tokio::time::sleep(Duration::from_millis(200)).await;
+
+            // Entries should have been flushed (pending < 10)
+            let stats = log.stats_async();
+            assert!(stats.pending_writes < 10);
+
+            // Stop background task
+            log.stop_background_flush().await;
+
+            let stats = log.stats_async();
+            assert!(!stats.background_running);
+        }
+
+        #[tokio::test]
+        async fn test_record_batch() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let storage_path = temp_dir.path().join("batch_witness_test");
+
+            let log = Arc::new(WitnessLog::new(
+                storage_path.to_str().unwrap(),
+                64,
+            ).unwrap());
+
+            log.start_background_flush();
+
+            // Create batch of entries
+            let entries: Vec<_> = (0..50)
+                .map(|i| WitnessEntry::new(
+                    format!("batch-session-{}", i),
+                    vec![0.1; 64],
+                    RoutingDecision::default(),
+                ))
+                .collect();
+
+            // Record batch
+            let accepted = log.record_batch(entries).await.unwrap();
+            assert_eq!(accepted, 50);
+
+            let stats = log.stats_async();
+            assert_eq!(stats.total_entries, 50);
+
+            log.stop_background_flush().await;
+        }
+
+        #[tokio::test]
+        async fn test_flush_async() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let storage_path = temp_dir.path().join("flush_async_test");
+
+            let log = WitnessLog::new(
+                storage_path.to_str().unwrap(),
+                64,
+            ).unwrap();
+
+            // Record entries
+            for i in 0..5 {
+                let entry = WitnessEntry::new(
+                    format!("flush-session-{}", i),
+                    vec![0.1; 64],
+                    RoutingDecision::default(),
+                );
+                log.record(entry).unwrap();
+            }
+
+            // Force async flush
+            log.flush_async().await.unwrap();
+
+            // All entries should be flushed
+            let stats = log.stats();
+            assert_eq!(stats.pending_writes, 0);
+        }
     }
 }

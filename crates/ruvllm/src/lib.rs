@@ -64,6 +64,10 @@ pub mod tokenizer;
 pub mod types;
 pub mod witness_log;
 
+// Test modules
+#[cfg(test)]
+mod tests;
+
 // Re-exports
 pub use adapter_manager::{AdapterManager, LoraAdapter, AdapterConfig};
 pub use autodetect::{
@@ -120,10 +124,15 @@ pub use speculative::{
     softmax, log_softmax, sample_from_probs, top_k_filter, top_p_filter,
 };
 pub use types::*;
-pub use witness_log::{WitnessLog, WitnessEntry, LatencyBreakdown, RoutingDecision};
+pub use witness_log::{WitnessLog, WitnessEntry, LatencyBreakdown, RoutingDecision, AsyncWriteConfig, WitnessLogStats};
 pub use gguf::{
     GgufFile, GgufModelLoader, GgufHeader, GgufValue, GgufQuantType,
     TensorInfo, QuantizedTensor, ModelConfig as GgufModelConfig,
+    // New GGUF loading types
+    GgufLoader, LoadConfig, LoadProgress, LoadedWeights, LoadedTensor,
+    TensorCategory, TensorNameMapper, StreamingLoader,
+    ModelInitializer, ModelWeights, LayerWeights, WeightTensor, QuantizedWeight,
+    ProgressModelBuilder,
 };
 pub use serving::{
     // Request types
@@ -449,14 +458,3 @@ impl RuvLLMEngine {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config_default() {
-        let config = RuvLLMConfig::default();
-        assert_eq!(config.max_sessions, 1000);
-        assert_eq!(config.embedding_dim, 768);
-    }
-}

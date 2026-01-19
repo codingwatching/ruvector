@@ -63,6 +63,8 @@
 pub mod parser;
 pub mod quantization;
 pub mod tensors;
+pub mod loader;
+pub mod model_init;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -78,6 +80,14 @@ use crate::backends::ModelArchitecture;
 pub use parser::{GgufHeader, GgufValue, parse_header, parse_metadata, parse_tensor_infos};
 pub use quantization::{GgufQuantType, QuantizedTensor, dequantize_block};
 pub use tensors::TensorInfo;
+pub use loader::{
+    GgufLoader, LoadConfig, LoadProgress, LoadedWeights, LoadedTensor,
+    TensorCategory, TensorNameMapper, StreamingLoader, ProgressCallback,
+};
+pub use model_init::{
+    ModelInitializer, ModelWeights, LayerWeights, WeightTensor, QuantizedWeight,
+    ProgressModelBuilder,
+};
 
 // ============================================================================
 // GGUF File Magic and Constants

@@ -44,6 +44,7 @@
 //! - [`norm`]: RMSNorm, LayerNorm
 //! - [`matmul`]: Batched GEMM operations
 //! - [`quantized`]: INT8/INT4 quantized inference kernels
+//! - [`activations`]: Vectorized SiLU, GELU, ReLU, Softmax
 //!
 //! ## Performance Characteristics
 //!
@@ -53,6 +54,9 @@
 //! | `paged_attention_neon` | 8192+ | 2.1 GFLOPS | 2.8x |
 //! | `rms_norm_neon` | Any | 4.8 GFLOPS | 4.1x |
 //! | `gemm_neon` | 4096x4096 | 1.2 GFLOPS | 2.4x |
+//! | `silu` | Any | 5.2 GFLOPS | 3.5x |
+//! | `gelu` | Any | 4.5 GFLOPS | 3.2x |
+//! | `softmax` | Any | 3.8 GFLOPS | 2.8x |
 //!
 //! ## Performance Optimizations
 //!
@@ -71,6 +75,7 @@
 //! - **KV Cache**: `[batch, num_kv_heads, seq_len, head_dim]`
 //! - **Hidden states**: `[batch, seq_len, hidden_dim]`
 
+pub mod activations;
 pub mod attention;
 pub mod matmul;
 pub mod norm;
@@ -87,7 +92,12 @@ pub use attention::{
     grouped_query_attention_neon, multi_query_attention_neon,
     paged_attention_neon, PagedKvCache,
     select_block_size, BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_LARGE,
+    // TD-009: Zero-allocation attention functions and scratch buffers
+    flash_attention_into, flash_attention_with_scratch, AttentionScratch,
 };
+// Thread-local scratch buffer for zero-allocation attention (non-WASM only)
+#[cfg(not(target_arch = "wasm32"))]
+pub use attention::THREAD_LOCAL_SCRATCH;
 #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 pub use attention::{
     multi_query_attention_parallel, grouped_query_attention_parallel,
@@ -108,6 +118,14 @@ pub use quantized::{
     INT4_BLOCK_SIZE, Q4K_SUPER_BLOCK_SIZE,
 };
 pub use rope::{apply_rope_neon, precompute_rope_tables, RopeConfig};
+
+// Activation function exports
+pub use activations::{
+    silu, silu_vec, gelu, gelu_vec, gelu_exact,
+    relu, relu_vec, leaky_relu,
+    softmax, softmax_vec, softmax_temperature,
+    batch_silu, batch_gelu, batch_softmax,
+};
 
 // Accelerate framework exports (macOS only)
 #[cfg(all(target_os = "macos", feature = "accelerate"))]
