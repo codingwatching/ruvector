@@ -102,6 +102,18 @@ pub enum RuvLLMError {
     /// Quantization errors
     #[error("Quantization error: {0}")]
     Quantization(String),
+
+    /// Not implemented errors
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+
+    /// Hybrid pipeline errors
+    #[error("Hybrid pipeline error: {0}")]
+    HybridPipeline(String),
+
+    /// Core ML errors (macOS only)
+    #[error("Core ML error: {0}")]
+    CoreML(String),
 }
 
 impl From<ruvector_core::RuvectorError> for RuvLLMError {

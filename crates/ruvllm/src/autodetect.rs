@@ -44,6 +44,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::backends::{DeviceType, DType, Quantization};
+#[cfg(feature = "coreml")]
+use crate::backends::{AneCapabilities, ComputeUnits};
 use crate::kernels::AttentionConfig;
 
 // =============================================================================
@@ -689,6 +691,160 @@ impl CoreInfo {
 // System Capabilities (Main Detection Struct)
 // =============================================================================
 
+/// Apple Neural Engine (ANE) capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AneInfo {
+    /// Whether ANE is available on this device
+    pub available: bool,
+    /// ANE compute power in TOPS (Trillion Operations Per Second)
+    pub tops: f32,
+    /// Maximum recommended model size in MB for ANE
+    pub max_model_size_mb: usize,
+    /// Supported operation types
+    pub supported_ops: Vec<String>,
+}
+
+impl Default for AneInfo {
+    fn default() -> Self {
+        Self::detect()
+    }
+}
+
+impl AneInfo {
+    /// Detect ANE capabilities
+    pub fn detect() -> Self {
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            // Apple Silicon has ANE
+            // M4 Pro: 38 TOPS, M3: 18 TOPS, M2: 15.8 TOPS, M1: 11 TOPS
+            Self {
+                available: true,
+                tops: Self::detect_ane_tops(),
+                max_model_size_mb: 2048, // ~2GB models work well on ANE
+                supported_ops: vec![
+                    "MatMul".to_string(),
+                    "Conv2D".to_string(),
+                    "GELU".to_string(),
+                    "SiLU".to_string(),
+                    "LayerNorm".to_string(),
+                    "Softmax".to_string(),
+                    "Add".to_string(),
+                    "Mul".to_string(),
+                ],
+            }
+        }
+
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        {
+            Self {
+                available: false,
+                tops: 0.0,
+                max_model_size_mb: 0,
+                supported_ops: vec![],
+            }
+        }
+    }
+
+    /// Detect ANE TOPS based on chip model
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    fn detect_ane_tops() -> f32 {
+        use std::process::Command;
+
+        // Try to get chip model from sysctl
+        if let Ok(output) = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+        {
+            let brand = String::from_utf8_lossy(&output.stdout).to_lowercase();
+
+            // M4 series
+            if brand.contains("m4") {
+                if brand.contains("max") {
+                    return 38.0; // M4 Max
+                } else if brand.contains("pro") {
+                    return 38.0; // M4 Pro
+                } else {
+                    return 38.0; // M4 base
+                }
+            }
+
+            // M3 series
+            if brand.contains("m3") {
+                if brand.contains("max") {
+                    return 18.0;
+                } else if brand.contains("pro") {
+                    return 18.0;
+                } else {
+                    return 18.0;
+                }
+            }
+
+            // M2 series
+            if brand.contains("m2") {
+                if brand.contains("ultra") {
+                    return 31.6; // 2x M2 Max
+                } else if brand.contains("max") {
+                    return 15.8;
+                } else if brand.contains("pro") {
+                    return 15.8;
+                } else {
+                    return 15.8;
+                }
+            }
+
+            // M1 series
+            if brand.contains("m1") {
+                if brand.contains("ultra") {
+                    return 22.0; // 2x M1 Max
+                } else if brand.contains("max") {
+                    return 11.0;
+                } else if brand.contains("pro") {
+                    return 11.0;
+                } else {
+                    return 11.0;
+                }
+            }
+        }
+
+        // Default to M1 level if detection fails
+        11.0
+    }
+
+    /// Check if a model of given size is suitable for ANE
+    pub fn is_model_suitable(&self, model_size_mb: usize) -> bool {
+        self.available && model_size_mb <= self.max_model_size_mb
+    }
+
+    /// Get recommended compute strategy for a given model size
+    pub fn recommended_strategy(&self, model_size_mb: usize) -> AneStrategy {
+        if !self.available {
+            return AneStrategy::GpuOnly;
+        }
+
+        if model_size_mb <= 500 {
+            // Small models: ANE is great
+            AneStrategy::AneOnly
+        } else if model_size_mb <= self.max_model_size_mb {
+            // Medium models: hybrid is best
+            AneStrategy::Hybrid
+        } else {
+            // Large models: GPU is better
+            AneStrategy::GpuOnly
+        }
+    }
+}
+
+/// ANE usage strategy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AneStrategy {
+    /// Use only ANE (best for small models)
+    AneOnly,
+    /// Use GPU + ANE hybrid (ANE for MLP, GPU for attention)
+    Hybrid,
+    /// Use only GPU (best for large models)
+    GpuOnly,
+}
+
 /// Complete system capabilities for inference configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemCapabilities {
@@ -700,6 +856,8 @@ pub struct SystemCapabilities {
     pub cpu_features: CpuFeatures,
     /// GPU capabilities (if available)
     pub gpu: Option<GpuCapabilities>,
+    /// Apple Neural Engine capabilities (if available)
+    pub ane: AneInfo,
     /// Total system memory in megabytes
     pub memory_mb: usize,
     /// Available memory in megabytes (if detectable)
@@ -722,6 +880,7 @@ impl SystemCapabilities {
             arch: Architecture::detect(),
             cpu_features: CpuFeatures::detect(),
             gpu: GpuCapabilities::detect(),
+            ane: AneInfo::detect(),
             memory_mb: Self::detect_total_memory(),
             available_memory_mb: Self::detect_available_memory(),
             cores: CoreInfo::detect(),
@@ -948,6 +1107,38 @@ impl SystemCapabilities {
 
     /// Select the best compute backend
     fn select_compute_backend(&self) -> ComputeBackend {
+        self.select_compute_backend_for_model(7.0 * 1024.0) // Default to 7B model (~7GB)
+    }
+
+    /// Select the best compute backend for a specific model size (in MB)
+    pub fn select_compute_backend_for_model(&self, model_size_mb: f32) -> ComputeBackend {
+        // Check if ANE is available and suitable for this model
+        #[cfg(feature = "coreml")]
+        {
+            if self.ane.available {
+                let strategy = self.ane.recommended_strategy(model_size_mb as usize);
+                match strategy {
+                    AneStrategy::AneOnly => {
+                        // Small model: pure ANE is best
+                        return ComputeBackend::CoreML;
+                    }
+                    AneStrategy::Hybrid => {
+                        // Medium model: hybrid ANE+GPU if Metal is available
+                        if let Some(ref gpu) = self.gpu {
+                            if matches!(gpu.backend, GpuBackend::Metal) {
+                                return ComputeBackend::HybridAne;
+                            }
+                        }
+                        // Fall back to CoreML if no GPU
+                        return ComputeBackend::CoreML;
+                    }
+                    AneStrategy::GpuOnly => {
+                        // Large model: use GPU (fall through)
+                    }
+                }
+            }
+        }
+
         // Prefer GPU if available
         if let Some(ref gpu) = self.gpu {
             match gpu.backend {
@@ -968,6 +1159,20 @@ impl SystemCapabilities {
         } else {
             ComputeBackend::CpuScalar
         }
+    }
+
+    /// Select compute backend optimized for power efficiency (battery life)
+    pub fn select_power_efficient_backend(&self) -> ComputeBackend {
+        // ANE is 3-4x more power efficient than GPU
+        #[cfg(feature = "coreml")]
+        {
+            if self.ane.available {
+                return ComputeBackend::CoreML;
+            }
+        }
+
+        // Fall back to standard selection
+        self.select_compute_backend()
     }
 
     /// Get optimal device type for the backend crate
@@ -1078,6 +1283,11 @@ impl SystemCapabilities {
             parts.push("No GPU".to_string());
         }
 
+        // Add ANE info if available
+        if self.ane.available {
+            parts.push(format!("ANE ({:.0} TOPS)", self.ane.tops));
+        }
+
         let simd = if self.cpu_features.avx512 {
             "AVX-512"
         } else if self.cpu_features.avx2 {
@@ -1093,6 +1303,20 @@ impl SystemCapabilities {
 
         parts.join(", ")
     }
+
+    /// Get ANE-specific summary
+    pub fn ane_summary(&self) -> String {
+        if !self.ane.available {
+            return "ANE: Not available".to_string();
+        }
+
+        format!(
+            "ANE: {:.0} TOPS, max model {}MB, {} supported ops",
+            self.ane.tops,
+            self.ane.max_model_size_mb,
+            self.ane.supported_ops.len()
+        )
+    }
 }
 
 // =============================================================================
@@ -1104,6 +1328,12 @@ impl SystemCapabilities {
 pub enum ComputeBackend {
     /// Apple Metal GPU
     Metal,
+    /// Apple Neural Engine via Core ML (38 TOPS on M4 Pro)
+    /// Optimal for small models (<1B params) and batch inference
+    CoreML,
+    /// Hybrid Metal GPU + ANE (best of both worlds)
+    /// Uses ANE for MLP/FFN layers, GPU for attention
+    HybridAne,
     /// NVIDIA CUDA GPU
     Cuda,
     /// WebGPU (browser/cross-platform)
@@ -1119,21 +1349,45 @@ pub enum ComputeBackend {
 }
 
 impl ComputeBackend {
-    /// Check if this is a GPU backend
+    /// Check if this is a GPU/accelerator backend
     pub fn is_gpu(&self) -> bool {
-        matches!(self, Self::Metal | Self::Cuda | Self::WebGPU)
+        matches!(self, Self::Metal | Self::CoreML | Self::HybridAne | Self::Cuda | Self::WebGPU)
+    }
+
+    /// Check if this backend uses the Neural Engine
+    pub fn uses_ane(&self) -> bool {
+        matches!(self, Self::CoreML | Self::HybridAne)
     }
 
     /// Get expected relative performance (higher = better)
+    /// Note: ANE performance depends heavily on model size and batch configuration
     pub fn relative_performance(&self) -> f32 {
         match self {
-            Self::Metal => 10.0,     // Apple Silicon is very efficient
-            Self::Cuda => 15.0,      // NVIDIA is fastest for large models
-            Self::WebGPU => 5.0,     // WebGPU has overhead
-            Self::CpuAvx512 => 4.0,  // AVX-512 is fast
-            Self::CpuAvx2 => 2.5,    // AVX2 is good
-            Self::CpuNeon => 2.0,    // NEON is comparable to AVX2
-            Self::CpuScalar => 1.0,  // Baseline
+            Self::HybridAne => 12.0,  // Best for models that benefit from ANE+GPU
+            Self::Metal => 10.0,      // Apple Silicon GPU is very efficient
+            Self::CoreML => 8.0,      // ANE alone (great for small models, limited for large)
+            Self::Cuda => 15.0,       // NVIDIA is fastest for large models
+            Self::WebGPU => 5.0,      // WebGPU has overhead
+            Self::CpuAvx512 => 4.0,   // AVX-512 is fast
+            Self::CpuAvx2 => 2.5,     // AVX2 is good
+            Self::CpuNeon => 2.0,     // NEON is comparable to AVX2
+            Self::CpuScalar => 1.0,   // Baseline
+        }
+    }
+
+    /// Get power efficiency rating (higher = more efficient)
+    /// ANE is significantly more power efficient than GPU
+    pub fn power_efficiency(&self) -> f32 {
+        match self {
+            Self::CoreML => 4.0,      // ANE is 3-4x more power efficient than GPU
+            Self::HybridAne => 3.0,   // Hybrid gets some efficiency benefits
+            Self::Metal => 2.0,       // Apple Silicon GPU is efficient
+            Self::Cuda => 1.0,        // NVIDIA uses more power
+            Self::WebGPU => 1.5,      // Varies
+            Self::CpuAvx512 => 1.2,
+            Self::CpuAvx2 => 1.3,
+            Self::CpuNeon => 1.5,     // ARM is power efficient
+            Self::CpuScalar => 1.0,
         }
     }
 }
@@ -1218,7 +1472,9 @@ impl InferenceConfig {
     /// Get estimated tokens per second for this configuration
     pub fn estimated_tokens_per_second(&self) -> f32 {
         let base = match self.compute_backend {
+            ComputeBackend::HybridAne => 90.0,  // Hybrid can exceed pure Metal for suitable models
             ComputeBackend::Metal => 80.0,
+            ComputeBackend::CoreML => 60.0,    // ANE alone (great for small models)
             ComputeBackend::Cuda => 100.0,
             ComputeBackend::WebGPU => 40.0,
             ComputeBackend::CpuAvx512 => 30.0,
@@ -1240,6 +1496,20 @@ impl InferenceConfig {
         let batch_factor = (self.batch_size as f32).sqrt();
 
         base * quant_factor * batch_factor
+    }
+
+    /// Create a config optimized for power efficiency (uses ANE when available)
+    pub fn power_efficient() -> Self {
+        let caps = SystemCapabilities::detect();
+        let mut config = caps.optimal_config();
+
+        // Override with power-efficient backend selection
+        config.compute_backend = caps.select_power_efficient_backend();
+
+        // Use smaller batches for better power efficiency
+        config.batch_size = 1;
+
+        config
     }
 }
 
@@ -1477,5 +1747,169 @@ mod tests {
         let low_latency = InferenceConfig::low_latency();
         let tps_low_latency = low_latency.estimated_tokens_per_second();
         assert!(tps_low_latency > 0.0);
+    }
+
+    // =========================================================================
+    // ANE (Apple Neural Engine) Tests
+    // =========================================================================
+
+    #[test]
+    fn test_ane_info_detect() {
+        let ane = AneInfo::detect();
+
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            assert!(ane.available, "ANE should be available on Apple Silicon");
+            assert!(ane.tops > 0.0, "ANE TOPS should be positive");
+            assert!(ane.max_model_size_mb > 0, "ANE max model size should be positive");
+            assert!(!ane.supported_ops.is_empty(), "ANE should have supported ops");
+        }
+
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        {
+            assert!(!ane.available, "ANE should not be available on non-Apple Silicon");
+        }
+    }
+
+    #[test]
+    fn test_ane_model_suitability() {
+        let ane = AneInfo {
+            available: true,
+            tops: 38.0,
+            max_model_size_mb: 2048,
+            supported_ops: vec!["MatMul".to_string()],
+        };
+
+        // Small model should be suitable
+        assert!(ane.is_model_suitable(500));
+        assert!(ane.is_model_suitable(2048));
+
+        // Large model should not be suitable
+        assert!(!ane.is_model_suitable(4096));
+        assert!(!ane.is_model_suitable(8192));
+    }
+
+    #[test]
+    fn test_ane_strategy_recommendation() {
+        let ane = AneInfo {
+            available: true,
+            tops: 38.0,
+            max_model_size_mb: 2048,
+            supported_ops: vec!["MatMul".to_string()],
+        };
+
+        // Small model: ANE only
+        assert_eq!(ane.recommended_strategy(300), AneStrategy::AneOnly);
+
+        // Medium model: Hybrid
+        assert_eq!(ane.recommended_strategy(1000), AneStrategy::Hybrid);
+
+        // Large model: GPU only
+        assert_eq!(ane.recommended_strategy(4000), AneStrategy::GpuOnly);
+    }
+
+    #[test]
+    fn test_ane_strategy_unavailable() {
+        let ane = AneInfo {
+            available: false,
+            tops: 0.0,
+            max_model_size_mb: 0,
+            supported_ops: vec![],
+        };
+
+        // All sizes should recommend GPU when ANE unavailable
+        assert_eq!(ane.recommended_strategy(100), AneStrategy::GpuOnly);
+        assert_eq!(ane.recommended_strategy(1000), AneStrategy::GpuOnly);
+        assert_eq!(ane.recommended_strategy(10000), AneStrategy::GpuOnly);
+    }
+
+    #[test]
+    fn test_compute_backend_ane_properties() {
+        // CoreML and HybridAne should use ANE
+        assert!(ComputeBackend::CoreML.uses_ane());
+        assert!(ComputeBackend::HybridAne.uses_ane());
+
+        // Other backends should not use ANE
+        assert!(!ComputeBackend::Metal.uses_ane());
+        assert!(!ComputeBackend::Cuda.uses_ane());
+        assert!(!ComputeBackend::CpuNeon.uses_ane());
+
+        // ANE backends should be considered GPU/accelerator
+        assert!(ComputeBackend::CoreML.is_gpu());
+        assert!(ComputeBackend::HybridAne.is_gpu());
+    }
+
+    #[test]
+    fn test_compute_backend_power_efficiency() {
+        // ANE should have highest power efficiency
+        assert!(
+            ComputeBackend::CoreML.power_efficiency() > ComputeBackend::Metal.power_efficiency(),
+            "CoreML should be more power efficient than Metal"
+        );
+        assert!(
+            ComputeBackend::HybridAne.power_efficiency() > ComputeBackend::Metal.power_efficiency(),
+            "HybridAne should be more power efficient than Metal"
+        );
+    }
+
+    #[test]
+    fn test_system_capabilities_includes_ane() {
+        let caps = SystemCapabilities::detect();
+
+        // ANE info should be populated
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            assert!(caps.ane.available);
+            // Summary should mention ANE
+            let summary = caps.summary();
+            assert!(summary.contains("ANE"), "Summary should include ANE info");
+        }
+    }
+
+    #[test]
+    fn test_ane_summary() {
+        let caps = SystemCapabilities::detect();
+        let ane_summary = caps.ane_summary();
+
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            assert!(ane_summary.contains("TOPS"));
+            assert!(ane_summary.contains("supported ops"));
+        }
+
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        {
+            assert!(ane_summary.contains("Not available"));
+        }
+    }
+
+    #[test]
+    fn test_power_efficient_config() {
+        let config = InferenceConfig::power_efficient();
+
+        // Power efficient config should use batch size 1
+        assert_eq!(config.batch_size, 1);
+
+        // On Apple Silicon with coreml feature, should prefer ANE
+        #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "coreml"))]
+        {
+            assert!(
+                config.compute_backend.uses_ane(),
+                "Power efficient config should use ANE on Apple Silicon"
+            );
+        }
+    }
+
+    #[test]
+    fn test_select_compute_backend_for_model_size() {
+        let caps = SystemCapabilities::detect();
+
+        // Different model sizes should potentially get different backends
+        let _small_backend = caps.select_compute_backend_for_model(500.0);
+        let _medium_backend = caps.select_compute_backend_for_model(2000.0);
+        let _large_backend = caps.select_compute_backend_for_model(10000.0);
+
+        // All backends should be valid
+        // (Actual values depend on platform and feature flags)
     }
 }

@@ -569,23 +569,24 @@ impl PagedKvCache {
     }
 
     /// Calculate tokens in a specific block.
+    ///
+    /// This correctly handles pre-allocated empty blocks by calculating
+    /// based on actual token count, not block array length.
     #[inline]
     fn tokens_in_block(&self, block_idx: usize) -> usize {
-        if block_idx >= self.key_blocks.len() {
+        // Calculate how many tokens exist before this block
+        let tokens_before_this_block = block_idx * self.block_size;
+
+        // If all tokens are in earlier blocks, this block is empty
+        if tokens_before_this_block >= self.num_tokens {
             return 0;
         }
 
-        let is_last_block = block_idx == self.key_blocks.len() - 1;
-        if !is_last_block {
-            self.block_size
-        } else {
-            let remainder = self.num_tokens % self.block_size;
-            if remainder == 0 && self.num_tokens > 0 {
-                self.block_size
-            } else {
-                remainder
-            }
-        }
+        // Calculate remaining tokens that could be in this block
+        let remaining_tokens = self.num_tokens - tokens_before_this_block;
+
+        // Return the minimum of remaining tokens and block size
+        remaining_tokens.min(self.block_size)
     }
 }
 

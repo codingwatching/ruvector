@@ -86,6 +86,11 @@ pub mod rope;
 #[cfg(any(target_os = "macos", doc))]
 pub mod accelerate;
 
+// Apple Neural Engine (ANE) optimized operations (macOS only)
+// Uses BNNS (Basic Neural Network Subroutines) which routes to ANE
+#[cfg(any(target_os = "macos", doc))]
+pub mod ane_ops;
+
 // Re-exports for convenience
 pub use attention::{
     flash_attention_neon, flash_attention_v2, flash_attention_auto,
@@ -138,6 +143,34 @@ pub use accelerate::{
 // Re-export availability check for all platforms
 #[cfg(not(all(target_os = "macos", feature = "accelerate")))]
 pub use accelerate::is_accelerate_available;
+
+// ANE (Apple Neural Engine) ops exports (macOS only with coreml feature)
+#[cfg(all(target_os = "macos", feature = "coreml"))]
+pub use ane_ops::{
+    // Direct ANE operations
+    matmul_ane, batched_matmul_ane,
+    gelu_ane, silu_ane, softmax_ane,
+    layer_norm_ane, rms_norm_ane,
+    // Auto-dispatch functions
+    matmul_auto, gelu_auto, silu_auto, softmax_auto,
+    layer_norm_auto, rms_norm_auto,
+    // Availability checks
+    is_ane_available, should_use_ane, should_use_ane_matmul,
+    should_use_ane_activation,
+    // Strategy recommendations (M4 Pro optimized)
+    get_ane_recommendation, AneRecommendation,
+};
+
+// Re-export ANE availability check for macOS without coreml feature
+#[cfg(all(target_os = "macos", not(feature = "coreml")))]
+pub use ane_ops::is_ane_available;
+
+// Fallback ANE availability for non-macOS
+#[cfg(not(target_os = "macos"))]
+#[inline(always)]
+pub fn is_ane_available() -> bool {
+    false
+}
 
 /// SIMD lane width for NEON (128-bit = 4 floats).
 ///

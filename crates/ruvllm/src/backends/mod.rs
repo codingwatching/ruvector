@@ -73,6 +73,19 @@ mod candle_backend;
 #[cfg(feature = "candle")]
 pub use candle_backend::*;
 
+// Core ML backend for Apple Neural Engine (ANE) acceleration
+mod coreml_backend;
+pub use coreml_backend::{CoreMLBackend, ComputeUnits, AneCapabilities};
+
+// Hybrid GPU+ANE pipeline coordinator
+#[cfg(feature = "hybrid-ane")]
+mod hybrid_pipeline;
+#[cfg(feature = "hybrid-ane")]
+pub use hybrid_pipeline::{
+    HybridPipeline, HybridPipelineConfig, AneStrategy, OperationType,
+    AcceleratorType, AcceleratorMetrics, RoutingDecision, HybridTensor, DataFormat,
+};
+
 // Model architecture implementations
 pub mod phi3;
 pub mod gemma2;

@@ -354,7 +354,8 @@ fn test_can_run_model() {
     );
 
     // Test boundary conditions
-    let available_gb = caps.memory_mb as f32 / 1024.0;
+    // Note: can_run_model uses available_memory_mb which defaults to memory_mb / 2
+    let available_gb = caps.available_memory_mb.unwrap_or(caps.memory_mb / 2) as f32 / 1024.0;
     let max_model = (available_gb - 2.0) / 0.4; // Reverse the formula from can_run_model
 
     if max_model > 0.0 {

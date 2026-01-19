@@ -49,6 +49,7 @@ use super::{
     ModelConfig, ModelInfo, Quantization, SpecialTokens, StreamEvent, TokenStream, Tokenizer,
 };
 use crate::error::{Result, RuvLLMError};
+use crate::sona::{SonaConfig, SonaIntegration, Trajectory};
 use crate::tokenizer::{ChatMessage, ChatTemplate, RuvTokenizer};
 
 use std::path::{Path, PathBuf};
@@ -193,6 +194,8 @@ mod candle_impl {
         model_id: String,
         /// Current sequence position for KV cache
         current_pos: Mutex<usize>,
+        /// SONA self-learning integration
+        sona: Option<SonaIntegration>,
     }
 
     impl Default for CandleBackend {
@@ -206,6 +209,7 @@ mod candle_impl {
                 config: None,
                 model_id: String::new(),
                 current_pos: Mutex::new(0),
+                sona: Some(SonaIntegration::new(SonaConfig::default())),
             }
         }
     }
@@ -229,7 +233,39 @@ mod candle_impl {
                 config: None,
                 model_id: String::new(),
                 current_pos: Mutex::new(0),
+                sona: Some(SonaIntegration::new(SonaConfig::default())),
             })
+        }
+
+        /// Get SONA learning stats
+        pub fn sona_stats(&self) -> Option<crate::sona::SonaStats> {
+            self.sona.as_ref().map(|s| s.stats())
+        }
+
+        /// Enable/disable SONA learning
+        pub fn set_sona_enabled(&mut self, enabled: bool) {
+            if enabled && self.sona.is_none() {
+                self.sona = Some(SonaIntegration::new(SonaConfig::default()));
+            } else if !enabled {
+                self.sona = None;
+            }
+        }
+
+        /// Create a simple embedding from text (placeholder - should use real embeddings)
+        fn simple_embedding(text: &str, dim: usize) -> Vec<f32> {
+            let mut embedding = vec![0.0f32; dim];
+            let bytes = text.as_bytes();
+            for (i, &b) in bytes.iter().enumerate() {
+                embedding[i % dim] += (b as f32) / 255.0;
+            }
+            // Normalize
+            let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if norm > 0.0 {
+                for x in &mut embedding {
+                    *x /= norm;
+                }
+            }
+            embedding
         }
 
         /// Get the enhanced RuvTokenizer with chat template support
@@ -1196,7 +1232,41 @@ mod candle_impl {
             }
 
             // Decode generated tokens
-            tokenizer.decode(&generated_tokens)
+            let output = tokenizer.decode(&generated_tokens)?;
+
+            // Record trajectory for SONA learning
+            if let Some(ref sona) = self.sona {
+                // Create simple embeddings from token statistics
+                let query_embedding = Self::simple_embedding(prompt, 768);
+                let response_embedding = Self::simple_embedding(&output, 768);
+
+                let trajectory = Trajectory {
+                    request_id: format!("req-{}", std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0)),
+                    session_id: "default".to_string(),
+                    query_embedding,
+                    response_embedding,
+                    quality_score: 0.8, // Default quality, can be updated with feedback
+                    routing_features: vec![
+                        generated_tokens.len() as f32 / params.max_tokens as f32,
+                        params.temperature,
+                        params.top_p,
+                        0.5, // placeholder
+                    ],
+                    model_index: 0,
+                    timestamp: chrono::Utc::now(),
+                };
+
+                if let Err(e) = sona.record_trajectory(trajectory) {
+                    tracing::debug!("SONA trajectory recording failed: {}", e);
+                } else {
+                    tracing::debug!("SONA instant learning triggered");
+                }
+            }
+
+            Ok(output)
         }
 
         fn generate_stream(

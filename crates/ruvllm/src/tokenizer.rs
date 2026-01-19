@@ -957,6 +957,60 @@ pub use candle_impl::RuvTokenizer;
 pub use stub_impl::RuvTokenizer;
 
 // ============================================================================
+// Tokenizer Trait Implementation (for LlmBackend compatibility)
+// ============================================================================
+
+use crate::backends::{Tokenizer, SpecialTokens};
+
+#[cfg(feature = "candle")]
+impl Tokenizer for RuvTokenizer {
+    fn encode(&self, text: &str) -> Result<Vec<u32>> {
+        self.encode(text)
+    }
+
+    fn decode(&self, tokens: &[u32]) -> Result<String> {
+        self.decode(tokens)
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.vocab_size()
+    }
+
+    fn special_tokens(&self) -> SpecialTokens {
+        SpecialTokens {
+            bos_token_id: self.bos_token_id(),
+            eos_token_id: Some(self.eos_token_id()),
+            pad_token_id: self.pad_token_id(),
+            unk_token_id: None,
+        }
+    }
+}
+
+#[cfg(not(feature = "candle"))]
+impl Tokenizer for RuvTokenizer {
+    fn encode(&self, text: &str) -> Result<Vec<u32>> {
+        self.encode(text)
+    }
+
+    fn decode(&self, tokens: &[u32]) -> Result<String> {
+        self.decode(tokens)
+    }
+
+    fn vocab_size(&self) -> usize {
+        0
+    }
+
+    fn special_tokens(&self) -> SpecialTokens {
+        SpecialTokens {
+            bos_token_id: self.bos_token_id(),
+            eos_token_id: Some(self.eos_token_id()),
+            pad_token_id: self.pad_token_id(),
+            unk_token_id: None,
+        }
+    }
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

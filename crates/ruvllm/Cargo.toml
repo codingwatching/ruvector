@@ -80,6 +80,12 @@ memmap2 = { version = "0.9", optional = true }
 metal = { version = "0.29", optional = true }
 objc = { version = "0.2", optional = true }
 
+# Core ML bindings (macOS/iOS) - for Apple Neural Engine acceleration
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true, features = ["NSString", "NSError", "NSURL", "NSArray", "NSDictionary", "NSData"] }
+objc2-core-ml = { version = "0.3", optional = true, features = ["MLModel", "MLModelConfiguration", "MLFeatureProvider", "MLFeatureValue", "MLMultiArray", "MLPredictionOptions", "MLModelDescription", "MLFeatureDescription", "MLDictionaryFeatureProvider", "MLModelError"] }
+block2 = { version = "0.6", optional = true }
+
 [dev-dependencies]
 criterion = { workspace = true }
 tempfile = "3.13"
@@ -123,6 +129,13 @@ gguf-mmap = ["mmap"]
 # Apple Accelerate framework for BLAS operations (macOS only, ~2x GEMV speedup)
 accelerate = []
 
+# Apple Neural Engine via Core ML (macOS/iOS, optimal for small models and batch inference)
+# Provides 38 TOPS dedicated ML acceleration with 3-4x better power efficiency
+coreml = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-core-ml", "dep:block2"]
+
+# Hybrid GPU+ANE pipeline (use ANE for MLP, GPU for attention)
+hybrid-ane = ["metal-compute", "coreml"]
+
 # mistral-rs backend feature (enables full mistral-rs integration)
 # When the actual mistralrs crate is available, uncomment and use:
 # mistral-rs = ["mistralrs", "mistralrs-core", "tokenizers"]
@@ -163,6 +176,10 @@ harness = false
 
 [[bench]]
 name = "serving_bench"
+harness = false
+
+[[bench]]
+name = "ane_bench"
 harness = false
 
 # Test configurations

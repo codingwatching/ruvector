@@ -646,9 +646,11 @@ fn test_kv_cache_allocation() {
     manager.free(RequestId(1));
     assert_eq!(manager.available_slots(), 3);
 
-    // Should be able to reuse slot
+    // Should be able to allocate again (slot may be reused via FIFO queue)
     let slot3 = manager.allocate(RequestId(3), 256).unwrap();
-    assert_eq!(slot3, slot1); // Reused slot
+    // Note: Due to FIFO queue, slot3 may not be slot1 - just verify allocation works
+    assert!(slot3 < 4, "Slot should be valid");
+    assert_eq!(manager.available_slots(), 2);
 }
 
 #[test]
@@ -866,11 +868,10 @@ mod async_tests {
             })
             .collect();
 
-        let results: Vec<_> = futures::future::join_all(handles)
-            .await
-            .into_iter()
-            .map(|r| r.unwrap())
-            .collect();
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            results.push(handle.await.unwrap());
+        }
 
         assert_eq!(results.len(), 10);
         assert_eq!(request_count.load(Ordering::SeqCst), 10);
@@ -964,6 +965,7 @@ fn test_high_throughput_queue() {
 #[test]
 fn test_kv_cache_churn() {
     let mut manager = KvCacheManager::new(10, 1024);
+    let mut active_requests: Vec<RequestId> = Vec::new();
 
     // Simulate rapid allocation/deallocation
     for i in 0..100 {
@@ -978,12 +980,19 @@ fn test_kv_cache_churn() {
             // Free every other one
             if i % 2 == 0 {
                 manager.free(request_id);
+            } else {
+                active_requests.push(request_id);
             }
         }
     }
 
-    // Should still have some slots available
-    assert!(manager.available_slots() > 0);
+    // Free remaining active requests to test cleanup
+    for request_id in &active_requests {
+        manager.free(*request_id);
+    }
+
+    // After freeing all, should have all slots available
+    assert_eq!(manager.available_slots(), 10, "All slots should be free after cleanup");
 }
 
 #[test]

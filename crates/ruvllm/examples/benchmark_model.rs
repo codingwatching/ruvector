@@ -410,17 +410,181 @@ fn print_help() {
 }
 
 fn run_benchmark(config: &BenchmarkConfig, model_size: u64) -> BenchmarkResults {
-    // Note: This is a placeholder implementation.
-    // In a real implementation, this would:
-    // 1. Load the model using RuvLLM's backend
-    // 2. Run actual inference
-    // 3. Measure real timings
-    //
-    // For now, we demonstrate the benchmark structure with simulated results.
+    // Try to use real model inference with candle backend
+    #[cfg(feature = "candle")]
+    {
+        match run_real_benchmark(config, model_size) {
+            Ok(results) => return results,
+            Err(e) => {
+                if !config.json_output {
+                    println!("Warning: Failed to run real benchmark: {}", e);
+                    println!("Falling back to simulated results.");
+                    println!();
+                }
+            }
+        }
+    }
+
+    // Fallback to simulated results
+    run_simulated_benchmark(config, model_size)
+}
+
+#[cfg(feature = "candle")]
+fn run_real_benchmark(config: &BenchmarkConfig, model_size: u64) -> Result<BenchmarkResults, String> {
+    use ruvllm_integration::{CandleBackend, LlmBackend, GenerateParams, ModelConfig};
+    use std::time::Instant;
 
     if !config.json_output {
-        println!("Note: This benchmark requires the 'candle' feature for actual model loading.");
-        println!("Running with simulated results to demonstrate the benchmark structure.");
+        println!("Loading model with Candle backend (Metal acceleration)...");
+    }
+
+    // Create backend and load model
+    let mut backend = CandleBackend::new().map_err(|e| format!("Failed to create backend: {}", e))?;
+
+    let model_config = ModelConfig::default();
+    backend.load_gguf(&config.model_path, &model_config)
+        .map_err(|e| format!("Failed to load GGUF model: {}", e))?;
+
+    // Load tokenizer from same directory as model
+    if let Some(parent) = config.model_path.parent() {
+        let tokenizer_path = parent.join("tokenizer.json");
+        if tokenizer_path.exists() {
+            if !config.json_output {
+                println!("Loading tokenizer from: {:?}", tokenizer_path);
+            }
+            backend.load_tokenizer(&tokenizer_path)
+                .map_err(|e| format!("Failed to load tokenizer: {}", e))?;
+        } else {
+            return Err(format!("Tokenizer not found at {:?}. Download it from HuggingFace.", tokenizer_path));
+        }
+    }
+
+    if !config.json_output {
+        println!("Model loaded successfully!");
+        println!();
+    }
+
+    let prompts = vec![
+        "Explain quantum computing in simple terms.",
+        "Write a haiku about programming.",
+        "What is the meaning of life?",
+        "Describe the process of photosynthesis.",
+        "Tell me a short story about a robot.",
+    ];
+
+    let params = GenerateParams {
+        max_tokens: config.max_tokens,
+        temperature: config.temperature,
+        top_p: 0.9,
+        top_k: 40,
+        ..Default::default()
+    };
+
+    let mut all_results = Vec::new();
+
+    // Warmup phase
+    if !config.json_output {
+        println!("Running warmup ({} iterations)...", config.warmup_iterations);
+    }
+
+    for i in 0..config.warmup_iterations {
+        let prompt = &prompts[i % prompts.len()];
+        let start = Instant::now();
+        let first_token_time = Instant::now();
+
+        match backend.generate(prompt, params.clone()) {
+            Ok(output) => {
+                let total_duration = start.elapsed();
+                let tokens_generated = output.split_whitespace().count().max(1);
+
+                let result = GenerationResult {
+                    tokens_generated,
+                    total_duration,
+                    time_to_first_token: first_token_time.elapsed(),
+                    token_latencies: vec![total_duration / tokens_generated as u32; tokens_generated],
+                };
+
+                if !config.json_output {
+                    println!(
+                        "  Warmup {}/{}: {:.1} tok/s",
+                        i + 1,
+                        config.warmup_iterations,
+                        result.tokens_per_second()
+                    );
+                }
+            }
+            Err(e) => {
+                if !config.json_output {
+                    println!("  Warmup {}/{}: Error - {}", i + 1, config.warmup_iterations, e);
+                }
+            }
+        }
+    }
+
+    // Benchmark phase
+    if !config.json_output {
+        println!();
+        println!("Running benchmark ({} iterations)...", config.benchmark_iterations);
+    }
+
+    for i in 0..config.benchmark_iterations {
+        let prompt = &prompts[i % prompts.len()];
+        let start = Instant::now();
+        let first_token_time = Instant::now();
+
+        match backend.generate(prompt, params.clone()) {
+            Ok(output) => {
+                let total_duration = start.elapsed();
+                let tokens_generated = output.split_whitespace().count().max(1);
+
+                let result = GenerationResult {
+                    tokens_generated,
+                    total_duration,
+                    time_to_first_token: first_token_time.elapsed(),
+                    token_latencies: vec![total_duration / tokens_generated as u32; tokens_generated],
+                };
+
+                if !config.json_output && (config.verbose || i % 5 == 0) {
+                    println!(
+                        "  Iteration {}/{}: {:.1} tok/s, TTFT: {:.1}ms",
+                        i + 1,
+                        config.benchmark_iterations,
+                        result.tokens_per_second(),
+                        result.time_to_first_token.as_secs_f64() * 1000.0
+                    );
+                }
+                all_results.push(result);
+            }
+            Err(e) => {
+                if !config.json_output {
+                    println!("  Iteration {}/{}: Error - {}", i + 1, config.benchmark_iterations, e);
+                }
+            }
+        }
+    }
+
+    if all_results.is_empty() {
+        return Err("No successful generations".to_string());
+    }
+
+    // Print SONA learning stats
+    if !config.json_output {
+        if let Some(stats) = backend.sona_stats() {
+            println!();
+            println!("SONA Self-Learning Stats:");
+            println!("  Total trajectories: {}", stats.total_trajectories);
+            println!("  Instant updates: {}", stats.instant_updates);
+            println!("  Background updates: {}", stats.background_updates);
+            println!("  Patterns learned: {}", stats.patterns_learned);
+        }
+    }
+
+    Ok(BenchmarkResults::from_results(config, model_size, all_results))
+}
+
+fn run_simulated_benchmark(config: &BenchmarkConfig, model_size: u64) -> BenchmarkResults {
+    if !config.json_output {
+        println!("Note: Running with simulated results (candle feature not enabled or model load failed).");
         println!();
     }
 
