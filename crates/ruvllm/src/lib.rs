@@ -42,8 +42,12 @@
 #![warn(clippy::all)]
 
 pub mod adapter_manager;
+pub mod backends;
 pub mod error;
+pub mod kernels;
 pub mod kv_cache;
+pub mod lora;
+pub mod optimization;
 pub mod paged_attention;
 pub mod policy_store;
 pub mod session;
@@ -54,6 +58,18 @@ pub mod witness_log;
 
 // Re-exports
 pub use adapter_manager::{AdapterManager, LoraAdapter, AdapterConfig};
+pub use lora::{
+    MicroLoRA, MicroLoraConfig, TargetModule, AdaptFeedback,
+    AdapterRegistry, AdapterPool, AdapterComposer, CompositionStrategy,
+    TrainingPipeline, TrainingConfig, EwcRegularizer, LearningRateSchedule,
+};
+pub use backends::{
+    create_backend, DeviceType, DType, GenerateParams, GeneratedToken, LlmBackend,
+    ModelArchitecture, ModelConfig, ModelInfo, Quantization, SharedBackend, SpecialTokens,
+    Tokenizer,
+};
+#[cfg(feature = "candle")]
+pub use backends::CandleBackend;
 pub use error::{RuvLLMError, Result};
 pub use kv_cache::{TwoTierKvCache, KvCacheConfig, CacheTier, CacheQuantization};
 pub use paged_attention::{PagedAttention, PagedAttentionConfig, PageTable, PageBlock};
@@ -61,6 +77,13 @@ pub use policy_store::{PolicyStore, PolicyEntry, PolicyType, QuantizationPolicy,
 pub use session::{SessionManager, Session, SessionConfig};
 pub use session_index::{SessionIndex, SessionState, KvCacheReference};
 pub use sona::{SonaIntegration, SonaConfig, LearningLoop};
+pub use optimization::{
+    InferenceMetrics, MetricsCollector, MetricsSnapshot, MovingAverage, LatencyHistogram,
+    RealtimeOptimizer, RealtimeConfig, BatchSizeStrategy, KvCachePressurePolicy,
+    TokenBudgetAllocation, SpeculativeConfig, OptimizationDecision,
+    SonaLlm, SonaLlmConfig, TrainingSample, AdaptationResult, LearningLoopStats,
+    ConsolidationStrategy, OptimizationTrigger,
+};
 pub use types::*;
 pub use witness_log::{WitnessLog, WitnessEntry, LatencyBreakdown, RoutingDecision};
 

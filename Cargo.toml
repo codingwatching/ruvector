@@ -63,6 +63,7 @@ members = [
     "crates/mcp-gate",
     "crates/ruQu",
     "crates/ruvllm",
+    "crates/ruvllm-cli",
 ]
 resolver = "2"
 

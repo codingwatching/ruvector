@@ -70,6 +70,22 @@ pub enum RuvLLMError {
     /// Ruvector errors
     #[error("Ruvector error: {0}")]
     Ruvector(String),
+
+    /// Backend inference errors
+    #[error("Backend error: {0}")]
+    Backend(String),
+
+    /// Model loading errors
+    #[error("Model error: {0}")]
+    Model(String),
+
+    /// Tokenization errors
+    #[error("Tokenization error: {0}")]
+    Tokenization(String),
+
+    /// Generation errors
+    #[error("Generation error: {0}")]
+    Generation(String),
 }
 
 impl From<ruvector_core::RuvectorError> for RuvLLMError {
