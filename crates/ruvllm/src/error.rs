@@ -94,6 +94,14 @@ pub enum RuvLLMError {
     /// Shader compilation errors
     #[error("Shader error: {0}")]
     Shader(String),
+
+    /// GGUF format errors
+    #[error("GGUF error: {0}")]
+    Gguf(String),
+
+    /// Quantization errors
+    #[error("Quantization error: {0}")]
+    Quantization(String),
 }
 
 impl From<ruvector_core::RuvectorError> for RuvLLMError {

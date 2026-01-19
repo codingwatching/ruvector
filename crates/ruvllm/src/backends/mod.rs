@@ -73,6 +73,16 @@ mod candle_backend;
 #[cfg(feature = "candle")]
 pub use candle_backend::*;
 
+// Model architecture implementations
+pub mod phi3;
+pub mod gemma2;
+
+pub use phi3::{Phi3Config, Phi3Model, Phi3Attention, Phi3MLP, Phi3DecoderLayer};
+pub use gemma2::{
+    Gemma2Config, Gemma2Model, Gemma2Attention, Gemma2MLP, Gemma2DecoderLayer,
+    logit_soft_cap, ATTENTION_SOFTCAP, FINAL_LOGIT_SOFTCAP,
+};
+
 // mistral-rs backend - always available, but full functionality requires the feature
 mod mistral_backend;
 
@@ -98,8 +108,10 @@ use std::time::{Duration, Instant};
 /// | `Llama` | 1B-70B | General purpose, chat |
 /// | `Mistral` | 7B | Code, instruction following |
 /// | `Phi` | 1.5-3B | Efficient edge deployment |
+/// | `Phi3` | 3B-14B | Extended context, SuRoPE |
 /// | `Qwen` | 0.5B-72B | Multilingual, reasoning |
 /// | `Gemma` | 2B-7B | Efficient, instruction-tuned |
+/// | `Gemma2` | 2B-27B | Soft-capping, alternating attention |
 ///
 /// # Example
 ///
@@ -108,6 +120,9 @@ use std::time::{Duration, Instant};
 ///
 /// let arch = ModelArchitecture::Mistral;
 /// assert_eq!(arch.config_name(), "mistral");
+///
+/// let phi3 = ModelArchitecture::Phi3;
+/// assert_eq!(phi3.config_name(), "phi3");
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModelArchitecture {
@@ -115,12 +130,16 @@ pub enum ModelArchitecture {
     Mistral,
     /// Llama architecture (1B-70B)
     Llama,
-    /// Phi architecture (1.5, 2, 3)
+    /// Phi architecture (1.5, 2)
     Phi,
+    /// Phi-3 architecture (SuRoPE, SwiGLU, sliding window)
+    Phi3,
     /// Qwen architecture
     Qwen,
-    /// Gemma architecture
+    /// Gemma architecture (original)
     Gemma,
+    /// Gemma-2 architecture (soft-capping, alternating local/global attention)
+    Gemma2,
 }
 
 impl Default for ModelArchitecture {
@@ -136,8 +155,52 @@ impl ModelArchitecture {
             Self::Mistral => "mistral",
             Self::Llama => "llama",
             Self::Phi => "phi",
+            Self::Phi3 => "phi3",
             Self::Qwen => "qwen2",
             Self::Gemma => "gemma",
+            Self::Gemma2 => "gemma2",
+        }
+    }
+
+    /// Detect architecture from model ID string
+    pub fn detect_from_model_id(model_id: &str) -> Option<Self> {
+        let lower = model_id.to_lowercase();
+        if lower.contains("phi-3") || lower.contains("phi3") {
+            Some(Self::Phi3)
+        } else if lower.contains("phi") {
+            Some(Self::Phi)
+        } else if lower.contains("gemma-2") || lower.contains("gemma2") {
+            Some(Self::Gemma2)
+        } else if lower.contains("gemma") {
+            Some(Self::Gemma)
+        } else if lower.contains("mistral") || lower.contains("codestral") {
+            Some(Self::Mistral)
+        } else if lower.contains("llama") {
+            Some(Self::Llama)
+        } else if lower.contains("qwen") {
+            Some(Self::Qwen)
+        } else {
+            None
+        }
+    }
+
+    /// Check if this architecture uses GQA (Grouped Query Attention)
+    pub fn uses_gqa(&self) -> bool {
+        matches!(self, Self::Mistral | Self::Llama | Self::Gemma | Self::Gemma2 | Self::Qwen)
+    }
+
+    /// Check if this architecture uses sliding window attention
+    pub fn uses_sliding_window(&self) -> bool {
+        matches!(self, Self::Mistral | Self::Phi3 | Self::Gemma2)
+    }
+
+    /// Get default sliding window size for this architecture
+    pub fn default_sliding_window(&self) -> Option<usize> {
+        match self {
+            Self::Mistral => Some(4096),
+            Self::Phi3 => Some(2048),
+            Self::Gemma2 => Some(4096), // For local attention layers
+            _ => None,
         }
     }
 }

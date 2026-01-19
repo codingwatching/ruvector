@@ -8138,6 +8138,7 @@ dependencies = [
  "futures-core",
  "half 2.7.1",
  "hf-hub 0.3.2",
+ "memmap2",
  "metal 0.29.0",
  "ndarray 0.16.1",
  "objc",
@@ -8153,6 +8154,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokenizers 0.20.4",
  "tokio",
+ "tokio-stream",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -8162,6 +8164,7 @@ dependencies = [
 name = "ruvllm-wasm"
 version = "2.0.0"
 dependencies = [
+ "bytemuck",
  "console_error_panic_hook",
  "js-sys",
  "serde",

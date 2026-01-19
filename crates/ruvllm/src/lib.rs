@@ -42,8 +42,10 @@
 #![warn(clippy::all)]
 
 pub mod adapter_manager;
+pub mod autodetect;
 pub mod backends;
 pub mod error;
+pub mod gguf;
 pub mod kernels;
 pub mod kv_cache;
 pub mod lora;
@@ -53,6 +55,7 @@ pub mod metal;
 pub mod optimization;
 pub mod paged_attention;
 pub mod policy_store;
+pub mod serving;
 pub mod session;
 pub mod session_index;
 pub mod sona;
@@ -63,6 +66,11 @@ pub mod witness_log;
 
 // Re-exports
 pub use adapter_manager::{AdapterManager, LoraAdapter, AdapterConfig};
+pub use autodetect::{
+    SystemCapabilities, Platform, Architecture, CpuFeatures,
+    GpuCapabilities, GpuBackend, CoreInfo, ComputeBackend,
+    InferenceConfig,
+};
 pub use lora::{
     MicroLoRA, MicroLoraConfig, TargetModule, AdaptFeedback,
     AdapterRegistry, AdapterPool, AdapterComposer, CompositionStrategy,
@@ -113,6 +121,24 @@ pub use speculative::{
 };
 pub use types::*;
 pub use witness_log::{WitnessLog, WitnessEntry, LatencyBreakdown, RoutingDecision};
+pub use gguf::{
+    GgufFile, GgufModelLoader, GgufHeader, GgufValue, GgufQuantType,
+    TensorInfo, QuantizedTensor, ModelConfig as GgufModelConfig,
+};
+pub use serving::{
+    // Request types
+    InferenceRequest, RequestId, Priority, RequestState, RunningRequest,
+    CompletedRequest, FinishReason, TokenOutput,
+    // Batch types
+    BatchedRequest, BatchStats, ScheduledBatch, IterationPlan, PrefillTask, DecodeTask, TokenBudget,
+    // KV cache management
+    KvCacheManager, KvCachePoolConfig, KvCacheAllocation, KvCacheManagerStats,
+    // Scheduler
+    ContinuousBatchScheduler, IterationScheduler, SchedulerConfig, SchedulerStats,
+    RequestQueue, PreemptionMode, PriorityPolicy,
+    // Engine
+    ServingEngine, ServingEngineConfig, ServingMetrics, GenerationResult,
+};
 
 // Metal GPU acceleration exports (macOS only)
 #[cfg(all(target_os = "macos", feature = "metal-compute"))]

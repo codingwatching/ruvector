@@ -47,6 +47,7 @@ tokio = { workspace = true, optional = true }
 # Async traits and streams
 async-trait = "0.1"
 futures-core = "0.3"
+tokio-stream = { version = "0.1", optional = true }
 
 # Candle ML framework (optional)
 candle-core = { version = "0.8", optional = true }
@@ -70,6 +71,9 @@ dirs = "5.0"
 # Half-precision floating point
 half = "2.4"
 
+# Memory mapping for efficient large file access (optional)
+memmap2 = { version = "0.9", optional = true }
+
 # Metal GPU acceleration (macOS only)
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = { version = "0.29", optional = true }
@@ -82,7 +86,7 @@ tracing-subscriber = { workspace = true }
 
 [features]
 default = ["async-runtime"]
-async-runtime = ["tokio"]
+async-runtime = ["tokio", "tokio-stream"]
 wasm = []
 
 # Multi-threaded GEMM/GEMV with rayon (4-6x speedup on M4 Pro 10-core)
@@ -108,6 +112,12 @@ inference-metal-native = ["candle", "metal", "metal-compute"]
 
 # Full inference backend with CUDA (recommended for NVIDIA)
 inference-cuda = ["candle", "cuda"]
+
+# Memory-mapped file access for efficient GGUF loading
+mmap = ["dep:memmap2"]
+
+# GGUF support with memory mapping (recommended for large models)
+gguf-mmap = ["mmap"]
 
 # mistral-rs backend feature (enables full mistral-rs integration)
 # When the actual mistralrs crate is available, uncomment and use:
@@ -145,4 +155,8 @@ harness = false
 
 [[bench]]
 name = "metal_bench"
+harness = false
+
+[[bench]]
+name = "serving_bench"
 harness = false

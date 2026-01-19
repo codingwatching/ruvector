@@ -6,8 +6,8 @@ rust-version = "1.77"
 license = "MIT"
 authors = ["Ruvector Team"]
 repository = "https://github.com/ruvnet/ruvector"
-description = "WASM bindings for RuvLLM - browser-compatible LLM inference runtime"
-keywords = ["wasm", "llm", "inference", "browser", "webassembly"]
+description = "WASM bindings for RuvLLM - browser-compatible LLM inference runtime with WebGPU acceleration"
+keywords = ["wasm", "llm", "inference", "browser", "webassembly", "webgpu"]
 categories = ["wasm", "api-bindings", "web-programming"]
 
 [lib]
@@ -22,6 +22,50 @@ web-sys = { version = "0.3", features = [
     "console",
     "Performance",
     "Window",
+    "Navigator",
+    # Web Workers support (enabled with parallel feature)
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
+    "MessageEvent",
+    "ErrorEvent",
+    "DedicatedWorkerGlobalScope",
+    # WebGPU features (enabled with webgpu feature)
+    "Gpu",
+    "GpuAdapter",
+    "GpuAdapterInfo",
+    "GpuDevice",
+    "GpuQueue",
+    "GpuBuffer",
+    "GpuBufferDescriptor",
+    "GpuShaderModule",
+    "GpuShaderModuleDescriptor",
+    "GpuBindGroup",
+    "GpuBindGroupDescriptor",
+    "GpuBindGroupEntry",
+    "GpuBindGroupLayout",
+    "GpuBindGroupLayoutDescriptor",
+    "GpuBindGroupLayoutEntry",
+    "GpuBufferBinding",
+    "GpuBufferBindingLayout",
+    "GpuBufferBindingType",
+    "GpuComputePipeline",
+    "GpuComputePipelineDescriptor",
+    "GpuPipelineLayout",
+    "GpuPipelineLayoutDescriptor",
+    "GpuProgrammableStage",
+    "GpuCommandEncoder",
+    "GpuCommandEncoderDescriptor",
+    "GpuCommandBuffer",
+    "GpuComputePassEncoder",
+    "GpuComputePassDescriptor",
+    "gpu_map_mode",
+    "GpuRequestAdapterOptions",
+    "GpuDeviceDescriptor",
+    "GpuSupportedLimits",
 ] }
 
 # Serialization
@@ -32,8 +76,17 @@ serde_json = "1.0"
 # Error handling
 console_error_panic_hook = { version = "0.1", optional = true }
 
+# Byte casting for GPU buffers
+bytemuck = { version = "1.14", features = ["derive"] }
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
 [features]
 default = ["console_error_panic_hook"]
+# WebGPU acceleration
+webgpu = []
+# Enable parallel inference with Web Workers
+parallel = []
+# Enable SIMD optimizations (requires wasm-simd target feature)
+simd = []

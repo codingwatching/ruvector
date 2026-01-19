@@ -118,6 +118,13 @@ impl Default for ChatTemplate {
 
 impl ChatTemplate {
     /// Detect chat template from model ID
+    ///
+    /// Supports automatic detection for:
+    /// - Llama 2/3 variants
+    /// - Mistral/Mixtral
+    /// - Qwen (ChatML format)
+    /// - Phi/Phi-3 (both use same template format)
+    /// - Gemma/Gemma-2 (both use same template format)
     pub fn detect_from_model_id(model_id: &str) -> Self {
         let model_lower = model_id.to_lowercase();
 
@@ -125,13 +132,15 @@ impl ChatTemplate {
             ChatTemplate::Llama3
         } else if model_lower.contains("llama-2") || model_lower.contains("llama2") {
             ChatTemplate::Llama2
-        } else if model_lower.contains("mistral") || model_lower.contains("mixtral") {
+        } else if model_lower.contains("mistral") || model_lower.contains("mixtral") || model_lower.contains("codestral") {
             ChatTemplate::Mistral
         } else if model_lower.contains("qwen") {
             ChatTemplate::Qwen
-        } else if model_lower.contains("phi") {
+        } else if model_lower.contains("phi-3") || model_lower.contains("phi3") || model_lower.contains("phi") {
+            // Phi-3 and Phi use the same template format
             ChatTemplate::Phi
-        } else if model_lower.contains("gemma") {
+        } else if model_lower.contains("gemma-2") || model_lower.contains("gemma2") || model_lower.contains("gemma") {
+            // Gemma-2 and Gemma use the same template format
             ChatTemplate::Gemma
         } else {
             // Default to ChatML as it's widely supported

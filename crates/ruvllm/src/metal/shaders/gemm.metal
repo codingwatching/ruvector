@@ -3,29 +3,42 @@
 // Optimized for Apple Silicon M4 Pro with simdgroup_matrix_multiply_accumulate
 //
 // Computes C = alpha * A @ B + beta * C
-// Target: 1+ TFLOPS on M4 Pro GPU
+// Target: 2+ TFLOPS on M4 Pro GPU
 //
 // Optimizations:
 // - simdgroup_matrix_multiply_accumulate for 8x8 tiles
-// - 32x32 output tiles with double-buffered loading
+// - 128x128 output tiles with triple-buffered loading (M4 Pro tuned)
+// - Bank conflict-free shared memory with padding
+// - Software pipelining for latency hiding
 // - Vectorized memory access (float4/half4)
-// - Optimal threadgroup memory layout
+// - Optimal threadgroup memory layout for 16KB L1, 192KB L2
+//
+// M4 Pro Specifications:
+// - 16KB L1 data cache per core
+// - 192KB L2 per core cluster
+// - 32-wide SIMD groups
+// - 1024 threads per threadgroup max
 //
 
 #include <metal_stdlib>
 #include <metal_simdgroup_matrix>
 using namespace metal;
 
-// Tile sizes optimized for M4 Pro (16KB threadgroup memory, 128KB L1 cache)
-// Using 32x32 output tiles with 8x8 simdgroup matrix multiply
-constant uint TILE_M = 32;          // Output tile rows
-constant uint TILE_N = 32;          // Output tile columns
-constant uint TILE_K = 32;          // Reduction tile size
+// ============================================================================
+// M4 Pro Tuned Constants (BM=128, BN=128, BK=32)
+// ============================================================================
+constant uint BM = 128;             // Output tile rows (M4 Pro optimal)
+constant uint BN = 128;             // Output tile columns (M4 Pro optimal)
+constant uint BK = 32;              // Reduction tile size
 constant uint SIMD_TILE = 8;        // simdgroup_matrix dimension
 constant uint SIMD_SIZE = 32;       // SIMD group size
+constant uint WARPS_PER_BLOCK = 16; // 1024 threads / 64 (for 128x128)
+constant uint NUM_BUFFERS = 3;      // Triple buffering for better latency hiding
 
-// Double-buffering constants
-constant uint NUM_BUFFERS = 2;
+// Legacy tile sizes for compatibility
+constant uint TILE_M = 32;
+constant uint TILE_N = 32;
+constant uint TILE_K = 32;
 
 // GEMM parameters structure (matches Rust GemmParams)
 struct GemmParams {
@@ -38,6 +51,178 @@ struct GemmParams {
     float alpha; // Scale factor for A @ B
     float beta;  // Scale factor for C
 };
+
+// =============================================================================
+// M4 PRO OPTIMIZED: High-Performance FP16 GEMM (BM=128, BN=128, BK=32)
+// Grid: (tiles_n, tiles_m, 1) where tiles_x = ceil(x / BM or BN)
+// Threadgroup: 1024 threads (32x32 configuration)
+// Target: 2+ TFLOPS
+// =============================================================================
+kernel void gemm_optimized(
+    device const half* A [[buffer(0)]],
+    device const half* B [[buffer(1)]],
+    device half* C [[buffer(2)]],
+    constant GemmParams& params [[buffer(3)]],
+    uint2 gid [[threadgroup_position_in_grid]],
+    uint2 tid [[thread_position_in_threadgroup]],
+    uint simd_lane [[thread_index_in_simdgroup]],
+    uint simd_group [[simdgroup_index_in_threadgroup]]
+) {
+    // 128x128 tile coordinates
+    const uint tile_m = gid.y;
+    const uint tile_n = gid.x;
+    const uint m_start = tile_m * BM;
+    const uint n_start = tile_n * BN;
+
+    if (m_start >= params.m || n_start >= params.n) return;
+
+    // Bank conflict-free shared memory with padding (+8 for 128-bit alignment)
+    // Uses 128*40*2 + 32*136*2 = 10240 + 8704 = 18944 bytes < 32KB
+    threadgroup half shared_a[NUM_BUFFERS][BM][BK + 8] __attribute__((aligned(16)));
+    threadgroup half shared_b[NUM_BUFFERS][BK][BN + 8] __attribute__((aligned(16)));
+
+    // Each warp computes a 32x32 subblock using 4x4 grid of 8x8 simdgroup_matrix ops
+    // 16 warps cover 4x4 = 128x128 tile
+    const uint warp_id = simd_group;
+    const uint warp_m = (warp_id / 4) * 32;   // 0, 32, 64, 96
+    const uint warp_n = (warp_id % 4) * 32;   // 0, 32, 64, 96
+
+    // 4x4 accumulator grid per warp (32x32 output per warp using 8x8 tiles)
+    simdgroup_half8x8 c_frag[4][4];
+    #pragma unroll
+    for (uint i = 0; i < 4; i++) {
+        #pragma unroll
+        for (uint j = 0; j < 4; j++) {
+            c_frag[i][j] = simdgroup_half8x8(0.0h);
+        }
+    }
+
+    const uint num_k_tiles = (params.k + BK - 1) / BK;
+    uint buffer_idx = 0;
+
+    // Cooperative load helpers
+    const uint thread_id = tid.y * 32 + tid.x;
+    const uint total_threads = 1024;
+
+    // Preload first tile (software pipelining stage 0)
+    {
+        // Load A tile [BM x BK] = 128x32 = 4096 elements
+        // 1024 threads: each loads 4 elements
+        #pragma unroll 4
+        for (uint i = thread_id; i < BM * BK; i += total_threads) {
+            const uint r = i / BK;
+            const uint c = i % BK;
+            const uint a_row = m_start + r;
+            const uint a_col = c;
+            shared_a[0][r][c] = (a_row < params.m && a_col < params.k)
+                ? A[a_row * params.lda + a_col] : half(0.0h);
+        }
+
+        // Load B tile [BK x BN] = 32x128 = 4096 elements
+        #pragma unroll 4
+        for (uint i = thread_id; i < BK * BN; i += total_threads) {
+            const uint r = i / BN;
+            const uint c = i % BN;
+            const uint b_row = r;
+            const uint b_col = n_start + c;
+            shared_b[0][r][c] = (b_row < params.k && b_col < params.n)
+                ? B[b_row * params.ldb + b_col] : half(0.0h);
+        }
+    }
+
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Main loop with triple-buffered software pipelining
+    for (uint k_tile = 0; k_tile < num_k_tiles; k_tile++) {
+        const uint next_buffer = (buffer_idx + 1) % NUM_BUFFERS;
+        const uint k_start_next = (k_tile + 1) * BK;
+
+        // Prefetch next tile while computing current (async-like pattern)
+        if (k_tile + 1 < num_k_tiles) {
+            #pragma unroll 4
+            for (uint i = thread_id; i < BM * BK; i += total_threads) {
+                const uint r = i / BK;
+                const uint c = i % BK;
+                const uint a_row = m_start + r;
+                const uint a_col = k_start_next + c;
+                shared_a[next_buffer][r][c] = (a_row < params.m && a_col < params.k)
+                    ? A[a_row * params.lda + a_col] : half(0.0h);
+            }
+
+            #pragma unroll 4
+            for (uint i = thread_id; i < BK * BN; i += total_threads) {
+                const uint r = i / BN;
+                const uint c = i % BN;
+                const uint b_row = k_start_next + r;
+                const uint b_col = n_start + c;
+                shared_b[next_buffer][r][c] = (b_row < params.k && b_col < params.n)
+                    ? B[b_row * params.ldb + b_col] : half(0.0h);
+            }
+        }
+
+        // Compute 32x32 per warp using 4x4 simdgroup_matrix ops
+        #pragma unroll 4
+        for (uint k = 0; k < BK; k += SIMD_TILE) {
+            // Load 4 A fragments (8x8 each) for this warp's rows
+            simdgroup_half8x8 a_frag[4];
+            #pragma unroll
+            for (uint i = 0; i < 4; i++) {
+                simdgroup_load(a_frag[i], &shared_a[buffer_idx][warp_m + i * 8][k], BK + 8);
+            }
+
+            // Load 4 B fragments (8x8 each) for this warp's columns
+            simdgroup_half8x8 b_frag[4];
+            #pragma unroll
+            for (uint j = 0; j < 4; j++) {
+                simdgroup_load(b_frag[j], &shared_b[buffer_idx][k][warp_n + j * 8], BN + 8);
+            }
+
+            // 4x4 multiply-accumulate
+            #pragma unroll
+            for (uint i = 0; i < 4; i++) {
+                #pragma unroll
+                for (uint j = 0; j < 4; j++) {
+                    simdgroup_multiply_accumulate(c_frag[i][j], a_frag[i], b_frag[j], c_frag[i][j]);
+                }
+            }
+        }
+
+        buffer_idx = next_buffer;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+
+    // Store results with alpha/beta scaling
+    const half alpha_h = half(params.alpha);
+    const half beta_h = half(params.beta);
+
+    // Write 32x32 result per warp (4x4 grid of 8x8)
+    #pragma unroll
+    for (uint i = 0; i < 4; i++) {
+        #pragma unroll
+        for (uint j = 0; j < 4; j++) {
+            const uint out_row_base = m_start + warp_m + i * 8;
+            const uint out_col_base = n_start + warp_n + j * 8;
+
+            // Store 8x8 tile
+            #pragma unroll
+            for (uint r = 0; r < 8; r++) {
+                #pragma unroll
+                for (uint c = 0; c < 8; c++) {
+                    const uint out_row = out_row_base + r;
+                    const uint out_col = out_col_base + c;
+                    if (out_row < params.m && out_col < params.n) {
+                        const uint idx = out_row * params.ldc + out_col;
+                        if (beta_h == half(0.0h)) {
+                            C[idx] = alpha_h * c_frag[i][j][r][c];
+                        } else {
+                            C[idx] = alpha_h * c_frag[i][j][r][c] + beta_h * C[idx];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 // =============================================================================
 // High-Performance FP16 GEMM with simdgroup_matrix_multiply_accumulate

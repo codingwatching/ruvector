@@ -103,10 +103,30 @@ use wasm_bindgen::prelude::*;
 
 pub mod bindings;
 pub mod utils;
+pub mod workers;
+
+#[cfg(feature = "webgpu")]
+pub mod webgpu;
 
 // Re-export all bindings
 pub use bindings::*;
 pub use utils::{error, log, now_ms, set_panic_hook, warn, Timer};
+
+// Re-export workers module
+pub use workers::{
+    ParallelInference,
+    is_shared_array_buffer_available,
+    is_atomics_available,
+    cross_origin_isolated,
+    optimal_worker_count,
+    feature_summary,
+    detect_capability_level,
+    supports_parallel_inference,
+};
+
+// Re-export WebGPU module when enabled
+#[cfg(feature = "webgpu")]
+pub use webgpu::*;
 
 /// Initialize the WASM module.
 ///

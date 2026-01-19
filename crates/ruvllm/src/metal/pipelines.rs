@@ -1,6 +1,7 @@
 //! Metal compute pipeline management
 //!
 //! Handles compilation and caching of Metal compute pipelines.
+//! Includes optimized M4 Pro pipelines for maximum performance.
 
 use metal::{ComputePipelineState, Device, Library};
 use std::collections::HashMap;
@@ -10,11 +11,12 @@ use crate::error::{Result, RuvLLMError};
 
 /// Collection of compiled Metal pipelines
 pub struct MetalPipelines {
-    /// Flash attention pipeline
+    // ============ Core Pipelines ============
+    /// Flash attention pipeline (legacy)
     pub attention: ComputePipelineState,
-    /// GEMM FP16 pipeline
+    /// GEMM FP16 pipeline (legacy)
     pub gemm: ComputePipelineState,
-    /// GEMM FP32 pipeline
+    /// GEMM FP32 pipeline (legacy)
     pub gemm_f32: ComputePipelineState,
     /// RMSNorm pipeline
     pub rms_norm: ComputePipelineState,
@@ -30,12 +32,43 @@ pub struct MetalPipelines {
     pub mul: ComputePipelineState,
     /// SiLU activation pipeline
     pub silu: ComputePipelineState,
+
+    // ============ M4 Pro Optimized Pipelines ============
+    /// M4 Pro optimized GEMM (BM=128, BN=128, BK=32)
+    pub gemm_optimized: Option<ComputePipelineState>,
+    /// Fused attention with online softmax
+    pub fused_attention: Option<ComputePipelineState>,
+    /// Fused attention FP16
+    pub fused_attention_f16: Option<ComputePipelineState>,
+    /// Paged attention for KV cache
+    pub paged_attention: Option<ComputePipelineState>,
+    /// Fused LayerNorm + Residual
+    pub fused_layernorm_residual: Option<ComputePipelineState>,
+    /// Fused RMSNorm + Residual
+    pub fused_rmsnorm_residual: Option<ComputePipelineState>,
+    /// Fused SwiGLU activation
+    pub fused_swiglu: Option<ComputePipelineState>,
+    /// INT4 GEMV with dequantization
+    pub int4_gemv: Option<ComputePipelineState>,
+    /// INT4 GEMV SIMD optimized
+    pub int4_gemv_simd: Option<ComputePipelineState>,
+    /// INT4 GEMM
+    pub int4_gemm: Option<ComputePipelineState>,
+    /// INT8 GEMV
+    pub int8_gemv: Option<ComputePipelineState>,
+    /// RoPE + Attention fusion
+    pub rope_then_attention: Option<ComputePipelineState>,
+    /// YaRN attention (extended context)
+    pub yarn_attention: Option<ComputePipelineState>,
+    /// In-place Q/K RoPE application
+    pub apply_rope_qk_inplace: Option<ComputePipelineState>,
 }
 
 impl MetalPipelines {
     /// Create all pipelines from a compiled library
     pub fn new(device: &Device, library: &Library) -> Result<Self> {
         Ok(Self {
+            // Core pipelines (required)
             attention: Self::create_pipeline(device, library, "flash_attention")?,
             gemm: Self::create_pipeline(device, library, "gemm_f16")?,
             gemm_f32: Self::create_pipeline(device, library, "gemm_f32")?,
@@ -46,7 +79,57 @@ impl MetalPipelines {
             add: Self::create_pipeline(device, library, "elementwise_add")?,
             mul: Self::create_pipeline(device, library, "elementwise_mul")?,
             silu: Self::create_pipeline(device, library, "silu")?,
+
+            // M4 Pro optimized pipelines (optional - may fail on older hardware)
+            gemm_optimized: Self::try_create_pipeline(device, library, "gemm_optimized"),
+            fused_attention: Self::try_create_pipeline(device, library, "fused_attention"),
+            fused_attention_f16: Self::try_create_pipeline(device, library, "fused_attention_f16"),
+            paged_attention: Self::try_create_pipeline(device, library, "paged_attention"),
+            fused_layernorm_residual: Self::try_create_pipeline(device, library, "fused_layernorm_residual"),
+            fused_rmsnorm_residual: Self::try_create_pipeline(device, library, "fused_rmsnorm_residual"),
+            fused_swiglu: Self::try_create_pipeline(device, library, "fused_swiglu"),
+            int4_gemv: Self::try_create_pipeline(device, library, "int4_gemv"),
+            int4_gemv_simd: Self::try_create_pipeline(device, library, "int4_gemv_simd"),
+            int4_gemm: Self::try_create_pipeline(device, library, "int4_gemm"),
+            int8_gemv: Self::try_create_pipeline(device, library, "int8_gemv"),
+            rope_then_attention: Self::try_create_pipeline(device, library, "rope_then_attention"),
+            yarn_attention: Self::try_create_pipeline(device, library, "yarn_attention"),
+            apply_rope_qk_inplace: Self::try_create_pipeline(device, library, "apply_rope_qk_inplace"),
         })
+    }
+
+    /// Check if M4 Pro optimized pipelines are available
+    pub fn has_m4_pro_optimizations(&self) -> bool {
+        self.gemm_optimized.is_some() && self.fused_attention.is_some()
+    }
+
+    /// Get list of available optimized pipelines
+    pub fn available_optimizations(&self) -> Vec<&'static str> {
+        let mut available = Vec::new();
+        if self.gemm_optimized.is_some() { available.push("gemm_optimized"); }
+        if self.fused_attention.is_some() { available.push("fused_attention"); }
+        if self.fused_attention_f16.is_some() { available.push("fused_attention_f16"); }
+        if self.paged_attention.is_some() { available.push("paged_attention"); }
+        if self.fused_layernorm_residual.is_some() { available.push("fused_layernorm_residual"); }
+        if self.fused_rmsnorm_residual.is_some() { available.push("fused_rmsnorm_residual"); }
+        if self.fused_swiglu.is_some() { available.push("fused_swiglu"); }
+        if self.int4_gemv.is_some() { available.push("int4_gemv"); }
+        if self.int4_gemv_simd.is_some() { available.push("int4_gemv_simd"); }
+        if self.int4_gemm.is_some() { available.push("int4_gemm"); }
+        if self.int8_gemv.is_some() { available.push("int8_gemv"); }
+        if self.rope_then_attention.is_some() { available.push("rope_then_attention"); }
+        if self.yarn_attention.is_some() { available.push("yarn_attention"); }
+        if self.apply_rope_qk_inplace.is_some() { available.push("apply_rope_qk_inplace"); }
+        available
+    }
+
+    /// Try to create a pipeline, returning None if it fails
+    fn try_create_pipeline(
+        device: &Device,
+        library: &Library,
+        function_name: &str,
+    ) -> Option<ComputePipelineState> {
+        Self::create_pipeline(device, library, function_name).ok()
     }
 
     /// Create a single pipeline from a function name
