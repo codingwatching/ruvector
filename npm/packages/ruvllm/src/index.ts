@@ -80,6 +80,9 @@ export * from './export';
 // Training pipeline
 export * from './training';
 
+// Model downloader and registry
+export * from './models';
+
 // Native bindings utilities
 export { version, hasSimdSupport } from './native';
 

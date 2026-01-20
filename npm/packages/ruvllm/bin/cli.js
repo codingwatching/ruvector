@@ -7,11 +7,13 @@
  *   ruvllm generate "Write a haiku about AI"
  *   ruvllm memory add "Important context"
  *   ruvllm memory search "context"
+ *   ruvllm models list
+ *   ruvllm models download claude-code
  *   ruvllm stats
  *   ruvllm benchmark
  */
 
-const { RuvLLM, SimdOps, version, hasSimdSupport } = require('../dist/cjs/index.js');
+const { RuvLLM, SimdOps, version, hasSimdSupport, ModelDownloader, listModels, getModelInfo, RUVLTRA_MODELS, getDefaultModelsDir } = require('../dist/cjs/index.js');
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -235,6 +237,182 @@ async function runInfo(flags) {
   }
 }
 
+// Model management commands
+async function runModelsList(flags) {
+  const downloader = new ModelDownloader();
+  const status = downloader.getStatus();
+
+  if (flags.json) {
+    console.log(formatJson(status));
+  } else {
+    console.log('\n╔══════════════════════════════════════════════════════════════════════════╗');
+    console.log('║                         RuvLTRA Models                                   ║');
+    console.log('║         https://huggingface.co/ruv/ruvltra                               ║');
+    console.log('╠══════════════════════════════════════════════════════════════════════════╣');
+    console.log('║  Model        │ Size    │ Params │ Status     │ Use Case                 ║');
+    console.log('╠══════════════════════════════════════════════════════════════════════════╣');
+
+    for (const { model, downloaded } of status) {
+      const statusIcon = downloaded ? '✓ Ready  ' : '○ Not DL ';
+      const name = model.id.padEnd(12);
+      const size = model.size.padEnd(7);
+      const params = model.parameters.padEnd(6);
+      const useCase = model.useCase.slice(0, 24).padEnd(24);
+      console.log(`║  ${name} │ ${size} │ ${params} │ ${statusIcon} │ ${useCase} ║`);
+    }
+
+    console.log('╚══════════════════════════════════════════════════════════════════════════╝');
+    console.log(`\nModels directory: ${getDefaultModelsDir()}`);
+    console.log('\nDownload with: ruvllm models download <model-id>');
+    console.log('  Examples:    ruvllm models download claude-code');
+    console.log('               ruvllm models download --all');
+  }
+}
+
+async function runModelsDownload(modelId, flags) {
+  const downloader = new ModelDownloader();
+
+  if (flags.all) {
+    console.log('\nDownloading all RuvLTRA models...\n');
+    const models = listModels();
+
+    for (const model of models) {
+      console.log(`\n[${model.id}] ${model.name} (${model.size})`);
+
+      if (downloader.isDownloaded(model.id) && !flags.force) {
+        console.log('  Already downloaded, skipping (use --force to re-download)');
+        continue;
+      }
+
+      try {
+        const lastPercent = { value: -1 };
+        const path = await downloader.download(model.id, {
+          force: flags.force,
+          onProgress: (p) => {
+            const percent = Math.floor(p.percent / 5) * 5; // Round to 5%
+            if (percent !== lastPercent.value) {
+              const bar = '█'.repeat(percent / 5) + '░'.repeat(20 - percent / 5);
+              const speed = (p.speedBps / 1024 / 1024).toFixed(1);
+              const eta = p.etaSeconds < 60
+                ? `${Math.ceil(p.etaSeconds)}s`
+                : `${Math.ceil(p.etaSeconds / 60)}m`;
+              process.stdout.write(`\r  [${bar}] ${p.percent}% | ${speed} MB/s | ETA: ${eta}   `);
+              lastPercent.value = percent;
+            }
+          },
+        });
+        console.log(`\n  ✓ Downloaded to: ${path}`);
+      } catch (error) {
+        console.error(`\n  ✗ Failed: ${error.message}`);
+      }
+    }
+
+    console.log('\n\nDownload complete!');
+    return;
+  }
+
+  if (!modelId) {
+    console.error('Error: model ID required. Use --all to download all models.');
+    console.error('\nAvailable models:');
+    listModels().forEach(m => console.error(`  - ${m.id}: ${m.name} (${m.size})`));
+    process.exit(1);
+  }
+
+  const model = getModelInfo(modelId);
+  if (!model) {
+    console.error(`Error: Unknown model "${modelId}"`);
+    console.error('\nAvailable models:');
+    listModels().forEach(m => console.error(`  - ${m.id}: ${m.name} (${m.size})`));
+    process.exit(1);
+  }
+
+  console.log(`\nDownloading ${model.name} (${model.size})...`);
+  console.log(`From: ${model.url}\n`);
+
+  if (downloader.isDownloaded(modelId) && !flags.force) {
+    const path = downloader.getModelPath(modelId);
+    console.log(`Model already downloaded at: ${path}`);
+    console.log('Use --force to re-download.');
+    return;
+  }
+
+  const lastPercent = { value: -1 };
+  try {
+    const path = await downloader.download(modelId, {
+      force: flags.force,
+      onProgress: (p) => {
+        const percent = Math.floor(p.percent / 2) * 2; // Round to 2%
+        if (percent !== lastPercent.value) {
+          const bar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
+          const downloaded = (p.downloaded / 1024 / 1024).toFixed(1);
+          const total = (p.total / 1024 / 1024).toFixed(1);
+          const speed = (p.speedBps / 1024 / 1024).toFixed(1);
+          const eta = p.etaSeconds < 60
+            ? `${Math.ceil(p.etaSeconds)}s`
+            : `${Math.ceil(p.etaSeconds / 60)}m`;
+          process.stdout.write(`\r[${bar}] ${p.percent}% | ${downloaded}/${total} MB | ${speed} MB/s | ETA: ${eta}   `);
+          lastPercent.value = percent;
+        }
+      },
+    });
+    console.log(`\n\n✓ Downloaded to: ${path}`);
+    console.log(`\nModel ready to use!`);
+    console.log(`  Context length: ${model.contextLength} tokens`);
+    console.log(`  Quantization:   ${model.quantization}`);
+  } catch (error) {
+    console.error(`\n\n✗ Download failed: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+async function runModelsStatus(flags) {
+  const downloader = new ModelDownloader();
+  const status = downloader.getStatus();
+
+  if (flags.json) {
+    console.log(formatJson(status.map(s => ({
+      id: s.model.id,
+      name: s.model.name,
+      downloaded: s.downloaded,
+      path: s.path,
+      size: s.model.size,
+    }))));
+  } else {
+    console.log('\nModel Status:');
+    console.log(`Directory: ${getDefaultModelsDir()}\n`);
+
+    for (const { model, downloaded, path } of status) {
+      const icon = downloaded ? '✓' : '○';
+      const status = downloaded ? 'Ready' : 'Not downloaded';
+      console.log(`  ${icon} ${model.name.padEnd(25)} ${status.padEnd(15)} ${model.size}`);
+      if (downloaded) {
+        console.log(`    Path: ${path}`);
+      }
+    }
+  }
+}
+
+async function runModelsDelete(modelId, flags) {
+  const downloader = new ModelDownloader();
+
+  if (flags.all) {
+    const count = downloader.deleteAll();
+    console.log(`Deleted ${count} model(s).`);
+    return;
+  }
+
+  if (!modelId) {
+    console.error('Error: model ID required. Use --all to delete all models.');
+    process.exit(1);
+  }
+
+  if (downloader.delete(modelId)) {
+    console.log(`Deleted model: ${modelId}`);
+  } else {
+    console.log(`Model not found or not downloaded: ${modelId}`);
+  }
+}
+
 function printHelp() {
   console.log(`
 RuvLLM - Self-learning LLM Orchestration
@@ -254,6 +432,13 @@ Commands:
   info                      Show system information
   help                      Show this help message
 
+Model Management:
+  models list               List available RuvLTRA models
+  models download <id>      Download a model from HuggingFace
+  models download --all     Download all available models
+  models status             Check which models are downloaded
+  models delete <id>        Delete a downloaded model
+
 Options:
   --json                    Output as JSON
   --temperature <float>     Sampling temperature (0.0-2.0)
@@ -264,6 +449,13 @@ Options:
   --metadata <json>         Metadata for memory add
   --dims <int>              Dimensions for benchmark (default: 768)
   --iterations <int>        Iterations for benchmark (default: 1000)
+  --force                   Force re-download even if model exists
+  --all                     Apply to all models (download/delete)
+
+Available Models (from https://huggingface.co/ruv/ruvltra):
+  claude-code               RuvLTRA Claude Code (398MB) - Claude Code workflows
+  small                     RuvLTRA Small (398MB) - Edge devices, IoT
+  medium                    RuvLTRA Medium (669MB) - General purpose
 
 Examples:
   ruvllm query "What is machine learning?"
@@ -272,6 +464,12 @@ Examples:
   ruvllm memory search "context" --k 5
   ruvllm similarity "hello world" "hi there"
   ruvllm benchmark --dims 1024 --iterations 5000
+
+  # Model management
+  ruvllm models list
+  ruvllm models download claude-code
+  ruvllm models download --all
+  ruvllm models status
 
 Learn more: https://github.com/ruvnet/ruvector
 `);
@@ -365,6 +563,22 @@ async function main() {
 
       case 'info':
         await runInfo(flags);
+        break;
+
+      case 'models':
+        const modelsSubcmd = positional[0];
+        if (!modelsSubcmd || modelsSubcmd === 'list') {
+          await runModelsList(flags);
+        } else if (modelsSubcmd === 'download') {
+          await runModelsDownload(positional[1], flags);
+        } else if (modelsSubcmd === 'status') {
+          await runModelsStatus(flags);
+        } else if (modelsSubcmd === 'delete' || modelsSubcmd === 'remove') {
+          await runModelsDelete(positional[1], flags);
+        } else {
+          // Treat subcommand as model ID for download
+          await runModelsDownload(modelsSubcmd, flags);
+        }
         break;
 
       default:

@@ -145,8 +145,8 @@ impl RuvLtraRegistry {
             ModelInfo {
                 id: "ruvltra-small".to_string(),
                 name: "RuvLTRA Small (0.5B Q4)".to_string(),
-                repo: "ruvnet/ruvltra-small".to_string(),
-                filename: "ruvltra-0.5b-q4_k_m.gguf".to_string(),
+                repo: "ruv/ruvltra".to_string(),
+                filename: "ruvltra-small-0.5b-q4_k_m.gguf".to_string(),
                 size: ModelSize::Small,
                 quantization: QuantizationLevel::Q4,
                 size_bytes: 662_000_000, // ~662MB
@@ -176,8 +176,8 @@ impl RuvLtraRegistry {
             ModelInfo {
                 id: "ruvltra-small-q8".to_string(),
                 name: "RuvLTRA Small (0.5B Q8)".to_string(),
-                repo: "ruvnet/ruvltra-small".to_string(),
-                filename: "ruvltra-0.5b-q8_0.gguf".to_string(),
+                repo: "ruv/ruvltra".to_string(),
+                filename: "ruvltra-small-0.5b-q8_0.gguf".to_string(),
                 size: ModelSize::Small,
                 quantization: QuantizationLevel::Q8,
                 size_bytes: 1_324_000_000, // ~1.3GB
@@ -206,8 +206,8 @@ impl RuvLtraRegistry {
             ModelInfo {
                 id: "ruvltra-medium".to_string(),
                 name: "RuvLTRA Medium (3B Q4)".to_string(),
-                repo: "ruvnet/ruvltra-medium".to_string(),
-                filename: "ruvltra-3b-q4_k_m.gguf".to_string(),
+                repo: "ruv/ruvltra".to_string(),
+                filename: "ruvltra-medium-1.1b-q4_k_m.gguf".to_string(),
                 size: ModelSize::Medium,
                 quantization: QuantizationLevel::Q4,
                 size_bytes: 2_100_000_000, // ~2.1GB
@@ -237,8 +237,8 @@ impl RuvLtraRegistry {
             ModelInfo {
                 id: "ruvltra-medium-q8".to_string(),
                 name: "RuvLTRA Medium (3B Q8)".to_string(),
-                repo: "ruvnet/ruvltra-medium".to_string(),
-                filename: "ruvltra-3b-q8_0.gguf".to_string(),
+                repo: "ruv/ruvltra".to_string(),
+                filename: "ruvltra-medium-1.1b-q8_0.gguf".to_string(),
                 size: ModelSize::Medium,
                 quantization: QuantizationLevel::Q8,
                 size_bytes: 4_200_000_000, // ~4.2GB
@@ -267,7 +267,7 @@ impl RuvLtraRegistry {
             ModelInfo {
                 id: "ruvltra-small-coder".to_string(),
                 name: "RuvLTRA Small Coder (LoRA)".to_string(),
-                repo: "ruvnet/ruvltra-small-coder".to_string(),
+                repo: "ruv/ruvltra".to_string(),
                 filename: "ruvltra-small-coder-lora.safetensors".to_string(),
                 size: ModelSize::Tiny,
                 quantization: QuantizationLevel::FP16,
@@ -432,11 +432,11 @@ mod tests {
 
         let url = model.download_url();
         assert!(url.contains("huggingface.co"));
-        assert!(url.contains("ruvnet/ruvltra-small"));
+        assert!(url.contains("ruv/ruvltra"));
         assert!(url.contains(".gguf"));
 
         let hub_url = model.hub_url();
-        assert_eq!(hub_url, "https://huggingface.co/ruvnet/ruvltra-small");
+        assert_eq!(hub_url, "https://huggingface.co/ruv/ruvltra");
     }
 
     #[test]

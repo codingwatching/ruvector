@@ -16,14 +16,13 @@ RuvLTRA models need to be distributed to users efficiently. HuggingFace Hub is t
 
 ### 1. Repository Structure
 
-Create dedicated HuggingFace repositories under the `ruv` organization:
+All models consolidated under a single HuggingFace repository:
 
 | Repository | Purpose | Models |
 |------------|---------|--------|
-| `ruv/ruvltra-claude-code` | Claude Code optimized | 0.5B Q4/Q8 |
-| `ruv/ruvltra-small` | Edge deployment | 0.5B Q4/Q8 |
-| `ruv/ruvltra-medium` | General purpose | 1.1B-3B Q4/Q8 |
-| `ruv/ruvltra-large` | High capability | 7B+ Q4/Q8 |
+| **`ruv/ruvltra`** | All RuvLTRA models | Claude Code, Small, Medium, Large |
+
+**URL**: https://huggingface.co/ruv/ruvltra
 
 ### 2. File Naming Convention
 
@@ -94,11 +93,10 @@ Each repository must include:
 ## Implementation
 
 ### Phase 1: Initial Publishing (Complete)
-- [x] Create `ruv/ruvltra-claude-code` repository
-- [x] Create `ruv/ruvltra-small` repository
-- [x] Create `ruv/ruvltra-medium` repository
+- [x] Create consolidated `ruv/ruvltra` repository
+- [x] Upload Claude Code, Small, and Medium models
 - [x] Upload Q4_K_M quantized models
-- [x] Add model cards with documentation
+- [x] Add comprehensive model card with badges, tutorials, architecture
 
 ### Phase 2: Enhanced Distribution
 - [ ] Add Q8 quantization variants
