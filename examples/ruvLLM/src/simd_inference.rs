@@ -999,10 +999,16 @@ pub struct SimdInferenceEngine {
     model: SmallTransformer,
     tokenizer: SimpleTokenizer,
     kv_caches: RwLock<HashMap<String, Vec<KvCache>>>,
+    /// Whether this is a demo model with random weights (not a real trained model)
+    is_demo_model: bool,
 }
 
 impl SimdInferenceEngine {
     /// Create engine with a small random model (for demo/testing)
+    ///
+    /// WARNING: This creates a model with RANDOM weights for demonstration purposes.
+    /// It will produce a placeholder response, not actual LLM inference.
+    /// For real inference, load a trained model using `load_model()`.
     pub fn new_demo() -> Self {
         let vocab_size = 256;
         let hidden_dim = 256;
@@ -1018,7 +1024,13 @@ impl SimdInferenceEngine {
             model,
             tokenizer,
             kv_caches: RwLock::new(HashMap::new()),
+            is_demo_model: true,
         }
+    }
+
+    /// Check if this is a demo model (random weights, not trained)
+    pub fn is_demo(&self) -> bool {
+        self.is_demo_model
     }
 
     /// Sample next token
@@ -1079,6 +1091,9 @@ impl SimdInferenceEngine {
     }
 
     /// Generate text
+    ///
+    /// If this is a demo model (random weights), returns a placeholder response
+    /// explaining that no trained model is loaded.
     pub fn generate(
         &self,
         prompt: &str,
@@ -1086,6 +1101,28 @@ impl SimdInferenceEngine {
         session_id: Option<&str>,
     ) -> (String, usize, f64) {
         let start = std::time::Instant::now();
+
+        // Demo model returns a helpful message instead of garbled output
+        if self.is_demo_model {
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+            let response = format!(
+                "[RuvLLM Demo Mode]\n\
+                 No trained model is currently loaded. This is a demonstration engine.\n\n\
+                 Your prompt: \"{}\"\n\n\
+                 To get actual LLM inference:\n\
+                 1. Load a GGUF model file\n\
+                 2. Or connect to an external LLM API\n\
+                 3. Or use RuvLLM with a trained checkpoint\n\n\
+                 The SIMD inference pipeline is operational with {} layers.\n\
+                 Config: temp={:.2}, top_p={:.2}, max_tokens={}",
+                prompt.chars().take(100).collect::<String>(),
+                self.model.num_layers(),
+                config.temperature,
+                config.top_p,
+                config.max_tokens,
+            );
+            return (response, 0, elapsed);
+        }
 
         // Tokenize
         let input_tokens = self.tokenizer.encode(prompt);
