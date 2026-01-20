@@ -210,5 +210,9 @@ name = "download_test_model"
 path = "examples/download_test_model.rs"
 
 [[example]]
+name = "hub_cli"
+path = "examples/hub_cli.rs"
+
+[[example]]
 name = "benchmark_model"
 path = "examples/benchmark_model.rs"

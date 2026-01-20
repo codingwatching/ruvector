@@ -100,12 +100,18 @@
 //! ```
 
 pub mod adapter;
+pub mod adapters;
 pub mod micro_lora;
 pub mod training;
 
 // Re-exports
 pub use adapter::{
     AdapterComposer, AdapterHandle, AdapterPool, AdapterRegistry, CompositionStrategy,
+};
+pub use adapters::{
+    LoraConfig, RuvLtraAdapters, AdapterMetadata,
+    trainer::{AdapterTrainer, AdapterTrainingConfig, AdapterDataset, SyntheticDataGenerator, TrainingExample},
+    merge::{AdapterMerger, MergeConfig, MergeStrategy, HotSwapManager},
 };
 pub use micro_lora::{
     AdaptFeedback, LoraAdapter, MicroLoRA, MicroLoraConfig, TargetModule,

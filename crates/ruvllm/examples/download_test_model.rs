@@ -1,18 +1,22 @@
 //! Download small GGUF models for testing
 //!
 //! This utility downloads small, quantized models suitable for testing RuvLLM.
+//! Now includes support for RuvLTRA models via the HuggingFace Hub integration.
 //!
 //! ## Usage
 //!
 //! ```bash
-//! # Download TinyLlama (recommended for quick tests)
+//! # Download RuvLTRA Small (recommended for quick tests)
+//! cargo run -p ruvllm --example download_test_model -- --model ruvltra-small
+//!
+//! # Download RuvLTRA Medium
+//! cargo run -p ruvllm --example download_test_model -- --model ruvltra-medium
+//!
+//! # Download TinyLlama (legacy)
 //! cargo run -p ruvllm --example download_test_model -- --model tinyllama
 //!
-//! # Download Qwen2-0.5B (smallest, fastest)
-//! cargo run -p ruvllm --example download_test_model -- --model qwen-0.5b
-//!
 //! # Download to custom directory
-//! cargo run -p ruvllm --example download_test_model -- --model tinyllama --output ./my_models
+//! cargo run -p ruvllm --example download_test_model -- --model ruvltra-small --output ./my_models
 //!
 //! # List available models
 //! cargo run -p ruvllm --example download_test_model -- --list
@@ -20,18 +24,19 @@
 //!
 //! ## Available Models
 //!
-//! | Model | Size | Download Time | Use Case |
-//! |-------|------|---------------|----------|
-//! | tinyllama | ~600MB | ~2-5 min | Fast iteration, general testing |
-//! | qwen-0.5b | ~400MB | ~1-3 min | Smallest, fastest tests |
-//! | phi-3-mini | ~2.2GB | ~10-20 min | Higher quality outputs |
-//! | gemma-2b | ~1.5GB | ~5-10 min | Google's efficient model |
+//! | Model | Size | Params | Use Case |
+//! |-------|------|--------|----------|
+//! | ruvltra-small | ~662MB | 0.5B | Edge devices, includes SONA weights |
+//! | ruvltra-medium | ~2.1GB | 3B | General purpose, extended context |
+//! | tinyllama | ~600MB | 1.1B | Fast iteration, general testing |
+//! | qwen-0.5b | ~400MB | 0.5B | Smallest, fastest tests |
 //!
 //! ## Environment Variables
 //!
 //! - `HF_TOKEN`: HuggingFace token for gated models (optional for most models)
 //! - `RUVLLM_MODELS_DIR`: Default output directory for models
 
+use ruvllm::hub::{RuvLtraRegistry, ModelDownloader, DownloadConfig, default_cache_dir};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -107,6 +112,7 @@ fn main() {
 
     if args.contains(&"--list".to_string()) || args.contains(&"-l".to_string()) {
         list_models();
+        list_ruvltra_models();
         return;
     }
 
@@ -150,12 +156,24 @@ fn main() {
         }
     };
 
-    // Find the model definition
+    // Check if this is a RuvLTRA model first
+    let registry = RuvLtraRegistry::new();
+    if let Some(ruvltra_model) = registry.get(model_name) {
+        download_ruvltra_model(ruvltra_model, output_dir, force);
+        return;
+    }
+
+    // Find the legacy model definition
     let model = match MODELS.iter().find(|m| m.name == model_name) {
         Some(m) => m,
         None => {
             eprintln!("Error: Unknown model '{}'", model_name);
             eprintln!("Available models:");
+            eprintln!("\nRuvLTRA models:");
+            for id in registry.model_ids() {
+                eprintln!("  - {}", id);
+            }
+            eprintln!("\nLegacy models:");
             for m in MODELS {
                 eprintln!("  - {}", m.name);
             }
@@ -406,6 +424,111 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// Download a RuvLTRA model using the hub integration
+fn download_ruvltra_model(
+    model_info: &ruvllm::hub::ModelInfo,
+    output_dir: Option<PathBuf>,
+    force: bool,
+) {
+    use ruvllm::hub::DownloadConfig;
+
+    println!("Downloading RuvLTRA model: {}", model_info.name);
+    println!("Repository: {}", model_info.repo);
+    println!("Size: ~{} MB", model_info.size_bytes / (1024 * 1024));
+    println!("Quantization: {:?}", model_info.quantization);
+    if model_info.has_sona_weights {
+        println!("Includes: SONA pre-trained weights");
+    }
+    println!();
+
+    // Create config
+    let cache_dir = output_dir
+        .or_else(|| env::var("RUVLLM_MODELS_DIR").ok().map(PathBuf::from))
+        .unwrap_or_else(default_cache_dir);
+
+    let config = DownloadConfig {
+        cache_dir,
+        hf_token: env::var("HF_TOKEN").ok(),
+        resume: !force,
+        show_progress: true,
+        verify_checksum: model_info.checksum.is_some(),
+        max_retries: 3,
+    };
+
+    // Create downloader
+    let downloader = ModelDownloader::with_config(config);
+
+    // Download the model
+    match downloader.download(model_info, None) {
+        Ok(path) => {
+            println!("\nDownload complete!");
+            println!("Model saved to: {}", path.display());
+            println!();
+            println!("Hardware requirements:");
+            println!("  - Minimum RAM: {:.1} GB", model_info.hardware.min_ram_gb);
+            println!("  - Recommended RAM: {:.1} GB", model_info.hardware.recommended_ram_gb);
+            if model_info.hardware.supports_ane {
+                println!("  - Apple Neural Engine: ✓ Supported");
+            }
+            if model_info.hardware.supports_metal {
+                println!("  - Metal GPU: ✓ Supported");
+            }
+            println!();
+            println!("To use this model:");
+            println!("  cargo test -p ruvllm --test real_model_test -- --ignored");
+        }
+        Err(e) => {
+            eprintln!("\nDownload failed: {}", e);
+            eprintln!("\nTroubleshooting:");
+            eprintln!("  - Ensure you have curl or wget installed");
+            eprintln!("  - Check your internet connection");
+            eprintln!("  - If downloading from a gated repo, set HF_TOKEN environment variable");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// List available RuvLTRA models
+fn list_ruvltra_models() {
+    use ruvllm::hub::RuvLtraRegistry;
+
+    let registry = RuvLtraRegistry::new();
+
+    println!("\nRuvLTRA models (recommended):\n");
+    println!("{:<20} {:>8}  {:>6}  {:<50}", "NAME", "SIZE", "PARAMS", "DESCRIPTION");
+    println!("{}", "-".repeat(90));
+
+    for model in registry.list_all() {
+        if !model.is_adapter {
+            println!(
+                "{:<20} {:>6}MB  {:>5.1}B  {}",
+                model.id,
+                model.size_bytes / (1024 * 1024),
+                model.params_b,
+                model.description.chars().take(48).collect::<String>()
+            );
+        }
+    }
+
+    println!("\nAdapters:\n");
+    for model in registry.list_all() {
+        if model.is_adapter {
+            println!(
+                "{:<20} {:>6}MB  (requires: {})",
+                model.id,
+                model.size_bytes / (1024 * 1024),
+                model.base_model.as_ref().unwrap()
+            );
+        }
+    }
+
+    println!();
+    println!("Recommendations:");
+    println!("  - For edge devices: ruvltra-small");
+    println!("  - For general use: ruvltra-medium");
+    println!("  - For code completion: ruvltra-small + ruvltra-small-coder adapter");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,5 +558,15 @@ mod tests {
             assert!(model.size_mb > 0);
             assert!(model.filename.ends_with(".gguf"));
         }
+    }
+
+    #[test]
+    fn test_ruvltra_registry() {
+        use ruvllm::hub::RuvLtraRegistry;
+
+        let registry = RuvLtraRegistry::new();
+        assert!(registry.get("ruvltra-small").is_some());
+        assert!(registry.get("ruvltra-medium").is_some());
+        assert!(registry.list_all().len() > 0);
     }
 }

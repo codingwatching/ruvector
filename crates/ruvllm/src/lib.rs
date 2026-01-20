@@ -48,6 +48,7 @@ pub mod capabilities;
 pub mod claude_flow;
 pub mod error;
 pub mod gguf;
+pub mod hub;
 pub mod kernels;
 pub mod kv_cache;
 pub mod lora;
@@ -66,6 +67,7 @@ pub mod session_index;
 pub mod sona;
 pub mod speculative;
 pub mod tokenizer;
+pub mod training;
 pub mod types;
 pub mod witness_log;
 
@@ -160,6 +162,21 @@ pub use gguf::{
     ModelInitializer, ModelWeights, LayerWeights, WeightTensor, QuantizedWeight,
     ProgressModelBuilder,
 };
+pub use hub::{
+    // Download
+    ModelDownloader, DownloadConfig, DownloadProgress, DownloadError, ChecksumVerifier,
+    // Upload
+    ModelUploader, UploadConfig, UploadProgress, UploadError, ModelMetadata,
+    // Registry
+    RuvLtraRegistry, ModelInfo, ModelSize, QuantizationLevel,
+    HardwareRequirements, get_model_info,
+    // Model Card
+    ModelCard, ModelCardBuilder, TaskType, Framework, License, DatasetInfo, MetricResult,
+    // Progress
+    ProgressBar, ProgressIndicator, ProgressStyle, ProgressCallback, MultiProgress,
+    // Common
+    HubError, default_cache_dir, get_hf_token,
+};
 pub use serving::{
     // Request types
     InferenceRequest, RequestId, Priority, RequestState, RunningRequest,
@@ -185,6 +202,11 @@ pub use quantize::{
     Q4KMBlock, Q5KMBlock, Q8Block,
     // Progress tracking
     QuantProgress, QuantStats,
+};
+pub use training::{
+    ClaudeTaskDataset, ClaudeTaskExample, TaskCategory, TaskMetadata,
+    ComplexityLevel, DomainType, DatasetConfig, AugmentationConfig,
+    DatasetGenerator, DatasetStats,
 };
 
 // RuvLTRA model architecture exports
