@@ -90,3 +90,5 @@ webgpu = []
 parallel = []
 # Enable SIMD optimizations (requires wasm-simd target feature)
 simd = []
+# Enable intelligent features (HNSW Router, MicroLoRA, SONA)
+intelligent = []
