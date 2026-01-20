@@ -207,12 +207,12 @@ impl SharedTensor {
     /// Fill with a constant value using Atomics (thread-safe).
     pub fn fill_atomic(&self, value: f32) {
         // Convert f32 to its bit representation for atomic operations
-        let bits = value.to_bits();
+        let bits = value.to_bits() as i32;
         let int_view = Int32Array::new(&self.buffer);
         let offset = (self.byte_offset / 4) as u32;
 
         for i in 0..self.len() as u32 {
-            js_sys::Atomics::store(&int_view, (offset + i) as i32, bits as i32)
+            js_sys::Atomics::store(&int_view, offset + i, bits)
                 .expect("Atomics::store failed");
         }
     }
@@ -224,7 +224,7 @@ impl SharedTensor {
         }
 
         let int_view = Int32Array::new(&self.buffer);
-        let offset = (self.byte_offset / 4 + index) as i32;
+        let offset = (self.byte_offset / 4 + index) as u32;
 
         let bits =
             js_sys::Atomics::load(&int_view, offset).expect("Atomics::load failed") as u32;
@@ -238,7 +238,7 @@ impl SharedTensor {
         }
 
         let int_view = Int32Array::new(&self.buffer);
-        let offset = (self.byte_offset / 4 + index) as i32;
+        let offset = (self.byte_offset / 4 + index) as u32;
         let bits = value.to_bits() as i32;
 
         js_sys::Atomics::store(&int_view, offset, bits).expect("Atomics::store failed");
@@ -518,7 +518,7 @@ impl SharedBarrier {
                 .expect("Atomics::store failed");
             js_sys::Atomics::add(&self.int_view, 0, 1)
                 .expect("Atomics::add failed");
-            js_sys::Atomics::notify(&self.int_view, 0, Some(self.count as u32))
+            js_sys::Atomics::notify(&self.int_view, 0)
                 .expect("Atomics::notify failed");
         } else {
             // Wait for generation to change
