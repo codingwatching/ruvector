@@ -13,6 +13,7 @@
 | 0.1 | 2026-01-22 | ruv.io | Initial architecture proposal |
 | 0.2 | 2026-01-22 | ruv.io | Full ruvector ecosystem integration |
 | 0.3 | 2026-01-22 | ruv.io | Universal coherence object, domain-agnostic interpretation, application roadmap |
+| 0.4 | 2026-01-22 | ruv.io | RuvLLM integration: coherence-gated LLM inference, witness-backed generation |
 
 ---
 
@@ -198,6 +199,7 @@ The coherence engine leverages the full ruvector crate ecosystem for maximum cap
 | `ruvector-raft` | Distributed consensus | `RaftConsensus`, `LogReplication` |
 | `ruvector-core` | Vector storage | `VectorDB`, `HnswConfig`, `DistanceMetric` |
 | `ruvector-graph` | Graph operations | `GraphStore`, `AdjacencyList` |
+| `ruvllm` | LLM inference with coherence | `RuvLLMEngine`, `CoherenceValidator`, `WitnessLog`, `ReasoningBank`, `AgenticMemory` |
 
 ---
 
@@ -1249,6 +1251,356 @@ impl RuvectorSubstrate {
 
 ---
 
+## RuvLLM Integration
+
+Prime-Radiant integrates deeply with `ruvllm` to provide **coherence-gated LLM inference** where every generation decision is backed by structural witnesses.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         RUVLLM + PRIME-RADIANT INTEGRATION                       │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐ │
+│  │                           RUVLLM ENGINE LAYER                               │ │
+│  │   RuvLLMEngine | PolicyStore | SessionManager | WitnessLog | SonaIntegration │
+│  └───────────────────────────────────┬────────────────────────────────────────┘ │
+│                                      │                                          │
+│  ┌───────────────┐ ┌───────────────┐ │ ┌───────────────┐ ┌───────────────┐     │
+│  │ QUALITY       │ │ CONTEXT       │ │ │ REFLECTION    │ │ REASONING     │     │
+│  │ CoherenceVal. │ │ AgenticMemory │ │ │ ReflectiveAgt │ │ ReasoningBank │     │
+│  │ DiversityAna. │ │ WorkingMemory │◄─┼►│ ConfidenceChk │ │ PatternStore  │     │
+│  │ QualityScore  │ │ EpisodicMem   │ │ │ ErrorLearner  │ │ EWC++ Consol. │     │
+│  └───────┬───────┘ └───────┬───────┘ │ └───────┬───────┘ └───────┬───────┘     │
+│          │                 │         │         │                 │              │
+│          └─────────────────┼─────────┼─────────┼─────────────────┘              │
+│                            ▼         │         ▼                                │
+│  ┌────────────────────────────────────────────────────────────────────────────┐ │
+│  │                       PRIME-RADIANT COHERENCE LAYER                         │ │
+│  │                                                                              │ │
+│  │   SheafGraph ◄─── Context as Nodes ◄─── Beliefs, Facts, Assertions         │ │
+│  │       │                                                                      │ │
+│  │   Residuals ◄─── Semantic Consistency ◄─── Citations, Implications          │ │
+│  │       │                                                                      │ │
+│  │   Energy ◄─── Hallucination Detector ◄─── Contradiction = High Energy       │ │
+│  │       │                                                                      │ │
+│  │   Gate ◄─── Inference Control ◄─── E < θ: Generate | E > θ: Refuse/Escalate │ │
+│  │       │                                                                      │ │
+│  │   Witness ◄─── Audit Trail ◄─── Every refusal has cryptographic proof       │ │
+│  │                                                                              │ │
+│  └────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Integration Points
+
+| RuvLLM Component | Prime-Radiant Integration | Benefit |
+|------------------|---------------------------|---------|
+| `CoherenceValidator` | Uses sheaf energy instead of heuristics | Mathematical consistency, not pattern matching |
+| `WitnessLog` | Merged with Prime-Radiant governance | Single audit trail for all decisions |
+| `ReasoningBank` | Patterns become learned restriction maps | Experience improves constraint accuracy |
+| `SonaIntegration` | Shared threshold tuning | Unified adaptive learning across LLM and coherence |
+| `QualityScoringEngine` | Energy-weighted quality scores | Structural quality, not just surface metrics |
+| `ConfidenceChecker` | Coherence energy replaces confidence | "I don't know" is provable |
+| `AgenticMemory` | Memory entries become sheaf nodes | Context consistency is computable |
+| `ErrorPatternLearner` | Error patterns update restriction maps | System learns what "incoherence" means |
+
+### Key Integration Modules
+
+#### 1. Coherence-Backed Quality Scoring
+
+```rust
+use prime_radiant::{SheafGraph, CoherenceEnergy, CoherenceGate};
+use ruvllm::quality::{CoherenceValidator, CoherenceConfig, SemanticConsistencyResult};
+
+/// Enhanced CoherenceValidator backed by sheaf Laplacian
+pub struct SheafCoherenceValidator {
+    /// Prime-Radiant coherence graph
+    graph: SheafGraph,
+    /// Gate for inference control
+    gate: CoherenceGate,
+    /// Original ruvllm validator for compatibility
+    inner: CoherenceValidator,
+}
+
+impl SheafCoherenceValidator {
+    /// Validate response coherence using sheaf energy
+    pub fn validate(&mut self, response: &str, context: &Context) -> ValidationResult {
+        // 1. Convert context and response to sheaf nodes
+        let context_node = self.graph.add_node(context.embedding());
+        let response_node = self.graph.add_node(response.embedding());
+
+        // 2. Add edges for semantic implications
+        for claim in response.extract_claims() {
+            for fact in context.facts() {
+                if claim.relates_to(fact) {
+                    self.graph.add_edge(
+                        claim.node_id,
+                        fact.node_id,
+                        SemanticRestrictionMap::new(&claim, &fact)
+                    );
+                }
+            }
+        }
+
+        // 3. Compute coherence energy
+        let energy = self.graph.compute_energy();
+
+        // 4. Gate decision with witness
+        let decision = self.gate.evaluate(&Action::generate(response), &energy);
+
+        ValidationResult {
+            coherent: decision.allow,
+            energy: energy.total_energy,
+            witness: decision.witness,
+            denial_reason: decision.denial_reason,
+        }
+    }
+}
+```
+
+#### 2. Witness-Backed Generation
+
+```rust
+use prime_radiant::governance::{WitnessRecord, LineageRecord};
+use ruvllm::{WitnessLog, WitnessEntry};
+
+/// Unified witness log for LLM inference and coherence decisions
+pub struct UnifiedWitnessLog {
+    /// Prime-Radiant governance witness records
+    coherence_witnesses: Vec<WitnessRecord>,
+    /// RuvLLM inference witness entries
+    inference_witnesses: WitnessLog,
+}
+
+impl UnifiedWitnessLog {
+    /// Record generation with coherence witness
+    pub fn record_generation(
+        &mut self,
+        prompt: &str,
+        response: &str,
+        coherence_decision: &GateDecision,
+    ) -> GenerationWitness {
+        // 1. Create Prime-Radiant witness for coherence
+        let coherence_witness = coherence_decision.witness.clone();
+        self.coherence_witnesses.push(coherence_witness.clone());
+
+        // 2. Create RuvLLM witness for generation
+        let inference_witness = self.inference_witnesses.record(
+            WitnessEntry::generation(prompt, response)
+                .with_coherence_ref(coherence_witness.id)
+        );
+
+        // 3. Create lineage linking both
+        GenerationWitness {
+            inference: inference_witness,
+            coherence: coherence_witness,
+            hash_chain: self.compute_chain_hash(),
+        }
+    }
+}
+```
+
+#### 3. ReasoningBank → Learned Restriction Maps
+
+```rust
+use prime_radiant::learned_rho::LearnedRestrictionMap;
+use ruvllm::reasoning_bank::{ReasoningBank, Pattern, Verdict};
+
+/// Bridge ReasoningBank patterns to Prime-Radiant restriction maps
+pub struct PatternToRestrictionBridge {
+    /// Source patterns from RuvLLM
+    reasoning_bank: ReasoningBank,
+    /// Target restriction maps for Prime-Radiant
+    restriction_maps: HashMap<PatternId, LearnedRestrictionMap>,
+}
+
+impl PatternToRestrictionBridge {
+    /// Learn restriction map from successful patterns
+    pub fn learn_from_verdict(&mut self, pattern_id: PatternId, verdict: Verdict) {
+        if verdict.success_score > 0.8 {
+            // Pattern succeeded - strengthen restriction map
+            let pattern = self.reasoning_bank.get_pattern(pattern_id);
+
+            // Extract source/target from pattern context
+            let (source_embedding, target_embedding) = pattern.extract_embeddings();
+
+            // Expected residual is zero for successful patterns
+            let expected_residual = vec![0.0; target_embedding.len()];
+
+            // Train restriction map to produce zero residual
+            self.restriction_maps
+                .entry(pattern_id)
+                .or_insert_with(|| LearnedRestrictionMap::new(
+                    source_embedding.len(),
+                    target_embedding.len()
+                ))
+                .train(&source_embedding, &target_embedding, &expected_residual);
+        } else {
+            // Pattern failed - learn what incoherence looks like
+            let pattern = self.reasoning_bank.get_pattern(pattern_id);
+            let (source_embedding, target_embedding) = pattern.extract_embeddings();
+
+            // High residual expected for failures
+            let failure_residual = self.compute_failure_residual(&pattern, &verdict);
+
+            self.restriction_maps
+                .entry(pattern_id)
+                .or_insert_with(|| LearnedRestrictionMap::new(
+                    source_embedding.len(),
+                    target_embedding.len()
+                ))
+                .train(&source_embedding, &target_embedding, &failure_residual);
+        }
+    }
+
+    /// Export learned maps to Prime-Radiant
+    pub fn export_to_prime_radiant(&self, graph: &mut SheafGraph) {
+        for (pattern_id, restriction_map) in &self.restriction_maps {
+            graph.register_learned_restriction(pattern_id, restriction_map.clone());
+        }
+    }
+}
+```
+
+#### 4. Context Memory as Sheaf Nodes
+
+```rust
+use prime_radiant::substrate::SheafNode;
+use ruvllm::context::{AgenticMemory, WorkingMemory, EpisodicMemory};
+
+/// Memory entries as coherence graph nodes
+pub struct MemoryCoherenceLayer {
+    /// Agentic memory (long-term patterns)
+    agentic: AgenticMemory,
+    /// Working memory (current context)
+    working: WorkingMemory,
+    /// Episodic memory (conversation history)
+    episodic: EpisodicMemory,
+    /// Sheaf graph for coherence
+    graph: SheafGraph,
+}
+
+impl MemoryCoherenceLayer {
+    /// Add memory entry with coherence tracking
+    pub fn add_with_coherence(&mut self, entry: MemoryEntry) -> CoherenceResult {
+        // 1. Add to appropriate memory type
+        let memory_id = match entry.memory_type {
+            MemoryType::Agentic => self.agentic.store(entry.clone()),
+            MemoryType::Working => self.working.store(entry.clone()),
+            MemoryType::Episodic => self.episodic.store(entry.clone()),
+        };
+
+        // 2. Create sheaf node for memory entry
+        let node = SheafNode {
+            id: NodeId::from(memory_id),
+            state: entry.embedding,
+            metadata: entry.metadata.into(),
+            updated_at: Timestamp::now(),
+        };
+        self.graph.add_node(node);
+
+        // 3. Create edges to related memories
+        let related = self.find_related_memories(&entry);
+        for related_id in related {
+            self.graph.add_edge(
+                memory_id.into(),
+                related_id.into(),
+                MemoryRestrictionMap::temporal_consistency(),
+            );
+        }
+
+        // 4. Check if adding this entry creates incoherence
+        let energy = self.graph.compute_energy();
+
+        CoherenceResult {
+            memory_id,
+            energy: energy.total_energy,
+            coherent: energy.total_energy < self.threshold,
+        }
+    }
+}
+```
+
+#### 5. Confidence as Coherence Energy
+
+```rust
+use prime_radiant::CoherenceEnergy;
+use ruvllm::reflection::{ConfidenceChecker, ConfidenceScore};
+
+/// Confidence derived from coherence energy
+pub struct CoherenceConfidence {
+    /// Base confidence checker
+    inner: ConfidenceChecker,
+    /// Coherence-to-confidence mapping
+    energy_scale: f32,
+}
+
+impl CoherenceConfidence {
+    /// Compute confidence from coherence energy
+    ///
+    /// Key insight: Low energy = high confidence (system is coherent)
+    ///              High energy = low confidence (contradictions exist)
+    pub fn confidence_from_energy(&self, energy: &CoherenceEnergy) -> ConfidenceScore {
+        // Energy is non-negative, higher = more incoherent
+        // Confidence should be 0-1, higher = more confident
+
+        // Sigmoid mapping: conf = 1 / (1 + exp(scale * (energy - threshold)))
+        let scaled = self.energy_scale * (energy.total_energy - self.threshold);
+        let confidence = 1.0 / (1.0 + scaled.exp());
+
+        ConfidenceScore {
+            value: confidence,
+            // Can explain confidence through energy breakdown
+            explanation: self.explain_confidence(energy),
+            // Confidence is now provable through witness
+            witness_backed: true,
+        }
+    }
+
+    fn explain_confidence(&self, energy: &CoherenceEnergy) -> String {
+        let top_contributors: Vec<_> = energy.edge_energies
+            .iter()
+            .filter(|(_, e)| **e > 0.01)
+            .take(3)
+            .collect();
+
+        if top_contributors.is_empty() {
+            "High confidence: no structural contradictions detected".into()
+        } else {
+            format!(
+                "Lower confidence due to {} potential inconsistencies",
+                top_contributors.len()
+            )
+        }
+    }
+}
+```
+
+### Integration ADRs
+
+| ADR | Decision |
+|-----|----------|
+| ADR-CE-016 | RuvLLM CoherenceValidator uses sheaf energy, not heuristic scores |
+| ADR-CE-017 | WitnessLog and Prime-Radiant governance share unified audit trail |
+| ADR-CE-018 | ReasoningBank patterns feed learned restriction map training |
+| ADR-CE-019 | Memory entries (agentic, working, episodic) become sheaf nodes |
+| ADR-CE-020 | Confidence scores derived from coherence energy with sigmoid mapping |
+| ADR-CE-021 | SonaIntegration shared between ruvllm and Prime-Radiant |
+| ADR-CE-022 | ErrorPatternLearner updates restriction maps on failure detection |
+
+### Integration Benefits
+
+1. **Structural Hallucination Detection** - Not pattern matching; mathematical proof that response contradicts context
+2. **Unified Audit Trail** - Single witness chain for both inference and coherence decisions
+3. **Experience-Driven Constraints** - ReasoningBank patterns make restriction maps more accurate over time
+4. **Provable Confidence** - "I don't know" backed by energy calculation, not vibes
+5. **Memory Consistency** - All context entries tracked for structural coherence
+6. **Shared Adaptation** - SONA tunes both LLM quality and coherence thresholds together
+
+---
+
 ## Application Tiers
 
 > **Philosophy**: This creates a clean spectrum of applications without rewriting the core. The same residual becomes contradiction energy, and the same gate becomes a refusal mechanism with a witness.
@@ -1337,6 +1689,13 @@ impl RuvectorSubstrate {
 | ADR-CE-013 | **Not prediction** - system shows safe/unsafe action, not what will happen |
 | ADR-CE-014 | **Reflex lane default** - most updates stay low-latency, escalation only on sustained incoherence |
 | ADR-CE-015 | **Adapt without losing control** - persistent tracking enables learning within governance |
+| ADR-CE-016 | **RuvLLM CoherenceValidator** uses sheaf energy, not heuristic scores |
+| ADR-CE-017 | **Unified audit trail** - WitnessLog and Prime-Radiant governance share single chain |
+| ADR-CE-018 | **Pattern-to-restriction bridge** - ReasoningBank patterns feed learned restriction maps |
+| ADR-CE-019 | **Memory as nodes** - AgenticMemory, WorkingMemory, EpisodicMemory become sheaf nodes |
+| ADR-CE-020 | **Confidence from energy** - sigmoid mapping from coherence energy to confidence score |
+| ADR-CE-021 | **Shared SONA** - SonaIntegration shared between ruvllm and Prime-Radiant |
+| ADR-CE-022 | **Failure learning** - ErrorPatternLearner updates restriction maps on detection |
 
 ---
 
@@ -1356,6 +1715,10 @@ impl RuvectorSubstrate {
 10. **Deterministic Replay** - Every action auditable and replayable from event log
 11. **Adapt Without Losing Control** - Threshold autotuning from production traces with governance approval
 12. **Domain Agnostic** - Clean spectrum of applications without rewriting core
+13. **LLM Hallucination Detection** - Structural proof that response contradicts context, not pattern matching
+14. **Witness-Backed Generation** - Every LLM output has cryptographic audit trail
+15. **Experience-Driven Constraints** - ReasoningBank patterns improve restriction map accuracy over time
+16. **Provable "I Don't Know"** - Confidence derived from energy, not heuristics
 
 ### Risks and Mitigations
 
@@ -1432,6 +1795,7 @@ impl RuvectorSubstrate {
 | `neural-gate` | Yes | Nervous-system CoherenceGatedSystem |
 | `attention` | No | Attention-weighted residuals (MoE, PDE) |
 | `distributed` | No | Raft-based multi-node coherence |
+| `ruvllm` | No | LLM inference integration with coherence-backed generation |
 | `postgres` | No | PostgreSQL governance storage |
 | `simd` | Yes | SIMD-optimized residual calculation |
 | `spectral` | No | Eigenvalue-based drift detection |
@@ -1455,6 +1819,7 @@ impl RuvectorSubstrate {
 | `ruvector-raft` | workspace | Distributed consensus |
 | `ruvector-core` | workspace | Vector storage and HNSW search |
 | `ruvector-graph` | workspace | Graph data structures |
+| `ruvllm` | workspace | LLM inference with coherence-backed quality |
 
 ### External Dependencies
 
@@ -1497,3 +1862,5 @@ impl RuvectorSubstrate {
 - **ADR-003**: SIMD Optimization Strategy
 - **ADR-006**: Memory Management
 - **ADR-007**: Security Review & Technical Debt
+- **ADR-011**: RuvLLM Architecture (LLM serving with quality gates)
+- **ADR-012**: ReasoningBank Pattern Storage (EWC++ consolidation)
