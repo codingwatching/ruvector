@@ -481,7 +481,28 @@ impl CoherenceGate {
     /// 2. Checks for persistent incoherence
     /// 3. Creates mandatory witness record
     /// 4. Returns the gate decision
+    #[inline]
     pub fn evaluate<A: Action>(&mut self, action: &A, energy: &EnergySnapshot) -> GateDecision {
+        let current_energy = energy.scope_energy;
+
+        // FAST PATH: Low energy and low-risk action -> immediate reflex approval
+        // This bypasses most computation for the common case (ADR-014 reflex lane)
+        if current_energy < self.thresholds.reflex {
+            let impact = action.impact();
+            if !impact.is_high_risk() {
+                // Quick history record and return
+                self.history.record(action.scope(), current_energy);
+                return GateDecision::allow(ComputeLane::Reflex);
+            }
+        }
+
+        // STANDARD PATH: Full evaluation for higher energy or high-risk actions
+        self.evaluate_full(action, energy)
+    }
+
+    /// Full evaluation path for non-trivial cases
+    #[inline(never)] // Keep this out-of-line to keep fast path small
+    fn evaluate_full<A: Action>(&mut self, action: &A, energy: &EnergySnapshot) -> GateDecision {
         let scope = action.scope();
         let impact = action.impact();
         let current_energy = energy.scope_energy;
@@ -489,7 +510,7 @@ impl CoherenceGate {
         // Record energy observation
         self.history.record(scope, current_energy);
 
-        // Determine base lane from energy
+        // Determine base lane from energy using branchless comparison
         let mut lane = self.thresholds.lane_for_energy(current_energy);
 
         // Adjust for action impact
@@ -544,6 +565,13 @@ impl CoherenceGate {
         } else {
             GateDecision::allow(lane)
         }
+    }
+
+    /// Fast path evaluation that skips witness creation
+    /// Use when witness is not needed (e.g., preflight checks)
+    #[inline]
+    pub fn evaluate_fast(&self, scope_energy: f32) -> ComputeLane {
+        self.thresholds.lane_for_energy(scope_energy)
     }
 
     /// Create a witness record for a gate decision.

@@ -6208,6 +6208,7 @@ dependencies = [
  "ruvector-nervous-system",
  "ruvector-raft",
  "ruvector-sona",
+ "ruvllm",
  "serde",
  "serde_json",
  "sqlx",
@@ -6217,6 +6218,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "wide",
 ]
 
 [[package]]

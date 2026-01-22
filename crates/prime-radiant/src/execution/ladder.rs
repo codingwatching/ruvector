@@ -239,16 +239,43 @@ impl LaneThresholds {
     }
 
     /// Determine which lane an energy level requires.
+    ///
+    /// Optimized with branchless comparison using conditional moves
+    /// for better branch prediction on modern CPUs.
+    #[inline]
     pub fn lane_for_energy(&self, energy: f32) -> ComputeLane {
-        if energy < self.reflex {
-            ComputeLane::Reflex
-        } else if energy < self.retrieval {
-            ComputeLane::Retrieval
-        } else if energy < self.heavy {
-            ComputeLane::Heavy
-        } else {
-            ComputeLane::Human
+        // Use branchless comparison for better performance
+        // The compiler can convert this to conditional moves (CMOVcc)
+        let is_above_reflex = (energy >= self.reflex) as u8;
+        let is_above_retrieval = (energy >= self.retrieval) as u8;
+        let is_above_heavy = (energy >= self.heavy) as u8;
+
+        // Sum determines the lane: 0=Reflex, 1=Retrieval, 2=Heavy, 3=Human
+        let lane_index = is_above_reflex + is_above_retrieval + is_above_heavy;
+
+        // SAFETY: lane_index is guaranteed to be 0-3
+        match lane_index {
+            0 => ComputeLane::Reflex,
+            1 => ComputeLane::Retrieval,
+            2 => ComputeLane::Heavy,
+            _ => ComputeLane::Human,
         }
+    }
+
+    /// Fast lane check using array lookup (alternative implementation)
+    #[inline]
+    pub fn lane_for_energy_lookup(&self, energy: f32) -> ComputeLane {
+        // Store thresholds in array for potential SIMD comparison
+        let thresholds = [self.reflex, self.retrieval, self.heavy];
+
+        // Count how many thresholds are exceeded
+        let mut lane = 0u8;
+        for &t in &thresholds {
+            lane += (energy >= t) as u8;
+        }
+
+        // SAFETY: lane is 0-3
+        ComputeLane::from_u8(lane).unwrap_or(ComputeLane::Human)
     }
 
     /// Get the threshold for a specific lane transition.

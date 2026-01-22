@@ -187,7 +187,7 @@ impl TopologyGate {
         let all_sims: Vec<f32> = similarities
             .iter()
             .enumerate()
-            .flat_map(|(i, row)| row.iter().enumerate().filter(|(j, _)| *j > i).map(|(_, &s)| s))
+            .flat_map(|(i, row)| row.iter().enumerate().filter(move |(j, _)| *j > i).map(|(_, &s)| s))
             .collect();
 
         let mean_sim: f32 = all_sims.iter().sum::<f32>() / all_sims.len().max(1) as f32;

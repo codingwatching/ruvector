@@ -256,17 +256,32 @@ impl RestrictionMap {
             MatrixStorage::Identity => input.to_vec(),
 
             MatrixStorage::Diagonal(scales) => {
-                // SIMD-friendly element-wise multiply
-                input
-                    .iter()
-                    .zip(scales.iter())
-                    .map(|(&x, &s)| x * s)
-                    .collect()
+                // SIMD-friendly element-wise multiply using chunks
+                let mut result = Vec::with_capacity(input.len());
+                let chunks_in = input.chunks_exact(4);
+                let chunks_sc = scales.chunks_exact(4);
+                let rem_in = chunks_in.remainder();
+                let rem_sc = chunks_sc.remainder();
+
+                for (chunk_in, chunk_sc) in chunks_in.zip(chunks_sc) {
+                    result.push(chunk_in[0] * chunk_sc[0]);
+                    result.push(chunk_in[1] * chunk_sc[1]);
+                    result.push(chunk_in[2] * chunk_sc[2]);
+                    result.push(chunk_in[3] * chunk_sc[3]);
+                }
+                for (&x, &s) in rem_in.iter().zip(rem_sc.iter()) {
+                    result.push(x * s);
+                }
+                result
             }
 
             MatrixStorage::Projection { indices, .. } => {
-                // Gather selected dimensions
-                indices.iter().map(|&i| input[i]).collect()
+                // Gather selected dimensions with pre-allocated capacity
+                let mut result = Vec::with_capacity(indices.len());
+                for &i in indices {
+                    result.push(input[i]);
+                }
+                result
             }
 
             MatrixStorage::Sparse {
@@ -277,6 +292,7 @@ impl RestrictionMap {
                 ..
             } => {
                 let mut result = vec![0.0; *output_dim];
+                // Use iterator without allocation overhead
                 for ((&r, &c), &v) in rows.iter().zip(cols.iter()).zip(values.iter()) {
                     result[r] += v * input[c];
                 }
@@ -290,14 +306,82 @@ impl RestrictionMap {
             } => self.apply_dense_simd(input, data, *output_dim, *input_dim),
         };
 
+        // Add bias if present - use SIMD-friendly pattern
+        if !self.bias.is_empty() {
+            let bias_len = self.bias.len();
+            let chunk_count = bias_len / 4;
+
+            // Process chunks of 4
+            for i in 0..chunk_count {
+                let base = i * 4;
+                output[base] += self.bias[base];
+                output[base + 1] += self.bias[base + 1];
+                output[base + 2] += self.bias[base + 2];
+                output[base + 3] += self.bias[base + 3];
+            }
+
+            // Handle remainder
+            for i in (chunk_count * 4)..bias_len {
+                output[i] += self.bias[i];
+            }
+        }
+
+        output
+    }
+
+    /// Apply restriction map into a pre-allocated output buffer (zero allocation)
+    ///
+    /// This is the preferred method for hot paths where the output buffer
+    /// can be reused across multiple calls.
+    #[inline]
+    pub fn apply_into(&self, input: &[f32], output: &mut [f32]) {
+        debug_assert_eq!(output.len(), self.output_dim, "Output dimension mismatch");
+
+        match &self.matrix {
+            MatrixStorage::Identity => {
+                output.copy_from_slice(input);
+            }
+
+            MatrixStorage::Diagonal(scales) => {
+                // SIMD-friendly element-wise multiply
+                for ((out, &inp), &sc) in output.iter_mut().zip(input.iter()).zip(scales.iter()) {
+                    *out = inp * sc;
+                }
+            }
+
+            MatrixStorage::Projection { indices, .. } => {
+                for (out, &i) in output.iter_mut().zip(indices.iter()) {
+                    *out = input[i];
+                }
+            }
+
+            MatrixStorage::Sparse {
+                rows,
+                cols,
+                values,
+                ..
+            } => {
+                output.fill(0.0);
+                for ((&r, &c), &v) in rows.iter().zip(cols.iter()).zip(values.iter()) {
+                    output[r] += v * input[c];
+                }
+            }
+
+            MatrixStorage::Dense {
+                data,
+                output_dim,
+                input_dim,
+            } => {
+                self.apply_dense_simd_into(input, data, *output_dim, *input_dim, output);
+            }
+        }
+
         // Add bias if present
         if !self.bias.is_empty() {
             for (y, &b) in output.iter_mut().zip(self.bias.iter()) {
                 *y += b;
             }
         }
-
-        output
     }
 
     /// SIMD-optimized dense matrix-vector multiplication
@@ -312,40 +396,100 @@ impl RestrictionMap {
         input_dim: usize,
     ) -> Vec<f32> {
         let mut output = vec![0.0; output_dim];
+        self.apply_dense_simd_into(input, matrix, output_dim, input_dim, &mut output);
+        output
+    }
 
+    /// SIMD-optimized dense matrix-vector multiplication into pre-allocated buffer
+    #[inline]
+    fn apply_dense_simd_into(
+        &self,
+        input: &[f32],
+        matrix: &[f32],
+        output_dim: usize,
+        input_dim: usize,
+        output: &mut [f32],
+    ) {
         // Process 4 output elements at a time for SIMD
         let output_chunks = output_dim / 4;
         let output_remainder = output_dim % 4;
 
-        // Main loop: process 4 rows at a time
+        // Main loop: process 4 rows at a time with better cache locality
         for chunk in 0..output_chunks {
             let base = chunk * 4;
-            let mut acc = [0.0f32; 4];
+            let mut acc0 = 0.0f32;
+            let mut acc1 = 0.0f32;
+            let mut acc2 = 0.0f32;
+            let mut acc3 = 0.0f32;
 
-            for j in 0..input_dim {
-                let x = input[j];
-                acc[0] += matrix[base * input_dim + j] * x;
-                acc[1] += matrix[(base + 1) * input_dim + j] * x;
-                acc[2] += matrix[(base + 2) * input_dim + j] * x;
-                acc[3] += matrix[(base + 3) * input_dim + j] * x;
+            // Process input in chunks of 4 for better ILP
+            let input_chunks = input_dim / 4;
+            let input_remainder = input_dim % 4;
+
+            let row0 = base * input_dim;
+            let row1 = (base + 1) * input_dim;
+            let row2 = (base + 2) * input_dim;
+            let row3 = (base + 3) * input_dim;
+
+            for jc in 0..input_chunks {
+                let j = jc * 4;
+                let x0 = input[j];
+                let x1 = input[j + 1];
+                let x2 = input[j + 2];
+                let x3 = input[j + 3];
+
+                acc0 += matrix[row0 + j] * x0
+                    + matrix[row0 + j + 1] * x1
+                    + matrix[row0 + j + 2] * x2
+                    + matrix[row0 + j + 3] * x3;
+                acc1 += matrix[row1 + j] * x0
+                    + matrix[row1 + j + 1] * x1
+                    + matrix[row1 + j + 2] * x2
+                    + matrix[row1 + j + 3] * x3;
+                acc2 += matrix[row2 + j] * x0
+                    + matrix[row2 + j + 1] * x1
+                    + matrix[row2 + j + 2] * x2
+                    + matrix[row2 + j + 3] * x3;
+                acc3 += matrix[row3 + j] * x0
+                    + matrix[row3 + j + 1] * x1
+                    + matrix[row3 + j + 2] * x2
+                    + matrix[row3 + j + 3] * x3;
             }
 
-            output[base] = acc[0];
-            output[base + 1] = acc[1];
-            output[base + 2] = acc[2];
-            output[base + 3] = acc[3];
+            // Handle input remainder
+            for j in (input_dim - input_remainder)..input_dim {
+                let x = input[j];
+                acc0 += matrix[row0 + j] * x;
+                acc1 += matrix[row1 + j] * x;
+                acc2 += matrix[row2 + j] * x;
+                acc3 += matrix[row3 + j] * x;
+            }
+
+            output[base] = acc0;
+            output[base + 1] = acc1;
+            output[base + 2] = acc2;
+            output[base + 3] = acc3;
         }
 
-        // Handle remainder rows
+        // Handle output remainder rows
         for i in (output_dim - output_remainder)..output_dim {
-            let mut sum = 0.0;
-            for j in 0..input_dim {
-                sum += matrix[i * input_dim + j] * input[j];
+            let row_start = i * input_dim;
+            let mut sum = 0.0f32;
+
+            // Unroll inner loop by 4
+            let input_chunks = input_dim / 4;
+            for jc in 0..input_chunks {
+                let j = jc * 4;
+                sum += matrix[row_start + j] * input[j]
+                    + matrix[row_start + j + 1] * input[j + 1]
+                    + matrix[row_start + j + 2] * input[j + 2]
+                    + matrix[row_start + j + 3] * input[j + 3];
+            }
+            for j in (input_chunks * 4)..input_dim {
+                sum += matrix[row_start + j] * input[j];
             }
             output[i] = sum;
         }
-
-        output
     }
 
     /// Compose two restriction maps: (B o A)(x) = B(A(x))

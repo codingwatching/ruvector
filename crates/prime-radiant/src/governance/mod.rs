@@ -18,8 +18,9 @@ mod repository;
 mod witness;
 
 pub use policy::{
-    ApprovalSignature, ApproverId, EscalationRule, PolicyBundle, PolicyBundleBuilder,
-    PolicyBundleId, PolicyBundleRef, PolicyBundleStatus, PolicyError, ThresholdConfig,
+    ApprovalSignature, ApproverId, EscalationCondition, EscalationRule, PolicyBundle,
+    PolicyBundleBuilder, PolicyBundleId, PolicyBundleRef, PolicyBundleStatus, PolicyError,
+    ThresholdConfig,
 };
 
 pub use witness::{

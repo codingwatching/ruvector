@@ -105,6 +105,11 @@ dashmap = { workspace = true }
 once_cell = { workspace = true }
 
 # -----------------------------------------------------------------------------
+# SIMD
+# -----------------------------------------------------------------------------
+wide = { version = "0.7", optional = true }
+
+# -----------------------------------------------------------------------------
 # Async Runtime (for distributed)
 # -----------------------------------------------------------------------------
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "macros", "time"], optional = true }
@@ -199,7 +204,7 @@ postgres = ["sqlx", "tokio", "futures"]
 # -----------------------------------------------------------------------------
 # Performance Features
 # -----------------------------------------------------------------------------
-simd = ["ruvector-core/simd"]
+simd = ["ruvector-core/simd", "wide"]
 parallel = ["rayon", "crossbeam"]
 
 # -----------------------------------------------------------------------------
@@ -247,6 +252,10 @@ name = "ruvllm_integration_tests"
 path = "tests/ruvllm_integration_tests.rs"
 required-features = ["ruvllm"]
 
+[[test]]
+name = "storage_tests"
+path = "tests/storage_tests.rs"
+
 # ============================================================================
 # BENCHMARKS (only existing ones)
 # ============================================================================
@@ -282,6 +291,32 @@ harness = false
 [[bench]]
 name = "hyperbolic_bench"
 harness = false
+
+# ============================================================================
+# EXAMPLES
+# ============================================================================
+
+[[example]]
+name = "basic_coherence"
+path = "examples/basic_coherence.rs"
+
+[[example]]
+name = "llm_validation"
+path = "examples/llm_validation.rs"
+required-features = ["ruvllm"]
+
+[[example]]
+name = "memory_tracking"
+path = "examples/memory_tracking.rs"
+required-features = ["ruvllm"]
+
+[[example]]
+name = "compute_ladder"
+path = "examples/compute_ladder.rs"
+
+[[example]]
+name = "governance_audit"
+path = "examples/governance_audit.rs"
 
 # ============================================================================
 # DOCUMENTATION

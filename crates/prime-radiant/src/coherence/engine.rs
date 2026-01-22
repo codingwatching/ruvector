@@ -262,6 +262,7 @@ impl RestrictionMap {
     }
 
     /// Apply the restriction map: y = Ax + b
+    #[inline]
     pub fn apply(&self, x: &[f32]) -> Vec<f32> {
         debug_assert_eq!(
             x.len(),
@@ -280,15 +281,61 @@ impl RestrictionMap {
         }
         #[cfg(not(feature = "simd"))]
         {
-            for row in 0..self.output_dim {
-                let row_offset = row * self.input_dim;
-                for col in 0..self.input_dim {
-                    result[row] += self.matrix[row_offset + col] * x[col];
-                }
-            }
+            self.apply_scalar(x, &mut result);
         }
 
         result
+    }
+
+    /// Apply restriction map into pre-allocated buffer (zero allocation hot path)
+    #[inline]
+    pub fn apply_into(&self, x: &[f32], result: &mut [f32]) {
+        debug_assert_eq!(x.len(), self.input_dim);
+        debug_assert_eq!(result.len(), self.output_dim);
+
+        result.copy_from_slice(&self.bias);
+
+        #[cfg(feature = "simd")]
+        {
+            self.apply_simd(x, result);
+        }
+        #[cfg(not(feature = "simd"))]
+        {
+            self.apply_scalar(x, result);
+        }
+    }
+
+    /// Scalar matrix-vector multiplication with loop unrolling
+    #[cfg(not(feature = "simd"))]
+    #[inline]
+    fn apply_scalar(&self, x: &[f32], result: &mut [f32]) {
+        // Process 4 rows at a time for ILP
+        let row_chunks = self.output_dim / 4;
+        let row_rem = self.output_dim % 4;
+
+        for chunk in 0..row_chunks {
+            let base = chunk * 4;
+            let row0 = base * self.input_dim;
+            let row1 = (base + 1) * self.input_dim;
+            let row2 = (base + 2) * self.input_dim;
+            let row3 = (base + 3) * self.input_dim;
+
+            for col in 0..self.input_dim {
+                let xv = x[col];
+                result[base] += self.matrix[row0 + col] * xv;
+                result[base + 1] += self.matrix[row1 + col] * xv;
+                result[base + 2] += self.matrix[row2 + col] * xv;
+                result[base + 3] += self.matrix[row3 + col] * xv;
+            }
+        }
+
+        // Handle remainder rows
+        for row in (self.output_dim - row_rem)..self.output_dim {
+            let row_offset = row * self.input_dim;
+            for col in 0..self.input_dim {
+                result[row] += self.matrix[row_offset + col] * x[col];
+            }
+        }
     }
 
     /// SIMD-optimized matrix-vector multiplication
@@ -392,6 +439,7 @@ impl SheafEdge {
     }
 
     /// Calculate the edge residual: r_e = rho_u(x_u) - rho_v(x_v)
+    #[inline]
     pub fn residual(&self, source_state: &[f32], target_state: &[f32]) -> Vec<f32> {
         let projected_source = self.rho_source.apply(source_state);
         let projected_target = self.rho_target.apply(target_state);
@@ -400,10 +448,28 @@ impl SheafEdge {
     }
 
     /// Calculate weighted residual energy: w_e * |r_e|^2
+    #[inline]
     pub fn weighted_residual_energy(&self, source: &[f32], target: &[f32]) -> f32 {
         let r = self.residual(source, target);
         let norm_sq = compute_norm_sq(&r);
         self.weight * norm_sq
+    }
+
+    /// Calculate weighted residual energy with pre-allocated buffers (zero allocation)
+    /// This is the preferred method for hot paths in batch computation.
+    #[inline]
+    pub fn weighted_residual_energy_into(
+        &self,
+        source: &[f32],
+        target: &[f32],
+        source_buf: &mut [f32],
+        target_buf: &mut [f32],
+    ) -> f32 {
+        self.rho_source.apply_into(source, source_buf);
+        self.rho_target.apply_into(target, target_buf);
+
+        // Compute norm squared directly without allocating residual
+        super::energy::compute_residual_norm_sq(source_buf, target_buf) * self.weight
     }
 
     /// Create an EdgeEnergy from this edge
@@ -767,16 +833,18 @@ impl CoherenceEngine {
     // Private methods
 
     fn compute_all_edge_energies(&self) -> HashMap<EdgeId, EdgeEnergy> {
-        #[cfg(feature = "parallel")]
         let edge_count = self.edges.len();
 
-        // Collect edges for parallel processing
+        // Pre-allocate HashMap with known capacity
+        let mut result = HashMap::with_capacity(edge_count);
+
+        // Collect edges for processing
         let edges: Vec<_> = self.edges.iter().collect();
 
         // Choose parallel or sequential based on size
         #[cfg(feature = "parallel")]
         if edge_count >= self.config.parallel_threshold {
-            return edges
+            let parallel_results: Vec<_> = edges
                 .par_iter()
                 .filter_map(|edge_ref| {
                     let edge = edge_ref.value();
@@ -784,17 +852,67 @@ impl CoherenceEngine {
                         .map(|e| (edge.id.clone(), e))
                 })
                 .collect();
+
+            result.extend(parallel_results);
+            return result;
         }
 
-        // Sequential fallback
-        edges
-            .iter()
-            .filter_map(|edge_ref| {
-                let edge = edge_ref.value();
-                self.compute_edge_energy_internal(edge)
-                    .map(|e| (edge.id.clone(), e))
-            })
-            .collect()
+        // Sequential path - use pre-allocated buffers for zero-allocation hot loop
+        let state_dim = self.config.default_dimension;
+        let mut source_buf = vec![0.0f32; state_dim];
+        let mut target_buf = vec![0.0f32; state_dim];
+
+        for edge_ref in &edges {
+            let edge = edge_ref.value();
+            if let Some(energy) = self.compute_edge_energy_with_buffers(
+                edge,
+                &mut source_buf,
+                &mut target_buf,
+            ) {
+                result.insert(edge.id.clone(), energy);
+            }
+        }
+
+        result
+    }
+
+    /// Compute edge energy with pre-allocated buffers (zero allocation hot path)
+    #[inline]
+    fn compute_edge_energy_with_buffers(
+        &self,
+        edge: &SheafEdge,
+        source_buf: &mut Vec<f32>,
+        target_buf: &mut Vec<f32>,
+    ) -> Option<EdgeEnergy> {
+        let source_node = self.nodes.get(&edge.source)?;
+        let target_node = self.nodes.get(&edge.target)?;
+
+        let source_state = &source_node.state.state;
+        let target_state = &target_node.state.state;
+
+        // Resize buffers if needed
+        let out_dim = edge.rho_source.output_dim;
+        if source_buf.len() < out_dim {
+            source_buf.resize(out_dim, 0.0);
+            target_buf.resize(out_dim, 0.0);
+        }
+
+        // Use zero-allocation path
+        let energy = edge.weighted_residual_energy_into(
+            source_state,
+            target_state,
+            &mut source_buf[..out_dim],
+            &mut target_buf[..out_dim],
+        );
+
+        // Create lightweight EdgeEnergy without storing residual
+        Some(EdgeEnergy::new_lightweight(
+            edge.id.clone(),
+            edge.source.clone(),
+            edge.target.clone(),
+            energy / edge.weight, // Recover norm_sq
+            edge.weight,
+        ))
     }
 
     fn compute_edge_energy_internal(&self, edge: &SheafEdge) -> Option<EdgeEnergy> {

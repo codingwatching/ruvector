@@ -623,6 +623,7 @@ mod tests {
             GateDecision::allow(ComputeLane::Reflex),
         );
         assert!(witness1.is_genesis());
+        let witness1_id = witness1.id.clone();
 
         // Second witness
         let action2 = Hash::from_bytes([2u8; 32]);
@@ -633,7 +634,7 @@ mod tests {
         );
         assert!(!witness2.is_genesis());
         assert_eq!(witness2.sequence, 1);
-        assert_eq!(witness2.previous_witness, Some(witness1.id));
+        assert_eq!(witness2.previous_witness, Some(witness1_id));
     }
 
     #[test]

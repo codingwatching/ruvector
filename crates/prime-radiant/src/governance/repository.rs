@@ -949,8 +949,8 @@ impl LineageRepository for InMemoryLineageRepository {
 mod tests {
     use super::*;
     use crate::governance::{
-        ApprovalSignature, ApproverId, ComputeLane, EnergySnapshot, GateDecision, PolicyBundleRef,
-        ThresholdConfig, Version,
+        EnergySnapshot, GateDecision, PolicyBundleRef, ThresholdConfig,
+        WitnessComputeLane as ComputeLane,
     };
 
     fn test_policy() -> PolicyBundle {

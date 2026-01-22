@@ -884,6 +884,8 @@ mod tests {
     #[test]
     fn test_duplicate_approver_rejected() -> Result<(), PolicyError> {
         let mut policy = PolicyBundle::new("test");
+        // Require 2 approvals so policy stays pending after first approval
+        policy.set_required_approvals(2)?;
         policy.submit_for_approval()?;
 
         let approver = ApproverId::new("same-approver");

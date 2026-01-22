@@ -939,8 +939,8 @@ impl Default for UnifiedWitnessLog {
 mod tests {
     use super::*;
     use crate::governance::{
-        ComputeLane, EnergySnapshot, GateDecision, Hash, PolicyBundleId, PolicyBundleRef, Timestamp,
-        Version, WitnessId,
+        EnergySnapshot, GateDecision, Hash, PolicyBundleId, PolicyBundleRef, Timestamp, Version,
+        WitnessComputeLane as ComputeLane, WitnessId,
     };
 
     fn test_inference_summary() -> InferenceWitnessSummary {

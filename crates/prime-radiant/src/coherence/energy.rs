@@ -40,6 +40,7 @@ pub struct EdgeEnergy {
 
 impl EdgeEnergy {
     /// Create a new edge energy
+    #[inline]
     pub fn new(
         edge_id: impl Into<EdgeId>,
         source: impl Into<String>,
@@ -56,6 +57,27 @@ impl EdgeEnergy {
             target: target.into(),
             energy,
             residual,
+            residual_norm_sq,
+            weight,
+        }
+    }
+
+    /// Create edge energy without storing residual (lightweight version)
+    /// Use this when the residual vector is not needed for debugging/analysis
+    #[inline]
+    pub fn new_lightweight(
+        edge_id: impl Into<EdgeId>,
+        source: impl Into<String>,
+        target: impl Into<String>,
+        residual_norm_sq: f32,
+        weight: f32,
+    ) -> Self {
+        Self {
+            edge_id: edge_id.into(),
+            source: source.into(),
+            target: target.into(),
+            energy: weight * residual_norm_sq,
+            residual: Vec::new(),
             residual_norm_sq,
             weight,
         }
@@ -400,16 +422,54 @@ pub struct EnergyStatistics {
 /// Compute the squared L2 norm of a vector
 ///
 /// Uses SIMD optimization when available via the `simd` feature.
+/// For small vectors (<= 8), uses unrolled scalar loop for better performance.
 #[inline]
 pub fn compute_norm_sq(v: &[f32]) -> f32 {
+    let len = v.len();
+
+    // Fast path for small vectors - avoid SIMD overhead
+    if len <= 8 {
+        let mut sum = 0.0f32;
+        for &x in v {
+            sum += x * x;
+        }
+        return sum;
+    }
+
     #[cfg(feature = "simd")]
     {
         compute_norm_sq_simd(v)
     }
     #[cfg(not(feature = "simd"))]
     {
-        v.iter().map(|x| x * x).sum()
+        compute_norm_sq_unrolled(v)
     }
+}
+
+/// Unrolled scalar computation for non-SIMD builds
+#[cfg(not(feature = "simd"))]
+#[inline]
+fn compute_norm_sq_unrolled(v: &[f32]) -> f32 {
+    let chunks = v.chunks_exact(4);
+    let remainder = chunks.remainder();
+
+    let mut acc0 = 0.0f32;
+    let mut acc1 = 0.0f32;
+    let mut acc2 = 0.0f32;
+    let mut acc3 = 0.0f32;
+
+    for chunk in chunks {
+        acc0 += chunk[0] * chunk[0];
+        acc1 += chunk[1] * chunk[1];
+        acc2 += chunk[2] * chunk[2];
+        acc3 += chunk[3] * chunk[3];
+    }
+
+    let mut sum = acc0 + acc1 + acc2 + acc3;
+    for &x in remainder {
+        sum += x * x;
+    }
+    sum
 }
 
 /// SIMD-optimized squared norm computation
@@ -448,18 +508,111 @@ pub fn compute_residual(projected_source: &[f32], projected_target: &[f32]) -> V
         "Projected vectors must have same dimension"
     );
 
+    let len = projected_source.len();
+    let mut result = Vec::with_capacity(len);
+
     #[cfg(feature = "simd")]
     {
-        compute_residual_simd(projected_source, projected_target)
+        result = compute_residual_simd(projected_source, projected_target);
     }
     #[cfg(not(feature = "simd"))]
     {
-        projected_source
-            .iter()
-            .zip(projected_target.iter())
-            .map(|(a, b)| a - b)
-            .collect()
+        // Unrolled loop for better vectorization
+        let chunks_a = projected_source.chunks_exact(4);
+        let chunks_b = projected_target.chunks_exact(4);
+        let rem_a = chunks_a.remainder();
+        let rem_b = chunks_b.remainder();
+
+        for (ca, cb) in chunks_a.zip(chunks_b) {
+            result.push(ca[0] - cb[0]);
+            result.push(ca[1] - cb[1]);
+            result.push(ca[2] - cb[2]);
+            result.push(ca[3] - cb[3]);
+        }
+        for (&a, &b) in rem_a.iter().zip(rem_b.iter()) {
+            result.push(a - b);
+        }
     }
+    result
+}
+
+/// Compute residual into pre-allocated buffer (zero allocation)
+#[inline]
+pub fn compute_residual_into(projected_source: &[f32], projected_target: &[f32], result: &mut [f32]) {
+    debug_assert_eq!(
+        projected_source.len(),
+        projected_target.len(),
+        "Projected vectors must have same dimension"
+    );
+    debug_assert_eq!(result.len(), projected_source.len(), "Result buffer size mismatch");
+
+    // Unrolled loop for better vectorization
+    let len = projected_source.len();
+    let chunks = len / 4;
+
+    for i in 0..chunks {
+        let base = i * 4;
+        result[base] = projected_source[base] - projected_target[base];
+        result[base + 1] = projected_source[base + 1] - projected_target[base + 1];
+        result[base + 2] = projected_source[base + 2] - projected_target[base + 2];
+        result[base + 3] = projected_source[base + 3] - projected_target[base + 3];
+    }
+    for i in (chunks * 4)..len {
+        result[i] = projected_source[i] - projected_target[i];
+    }
+}
+
+/// Compute residual norm squared directly without allocating residual vector
+/// This is the most efficient path when the residual vector itself is not needed
+#[inline]
+pub fn compute_residual_norm_sq(projected_source: &[f32], projected_target: &[f32]) -> f32 {
+    debug_assert_eq!(
+        projected_source.len(),
+        projected_target.len(),
+        "Projected vectors must have same dimension"
+    );
+
+    let len = projected_source.len();
+
+    // Fast path for small vectors
+    if len <= 8 {
+        let mut sum = 0.0f32;
+        for (&a, &b) in projected_source.iter().zip(projected_target.iter()) {
+            let d = a - b;
+            sum += d * d;
+        }
+        return sum;
+    }
+
+    // Unrolled loop with 4 accumulators for ILP
+    let chunks = len / 4;
+    let mut acc0 = 0.0f32;
+    let mut acc1 = 0.0f32;
+    let mut acc2 = 0.0f32;
+    let mut acc3 = 0.0f32;
+
+    for i in 0..chunks {
+        let base = i * 4;
+        let d0 = projected_source[base] - projected_target[base];
+        let d1 = projected_source[base + 1] - projected_target[base + 1];
+        let d2 = projected_source[base + 2] - projected_target[base + 2];
+        let d3 = projected_source[base + 3] - projected_target[base + 3];
+
+        acc0 += d0 * d0;
+        acc1 += d1 * d1;
+        acc2 += d2 * d2;
+        acc3 += d3 * d3;
+    }
+
+    let mut sum = acc0 + acc1 + acc2 + acc3;
+
+    // Handle remainder
+    for i in (chunks * 4)..len {
+        let d = projected_source[i] - projected_target[i];
+        sum += d * d;
+    }
+
+    sum
 }
 
 /// SIMD-optimized residual computation
