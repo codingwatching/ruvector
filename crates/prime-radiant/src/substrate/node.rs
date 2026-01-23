@@ -80,15 +80,26 @@ impl StateVector {
 
     /// Compute L2 norm squared (for energy calculations)
     ///
-    /// SIMD-optimized: Uses 4-lane accumulation for better vectorization.
+    /// SIMD-optimized: Uses chunks_exact for proper auto-vectorization.
     #[inline]
     pub fn norm_squared(&self) -> f32 {
-        // SIMD-friendly 4-lane accumulation
-        let mut lanes = [0.0f32; 4];
-        for (i, &x) in self.data.iter().enumerate() {
-            lanes[i % 4] += x * x;
+        // Process 4 elements at a time for auto-vectorization
+        let chunks = self.data.chunks_exact(4);
+        let remainder = chunks.remainder();
+
+        let mut acc = [0.0f32; 4];
+        for chunk in chunks {
+            acc[0] += chunk[0] * chunk[0];
+            acc[1] += chunk[1] * chunk[1];
+            acc[2] += chunk[2] * chunk[2];
+            acc[3] += chunk[3] * chunk[3];
         }
-        lanes[0] + lanes[1] + lanes[2] + lanes[3]
+
+        let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+        for &x in remainder {
+            sum += x * x;
+        }
+        sum
     }
 
     /// Compute L2 norm
@@ -99,16 +110,30 @@ impl StateVector {
 
     /// Compute dot product with another vector
     ///
-    /// SIMD-optimized: Uses 4-lane accumulation.
+    /// SIMD-optimized: Uses chunks_exact for proper auto-vectorization.
     #[inline]
     pub fn dot(&self, other: &Self) -> f32 {
         debug_assert_eq!(self.dim, other.dim, "Vector dimensions must match");
 
-        let mut lanes = [0.0f32; 4];
-        for (i, (&a, &b)) in self.data.iter().zip(other.data.iter()).enumerate() {
-            lanes[i % 4] += a * b;
+        // Process 4 elements at a time for auto-vectorization
+        let chunks_a = self.data.chunks_exact(4);
+        let chunks_b = other.data.chunks_exact(4);
+        let remainder_a = chunks_a.remainder();
+        let remainder_b = chunks_b.remainder();
+
+        let mut acc = [0.0f32; 4];
+        for (ca, cb) in chunks_a.zip(chunks_b) {
+            acc[0] += ca[0] * cb[0];
+            acc[1] += ca[1] * cb[1];
+            acc[2] += ca[2] * cb[2];
+            acc[3] += ca[3] * cb[3];
         }
-        lanes[0] + lanes[1] + lanes[2] + lanes[3]
+
+        let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+        for (&a, &b) in remainder_a.iter().zip(remainder_b.iter()) {
+            sum += a * b;
+        }
+        sum
     }
 
     /// Subtract another vector (for residual calculation)

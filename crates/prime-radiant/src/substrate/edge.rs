@@ -138,12 +138,23 @@ impl SheafEdge {
     pub fn residual_norm_squared(&self, source_state: &[f32], target_state: &[f32]) -> f32 {
         let residual = self.residual(source_state, target_state);
 
-        // SIMD-friendly 4-lane accumulation
-        let mut lanes = [0.0f32; 4];
-        for (i, &r) in residual.iter().enumerate() {
-            lanes[i % 4] += r * r;
+        // SIMD-friendly: process 4 elements at a time using chunks_exact
+        let chunks = residual.chunks_exact(4);
+        let remainder = chunks.remainder();
+
+        let mut acc = [0.0f32; 4];
+        for chunk in chunks {
+            acc[0] += chunk[0] * chunk[0];
+            acc[1] += chunk[1] * chunk[1];
+            acc[2] += chunk[2] * chunk[2];
+            acc[3] += chunk[3] * chunk[3];
         }
-        lanes[0] + lanes[1] + lanes[2] + lanes[3]
+
+        let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+        for &r in remainder {
+            sum += r * r;
+        }
+        sum
     }
 
     /// Calculate weighted residual energy
@@ -168,12 +179,22 @@ impl SheafEdge {
     ) -> (Vec<f32>, f32) {
         let residual = self.residual(source_state, target_state);
 
-        // SIMD-friendly norm squared calculation
-        let mut lanes = [0.0f32; 4];
-        for (i, &r) in residual.iter().enumerate() {
-            lanes[i % 4] += r * r;
+        // SIMD-friendly: process 4 elements at a time using chunks_exact
+        let chunks = residual.chunks_exact(4);
+        let remainder = chunks.remainder();
+
+        let mut acc = [0.0f32; 4];
+        for chunk in chunks {
+            acc[0] += chunk[0] * chunk[0];
+            acc[1] += chunk[1] * chunk[1];
+            acc[2] += chunk[2] * chunk[2];
+            acc[3] += chunk[3] * chunk[3];
         }
-        let norm_sq = lanes[0] + lanes[1] + lanes[2] + lanes[3];
+
+        let mut norm_sq = acc[0] + acc[1] + acc[2] + acc[3];
+        for &r in remainder {
+            norm_sq += r * r;
+        }
         let energy = self.weight * norm_sq;
 
         (residual, energy)

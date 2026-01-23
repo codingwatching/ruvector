@@ -331,9 +331,29 @@ impl SheafGraph {
         id
     }
 
-    /// Get a node by ID
+    /// Get a node by ID (clones the node)
     pub fn get_node(&self, id: NodeId) -> Option<SheafNode> {
         self.nodes.get(&id).map(|n| n.clone())
+    }
+
+    /// Get a reference to a node without cloning
+    ///
+    /// Returns a DashMap reference guard for read-only access.
+    /// More efficient than `get_node()` when you only need to read.
+    #[inline]
+    pub fn get_node_ref(
+        &self,
+        id: NodeId,
+    ) -> Option<dashmap::mapref::one::Ref<'_, NodeId, SheafNode>> {
+        self.nodes.get(&id)
+    }
+
+    /// Execute a closure with a reference to a node (zero-copy read)
+    ///
+    /// More efficient than get_node() when you only need to read node data.
+    #[inline]
+    pub fn with_node<R>(&self, id: NodeId, f: impl FnOnce(&SheafNode) -> R) -> Option<R> {
+        self.nodes.get(&id).map(|n| f(&n))
     }
 
     /// Get a reference to a node (for reading state)

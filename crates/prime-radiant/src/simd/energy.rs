@@ -330,24 +330,28 @@ pub fn batch_lane_assignment_simd(
     let remainder_e = chunks_e.remainder();
     let offset = len - remainder_e.len();
 
+    let v_one = f32x8::splat(1.0);
+    let v_zero = f32x8::ZERO;
+
     for (ce, cl) in chunks_e.zip(chunks_l) {
         let ve = load_f32x8(ce);
 
-        // Branchless comparison: count thresholds exceeded
-        // Using cmp_ge which returns a mask, then convert to 0/1
-        let above_reflex = ve.cmp_ge(vt_reflex);
-        let above_retrieval = ve.cmp_ge(vt_retrieval);
-        let above_heavy = ve.cmp_ge(vt_heavy);
+        // Branchless comparison using SIMD masks
+        let mask_reflex = ve.cmp_ge(vt_reflex);
+        let mask_retrieval = ve.cmp_ge(vt_retrieval);
+        let mask_heavy = ve.cmp_ge(vt_heavy);
 
-        // Convert masks to lane indices
-        // Each comparison adds 1 when true
-        let arr_e: [f32; 8] = ve.into();
+        // Convert masks to 1.0/0.0 using blend, then sum
+        let add_reflex = mask_reflex.blend(v_one, v_zero);
+        let add_retrieval = mask_retrieval.blend(v_one, v_zero);
+        let add_heavy = mask_heavy.blend(v_one, v_zero);
+
+        let lane_floats = add_reflex + add_retrieval + add_heavy;
+        let lane_arr: [f32; 8] = lane_floats.into();
+
+        // Convert to u8 (branchless)
         for i in 0..8 {
-            let e = arr_e[i];
-            let lane = (e >= t_reflex) as u8
-                + (e >= t_retrieval) as u8
-                + (e >= t_heavy) as u8;
-            cl[i] = lane.min(3);
+            cl[i] = (lane_arr[i] as u8).min(3);
         }
     }
 
@@ -515,10 +519,8 @@ fn batch_lane_assignment_scalar(energies: &[f32], thresholds: [f32; 4], lanes: &
 #[inline(always)]
 fn load_f32x8(slice: &[f32]) -> f32x8 {
     debug_assert!(slice.len() >= 8);
-    let arr: [f32; 8] = [
-        slice[0], slice[1], slice[2], slice[3],
-        slice[4], slice[5], slice[6], slice[7],
-    ];
+    // Use try_into for direct memory copy instead of element-by-element
+    let arr: [f32; 8] = slice[..8].try_into().unwrap();
     f32x8::from(arr)
 }
 

@@ -386,10 +386,8 @@ fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {
 #[inline(always)]
 fn load_f32x8(slice: &[f32]) -> f32x8 {
     debug_assert!(slice.len() >= 8);
-    let arr: [f32; 8] = [
-        slice[0], slice[1], slice[2], slice[3],
-        slice[4], slice[5], slice[6], slice[7],
-    ];
+    // Use try_into for direct memory copy instead of element-by-element
+    let arr: [f32; 8] = slice[..8].try_into().unwrap();
     f32x8::from(arr)
 }
 
