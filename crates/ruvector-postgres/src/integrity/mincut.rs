@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_mincut_triangle() {
-        use super::super::contracted_graph::{ContractedEdge, ContractedNode};
+        use super::super::contracted_graph::{ContractedEdge, ContractedNode, EdgeType};
 
         let mut graph = ContractedGraph::new(1);
         for i in 0..3 {
@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_witness_edges() {
-        use super::super::contracted_graph::{ContractedEdge, ContractedNode};
+        use super::super::contracted_graph::{ContractedEdge, ContractedNode, EdgeType};
 
         let mut graph = ContractedGraph::new(1);
         graph.add_node(ContractedNode::new(1, NodeType::Partition, 0));
