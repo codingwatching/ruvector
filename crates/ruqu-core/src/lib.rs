@@ -1,8 +1,9 @@
-//! # ruqu-core -- Quantum Simulation Engine
+//! # ruqu-core -- Quantum Execution Intelligence Engine
 //!
-//! Pure Rust state-vector quantum simulator for the ruVector stack.
-//! Supports up to 32 qubits (state vector), millions via stabilizer, common gates, measurement, noise models,
-//! and expectation value computation.
+//! Pure Rust quantum simulation and execution engine for the ruVector stack.
+//! Supports state-vector (up to 32 qubits), stabilizer (millions), Clifford+T
+//! (moderate T-count), and tensor network backends with automatic routing,
+//! noise modeling, error mitigation, and cryptographic witness logging.
 //!
 //! ## Quick Start
 //!
@@ -17,6 +18,7 @@
 //! // probs ~= [0.5, 0.0, 0.0, 0.5]
 //! ```
 
+// -- Core simulation layer --
 pub mod types;
 pub mod error;
 pub mod gate;
@@ -31,6 +33,26 @@ pub mod circuit_analyzer;
 pub mod stabilizer;
 pub mod tensor_network;
 
+// -- Scientific instrument layer (ADR-QE-015) --
+pub mod qasm;
+pub mod noise;
+pub mod mitigation;
+pub mod hardware;
+pub mod transpiler;
+pub mod replay;
+pub mod witness;
+pub mod confidence;
+pub mod verification;
+
+// -- SOTA differentiation layer --
+pub mod planner;
+pub mod clifford_t;
+pub mod decomposition;
+
+// -- QEC control plane --
+pub mod decoder;
+pub mod qec_scheduler;
+
 /// Re-exports of the most commonly used items.
 pub mod prelude {
     pub use crate::types::*;
@@ -39,4 +61,6 @@ pub mod prelude {
     pub use crate::state::QuantumState;
     pub use crate::circuit::QuantumCircuit;
     pub use crate::simulator::{SimConfig, SimulationResult, Simulator, ShotResult};
+    pub use crate::qasm::to_qasm3;
+    pub use crate::backend::BackendType;
 }

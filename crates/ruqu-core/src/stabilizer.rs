@@ -433,6 +433,20 @@ impl StabilizerState {
         &self.measurement_record
     }
 
+    /// Create a copy of this stabilizer state with a new RNG seed.
+    ///
+    /// The quantum state (tableau) is duplicated exactly; only the RNG
+    /// and measurement record are reset.  This is used by the Clifford+T
+    /// backend to fork stabilizer terms during T-gate decomposition.
+    pub fn clone_with_seed(&self, seed: u64) -> Result<Self> {
+        Ok(Self {
+            num_qubits: self.num_qubits,
+            tableau: self.tableau.clone(),
+            rng: StdRng::seed_from_u64(seed),
+            measurement_record: Vec::new(),
+        })
+    }
+
     /// Check whether a gate is a Clifford gate (simulable by this backend).
     ///
     /// Clifford gates are: H, X, Y, Z, S, Sdg, CNOT, CZ, SWAP.
