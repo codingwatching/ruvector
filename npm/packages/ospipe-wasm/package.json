@@ -1,0 +1,33 @@
+{
+  "name": "@ruvector/ospipe-wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OSpipe: RuVector-enhanced personal AI memory for browsers - WASM bindings",
+  "main": "ospipe_wasm.js",
+  "types": "ospipe_wasm.d.ts",
+  "module": "ospipe_wasm.js",
+  "keywords": [
+    "ospipe",
+    "screenpipe",
+    "wasm",
+    "vector-search",
+    "ai-memory",
+    "ruvector"
+  ],
+  "author": "RuVector Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/ruvector.git",
+    "directory": "examples/OSpipe"
+  },
+  "files": [
+    "ospipe_wasm_bg.wasm",
+    "ospipe_wasm.js",
+    "ospipe_wasm.d.ts",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

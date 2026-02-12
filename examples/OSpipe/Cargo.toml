@@ -1,0 +1,52 @@
+[package]
+name = "ospipe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+description = "OSpipe: RuVector-enhanced personal AI memory system integrating with Screenpipe"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/ruvector"
+
+[dependencies]
+# Serialization (cross-platform)
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling and utilities (cross-platform)
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Time and UUID (cross-platform)
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde", "js"] }
+
+# Math (cross-platform)
+rand = { workspace = true }
+
+# Native-only: RuVector ecosystem (path dependencies)
+# These crates pull in platform-specific code (mmap, tokio, ring, etc.) that
+# does not compile for wasm32-unknown-unknown.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ruvector-core = { path = "../../crates/ruvector-core" }
+ruvector-filter = { path = "../../crates/ruvector-filter" }
+ruvector-cluster = { path = "../../crates/ruvector-cluster" }
+ruvector-delta-core = { path = "../../crates/ruvector-delta-core", features = ["serde"] }
+ruvector-router-core = { path = "../../crates/ruvector-router-core" }
+cognitum-gate-kernel = { path = "../../crates/cognitum-gate-kernel", default-features = true }
+
+# WASM-only dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[features]
+default = []
+
+[lib]
+crate-type = ["cdylib", "rlib"]
