@@ -160,16 +160,27 @@ pub fn has_ssn_pattern(content: &str) -> bool {
 /// Simple safety classification for content.
 ///
 /// Returns `"deny"`, `"redact"`, or `"allow"`.
+///
+/// Classification matches native `SafetyGate::check`:
+/// - Credit card patterns -> "redact"
+/// - SSN patterns -> "redact"
+/// - Email patterns -> "redact"
+/// - Custom sensitive keywords -> "deny"
 pub fn safety_classify(content: &str) -> &'static str {
+    // PII patterns are redacted (matching native SafetyGate behavior)
     if has_credit_card_pattern(content) {
-        return "deny";
+        return "redact";
     }
     if has_ssn_pattern(content) {
-        return "deny";
+        return "redact";
+    }
+    if has_email_pattern(content) {
+        return "redact";
     }
 
+    // Custom sensitive keywords are denied (matching native custom_patterns -> Deny)
     let lower = content.to_lowercase();
-    let redact_keywords = [
+    let deny_keywords = [
         "password",
         "secret",
         "api_key",
@@ -179,36 +190,91 @@ pub fn safety_classify(content: &str) -> &'static str {
         "private_key",
         "private-key",
     ];
-    for kw in &redact_keywords {
+    for kw in &deny_keywords {
         if lower.contains(kw) {
-            return "redact";
+            return "deny";
         }
     }
 
     "allow"
 }
 
-/// Route a query string to the optimal search backend.
-///
-/// Returns `"Graph"`, `"Temporal"`, `"Keyword"`, or `"Semantic"`.
-pub fn route_query(query: &str) -> &'static str {
-    let lower = query.to_lowercase();
+/// Check for email-like patterns: local@domain.tld
+pub fn has_email_pattern(content: &str) -> bool {
+    let chars: Vec<char> = content.chars().collect();
+    let len = chars.len();
 
-    let graph_keywords = [
-        "who", "person", "people", "contact", "relationship", "connected",
-        "friend", "colleague", "team", "member", "organization", "company",
-    ];
-    for kw in &graph_keywords {
-        if lower.contains(kw) {
-            return "Graph";
+    for i in 0..len {
+        if chars[i] == '@' {
+            // Must have at least one local-part char before '@'
+            if i == 0 || chars[i - 1].is_whitespace() {
+                continue;
+            }
+            // Must have at least one domain char and a dot after '@'
+            if i + 1 >= len || chars[i + 1].is_whitespace() {
+                continue;
+            }
+            // Scan backwards to find start of local part
+            let mut start = i;
+            while start > 0 && is_email_char(chars[start - 1]) {
+                start -= 1;
+            }
+            if start == i {
+                continue;
+            }
+            // Scan forwards to find end of domain
+            let mut end = i + 1;
+            let mut has_dot = false;
+            while end < len && is_domain_char(chars[end]) {
+                if chars[end] == '.' {
+                    has_dot = true;
+                }
+                end += 1;
+            }
+            if has_dot && end > i + 3 {
+                return true;
+            }
         }
     }
+    false
+}
 
+fn is_email_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '.' || c == '+' || c == '-' || c == '_'
+}
+
+fn is_domain_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '.' || c == '-'
+}
+
+/// Route a query string to the optimal search backend.
+///
+/// Returns `"Temporal"`, `"Graph"`, `"Keyword"`, or `"Hybrid"`.
+///
+/// Routing heuristics (matching native `QueryRouter::route`):
+/// - Temporal keywords ("yesterday", "last week", etc.) -> Temporal
+/// - Graph keywords ("related to", "connected to", etc.) -> Graph
+/// - Quoted exact phrases -> Keyword
+/// - Short queries (1-2 words) -> Keyword
+/// - Everything else -> Hybrid
+pub fn route_query(query: &str) -> &'static str {
+    let lower = query.to_lowercase();
+    let word_count = lower.split_whitespace().count();
+
+    // Temporal patterns (checked first, matching native router order)
     let temporal_keywords = [
-        "when", "date", "time", "yesterday", "today", "last week",
-        "last month", "before", "after", "between", "morning",
-        "afternoon", "evening", "recent", "latest", "earlier",
-        "ago", "since", "during", "history",
+        "yesterday",
+        "last week",
+        "last month",
+        "today",
+        "this morning",
+        "this afternoon",
+        "hours ago",
+        "minutes ago",
+        "days ago",
+        "between",
+        "before",
+        "after",
     ];
     for kw in &temporal_keywords {
         if lower.contains(kw) {
@@ -216,17 +282,32 @@ pub fn route_query(query: &str) -> &'static str {
         }
     }
 
-    let keyword_indicators = [
-        "exact", "literal", "find", "search for", "lookup", "look up",
-        "grep", "contains", "match",
+    // Graph patterns
+    let graph_keywords = [
+        "related to",
+        "connected to",
+        "linked with",
+        "associated with",
+        "relationship between",
     ];
-    for kw in &keyword_indicators {
+    for kw in &graph_keywords {
         if lower.contains(kw) {
-            return "Keyword";
+            return "Graph";
         }
     }
 
-    "Semantic"
+    // Exact phrase (quoted)
+    if query.starts_with('"') && query.ends_with('"') {
+        return "Keyword";
+    }
+
+    // Very short queries are better served by keyword
+    if word_count <= 2 {
+        return "Keyword";
+    }
+
+    // Default: hybrid combines the best of both
+    "Hybrid"
 }
 
 // ---------------------------------------------------------------------------
@@ -307,51 +388,70 @@ mod tests {
     }
 
     #[test]
-    fn test_safety_classify_deny_cc() {
-        assert_eq!(safety_classify("pay with 4111-1111-1111-1111"), "deny");
+    fn test_safety_classify_redact_cc() {
+        assert_eq!(safety_classify("pay with 4111-1111-1111-1111"), "redact");
     }
 
     #[test]
-    fn test_safety_classify_deny_ssn() {
-        assert_eq!(safety_classify("my ssn 123-45-6789"), "deny");
+    fn test_safety_classify_redact_ssn() {
+        assert_eq!(safety_classify("my ssn 123-45-6789"), "redact");
     }
 
     #[test]
-    fn test_safety_classify_redact_password() {
-        assert_eq!(safety_classify("my password is foo"), "redact");
+    fn test_safety_classify_redact_email() {
+        assert_eq!(safety_classify("contact user@example.com"), "redact");
     }
 
     #[test]
-    fn test_safety_classify_redact_api_key() {
-        assert_eq!(safety_classify("api_key: sk-abc123"), "redact");
+    fn test_safety_classify_deny_password() {
+        assert_eq!(safety_classify("my password is foo"), "deny");
+    }
+
+    #[test]
+    fn test_safety_classify_deny_api_key() {
+        assert_eq!(safety_classify("api_key: sk-abc123"), "deny");
     }
 
     #[test]
     fn test_safety_classify_allow() {
-        assert_eq!(safety_classify("the weather is nice today"), "allow");
+        assert_eq!(safety_classify("the weather is nice"), "allow");
     }
 
     #[test]
-    fn test_route_query_graph() {
-        assert_eq!(route_query("who was I talking to?"), "Graph");
-        assert_eq!(route_query("find people in my contacts"), "Graph");
+    fn test_has_email_pattern() {
+        assert!(has_email_pattern("contact user@example.com please"));
+        assert!(has_email_pattern("email: alice@test.org"));
+        assert!(!has_email_pattern("not an email"));
+        assert!(!has_email_pattern("@ alone"));
+        assert!(!has_email_pattern("no@d"));
     }
 
     #[test]
     fn test_route_query_temporal() {
-        assert_eq!(route_query("what happened yesterday?"), "Temporal");
+        assert_eq!(route_query("what happened yesterday"), "Temporal");
         assert_eq!(route_query("show me events from last week"), "Temporal");
     }
 
     #[test]
-    fn test_route_query_keyword() {
-        assert_eq!(route_query("find exact match for error code"), "Keyword");
-        assert_eq!(route_query("grep for TODO"), "Keyword");
+    fn test_route_query_graph() {
+        assert_eq!(route_query("documents related to authentication"), "Graph");
+        assert_eq!(route_query("things connected to the API module"), "Graph");
     }
 
     #[test]
-    fn test_route_query_semantic() {
-        assert_eq!(route_query("something about machine learning"), "Semantic");
-        assert_eq!(route_query("explain how embeddings work"), "Semantic");
+    fn test_route_query_keyword_quoted() {
+        assert_eq!(route_query("\"exact phrase search\""), "Keyword");
+    }
+
+    #[test]
+    fn test_route_query_keyword_short() {
+        assert_eq!(route_query("rust programming"), "Keyword");
+        assert_eq!(route_query("hello"), "Keyword");
+    }
+
+    #[test]
+    fn test_route_query_hybrid() {
+        assert_eq!(route_query("something about machine learning"), "Hybrid");
+        assert_eq!(route_query("explain how embeddings work"), "Hybrid");
     }
 }

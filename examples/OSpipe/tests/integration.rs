@@ -2,8 +2,10 @@
 
 use ospipe::capture::{CaptureSource, CapturedFrame};
 use ospipe::config::{OsPipeConfig, SafetyConfig, StorageConfig};
+use ospipe::graph::KnowledgeGraph;
 use ospipe::pipeline::{IngestionPipeline, IngestResult};
 use ospipe::safety::{SafetyDecision, SafetyGate};
+use ospipe::search::enhanced::EnhancedSearch;
 use ospipe::search::reranker::AttentionReranker;
 use ospipe::search::router::{QueryRoute, QueryRouter};
 use ospipe::search::hybrid::HybridSearch;
@@ -757,7 +759,6 @@ fn test_quantizer_dequantize_old_preserves_dimension() {
 // Knowledge graph tests
 // ---------------------------------------------------------------------------
 
-use ospipe::graph::KnowledgeGraph;
 use std::collections::HashMap;
 
 #[test]
@@ -1046,5 +1047,544 @@ fn test_quantum_amplitude_boost_all_same_side() {
             (orig.1 - current.1).abs() < 1e-5,
             "Scores should be unchanged when all are above threshold"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline with knowledge graph wired
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_pipeline_with_graph_extracts_entities() {
+    let config = OsPipeConfig::default();
+    let kg = KnowledgeGraph::new();
+    let mut pipeline = IngestionPipeline::new(config)
+        .unwrap()
+        .with_graph(kg);
+
+    // Ingest a frame whose text contains extractable entities.
+    let frame = CapturedFrame::new_screen(
+        "Browser",
+        "Meeting Notes",
+        "Meeting with John Smith at https://meet.example.com. Contact @alice.",
+        0,
+    );
+    let result = pipeline.ingest(frame).unwrap();
+
+    // Frame should be stored.
+    assert!(matches!(result, IngestResult::Stored { .. }));
+
+    // The knowledge graph should have extracted entities.
+    let kg = pipeline.knowledge_graph().expect("graph should be attached");
+    let frames = kg.find_by_label("Frame");
+    assert_eq!(frames.len(), 1, "Should have created a Frame node");
+
+    let people = kg.find_by_label("Person");
+    assert!(
+        people.iter().any(|e| e.name.contains("John Smith")),
+        "Should have extracted 'John Smith' as a Person entity, got: {:?}",
+        people
+    );
+
+    let urls = kg.find_by_label("Url");
+    assert!(
+        urls.iter().any(|e| e.name.contains("meet.example.com")),
+        "Should have extracted the URL entity, got: {:?}",
+        urls
+    );
+
+    let mentions = kg.find_by_label("Mention");
+    assert!(
+        mentions.iter().any(|e| e.name.contains("@alice")),
+        "Should have extracted the @alice mention, got: {:?}",
+        mentions
+    );
+}
+
+#[test]
+fn test_pipeline_without_graph_still_works() {
+    let config = OsPipeConfig::default();
+    let mut pipeline = IngestionPipeline::new(config).unwrap();
+
+    let frame = CapturedFrame::new_screen("App", "Win", "no graph attached", 0);
+    let result = pipeline.ingest(frame).unwrap();
+    assert!(matches!(result, IngestResult::Stored { .. }));
+    assert!(pipeline.knowledge_graph().is_none());
+}
+
+#[test]
+fn test_pipeline_graph_multiple_frames() {
+    let config = OsPipeConfig::default();
+    let kg = KnowledgeGraph::new();
+    let mut pipeline = IngestionPipeline::new(config)
+        .unwrap()
+        .with_graph(kg);
+
+    let frames = vec![
+        CapturedFrame::new_screen("App", "Win1", "Alice Smith works at https://company.com", 0),
+        CapturedFrame::new_screen("App", "Win2", "Bob Jones emailed bob@company.org", 0),
+    ];
+
+    pipeline.ingest_batch(frames).unwrap();
+
+    let kg = pipeline.knowledge_graph().unwrap();
+    let frame_nodes = kg.find_by_label("Frame");
+    assert_eq!(frame_nodes.len(), 2, "Should have 2 Frame nodes");
+}
+
+// ---------------------------------------------------------------------------
+// Enhanced search integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_enhanced_search_basic_integration() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let frames = vec![
+        CapturedFrame::new_screen("Editor", "code.rs", "implementing vector search in Rust", 0),
+        CapturedFrame::new_screen("Browser", "docs", "Rust vector database documentation", 0),
+        CapturedFrame::new_audio("Mic", "discussing Python machine learning", None),
+    ];
+
+    for frame in &frames {
+        let emb = engine.embed(frame.text_content());
+        store.insert(frame, &emb).unwrap();
+    }
+
+    let es = EnhancedSearch::new(384);
+    let query = "vector search Rust";
+    let query_emb = engine.embed(query);
+    let results = es.search(query, &query_emb, &store, 2).unwrap();
+
+    assert!(!results.is_empty(), "Enhanced search should return results");
+    assert!(results.len() <= 2, "Should respect k=2 limit");
+}
+
+#[test]
+fn test_enhanced_search_empty_store() {
+    let config = StorageConfig::default();
+    let store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let es = EnhancedSearch::new(384);
+    let query_emb = engine.embed("test query");
+    let results = es.search("test query", &query_emb, &store, 5).unwrap();
+    assert!(results.is_empty(), "Search on empty store should return no results");
+}
+
+#[test]
+fn test_enhanced_search_single_result() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let frame = CapturedFrame::new_screen("App", "Win", "unique single content", 0);
+    let emb = engine.embed(frame.text_content());
+    store.insert(&frame, &emb).unwrap();
+
+    let es = EnhancedSearch::new(384);
+    let query_emb = engine.embed("unique single content");
+    let results = es.search("unique single content", &query_emb, &store, 5).unwrap();
+
+    assert_eq!(results.len(), 1, "Should find the single stored frame");
+    assert_eq!(results[0].id, frame.id, "Should match the stored frame ID");
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end: ingest -> search -> reranked results
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_end_to_end_ingest_and_enhanced_search() {
+    let config = OsPipeConfig::default();
+    let kg = KnowledgeGraph::new();
+    let es = EnhancedSearch::new(config.storage.embedding_dim);
+    let mut pipeline = IngestionPipeline::new(config)
+        .unwrap()
+        .with_graph(kg)
+        .with_enhanced_search(es);
+
+    // Ingest several frames with varied content.
+    let frames = vec![
+        CapturedFrame::new_screen(
+            "VS Code",
+            "main.rs",
+            "fn main() { println!(\"hello world\"); }",
+            0,
+        ),
+        CapturedFrame::new_screen(
+            "Firefox",
+            "Rust docs",
+            "The Rust Programming Language book chapter on ownership",
+            0,
+        ),
+        CapturedFrame::new_audio(
+            "Mic",
+            "discussing the project architecture with Alice Smith",
+            None,
+        ),
+        CapturedFrame::new_screen(
+            "VS Code",
+            "lib.rs",
+            "pub struct VectorStore { embeddings: Vec<f32> }",
+            0,
+        ),
+    ];
+
+    let results = pipeline.ingest_batch(frames).unwrap();
+    let stored_count = results.iter().filter(|r| matches!(r, IngestResult::Stored { .. })).count();
+    assert!(stored_count >= 3, "Most frames should be stored");
+
+    // Search using the pipeline's convenience method (uses enhanced search).
+    let search_results = pipeline.search("Rust programming", 3).unwrap();
+    assert!(
+        !search_results.is_empty(),
+        "Enhanced pipeline search should find relevant frames"
+    );
+    assert!(
+        search_results.len() <= 3,
+        "Should respect k=3 limit, got {}",
+        search_results.len()
+    );
+
+    // All returned scores should be positive.
+    for sr in &search_results {
+        assert!(sr.score > 0.0, "Score should be positive, got {}", sr.score);
+    }
+
+    // Verify the knowledge graph captured entities.
+    let kg = pipeline.knowledge_graph().unwrap();
+    let people = kg.find_by_label("Person");
+    assert!(
+        people.iter().any(|e| e.name.contains("Alice Smith")),
+        "Graph should have captured 'Alice Smith' from audio transcription, got: {:?}",
+        people
+    );
+}
+
+#[test]
+fn test_pipeline_search_without_enhanced() {
+    let config = OsPipeConfig::default();
+    let mut pipeline = IngestionPipeline::new(config).unwrap();
+
+    let frame = CapturedFrame::new_screen("App", "Win", "basic search content", 0);
+    pipeline.ingest(frame).unwrap();
+
+    // Without enhanced search, the pipeline falls back to basic vector search.
+    let results = pipeline.search("basic search content", 5).unwrap();
+    assert!(!results.is_empty(), "Basic search should still work");
+    assert_eq!(results[0].score, 1.0, "Exact match should have score 1.0 (within tolerance)");
+}
+
+// ---------------------------------------------------------------------------
+// Delete / Update API tests (VectorStore)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_vector_store_delete() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let frame = CapturedFrame::new_screen("App", "Win", "delete me", 0);
+    let id = frame.id;
+    let emb = engine.embed(frame.text_content());
+    store.insert(&frame, &emb).unwrap();
+    assert_eq!(store.len(), 1);
+
+    // Delete the entry
+    let removed = store.delete(&id).unwrap();
+    assert!(removed, "delete should return true for existing id");
+    assert_eq!(store.len(), 0);
+    assert!(store.get(&id).is_none(), "get should return None after delete");
+
+    // Deleting again should return false
+    let removed_again = store.delete(&id).unwrap();
+    assert!(!removed_again, "delete should return false for missing id");
+}
+
+#[test]
+fn test_vector_store_delete_search_consistency() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let frame1 = CapturedFrame::new_screen("App", "Win", "keep this frame", 0);
+    let frame2 = CapturedFrame::new_screen("App", "Win", "remove this frame", 0);
+    let id2 = frame2.id;
+
+    let emb1 = engine.embed(frame1.text_content());
+    let emb2 = engine.embed(frame2.text_content());
+    store.insert(&frame1, &emb1).unwrap();
+    store.insert(&frame2, &emb2).unwrap();
+    assert_eq!(store.len(), 2);
+
+    store.delete(&id2).unwrap();
+    assert_eq!(store.len(), 1);
+
+    // Search should only return the remaining entry
+    let query = engine.embed("keep this frame");
+    let results = store.search(&query, 10).unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].id, frame1.id);
+}
+
+#[test]
+fn test_vector_store_update_metadata() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+    let engine = EmbeddingEngine::new(384);
+
+    let frame = CapturedFrame::new_screen("App", "Win", "update me", 0);
+    let id = frame.id;
+    let emb = engine.embed(frame.text_content());
+    store.insert(&frame, &emb).unwrap();
+
+    // Original metadata has "App" as app_name
+    let stored = store.get(&id).unwrap();
+    assert_eq!(
+        stored.metadata.get("app_name").and_then(|v| v.as_str()),
+        Some("App"),
+    );
+
+    // Update metadata
+    let new_meta = serde_json::json!({
+        "app_name": "UpdatedApp",
+        "custom_field": 42,
+    });
+    store.update_metadata(&id, new_meta).unwrap();
+
+    // Verify the update took effect
+    let stored = store.get(&id).unwrap();
+    assert_eq!(
+        stored.metadata.get("app_name").and_then(|v| v.as_str()),
+        Some("UpdatedApp"),
+    );
+    assert_eq!(
+        stored.metadata.get("custom_field").and_then(|v| v.as_i64()),
+        Some(42),
+    );
+}
+
+#[test]
+fn test_vector_store_update_metadata_not_found() {
+    let config = StorageConfig::default();
+    let mut store = VectorStore::new(config).unwrap();
+
+    let missing_id = uuid::Uuid::new_v4();
+    let result = store.update_metadata(&missing_id, serde_json::json!({}));
+    assert!(result.is_err(), "update_metadata on missing id should fail");
+}
+
+// ---------------------------------------------------------------------------
+// EmbeddingModel trait tests
+// ---------------------------------------------------------------------------
+
+use ospipe::storage::traits::{EmbeddingModel, HashEmbeddingModel};
+
+#[test]
+fn test_embedding_model_trait_hash() {
+    let model = HashEmbeddingModel::new(128);
+    assert_eq!(model.dimension(), 128);
+
+    let v1 = model.embed("deterministic");
+    let v2 = model.embed("deterministic");
+    assert_eq!(v1, v2, "Same input must produce identical output");
+    assert_eq!(v1.len(), 128);
+
+    // Check normalization
+    let mag: f32 = v1.iter().map(|x| x * x).sum::<f32>().sqrt();
+    assert!(
+        (mag - 1.0).abs() < 1e-5,
+        "HashEmbeddingModel should produce normalized vectors",
+    );
+}
+
+#[test]
+fn test_embedding_model_trait_batch() {
+    let model = HashEmbeddingModel::new(64);
+    let texts = vec!["alpha", "beta", "gamma"];
+    let embeddings = model.batch_embed(&texts);
+    assert_eq!(embeddings.len(), 3);
+    for emb in &embeddings {
+        assert_eq!(emb.len(), 64);
+    }
+}
+
+#[test]
+fn test_embedding_engine_implements_trait() {
+    // Verify EmbeddingEngine can be used as dyn EmbeddingModel
+    let engine = EmbeddingEngine::new(64);
+    let model: &dyn EmbeddingModel = &engine;
+    let v = model.embed("trait dispatch");
+    assert_eq!(v.len(), 64);
+    assert_eq!(model.dimension(), 64);
+}
+
+// ---------------------------------------------------------------------------
+// HNSW vector store tests (native only)
+// ---------------------------------------------------------------------------
+
+#[cfg(not(target_arch = "wasm32"))]
+mod hnsw_tests {
+    use ospipe::capture::CapturedFrame;
+    use ospipe::config::StorageConfig;
+    use ospipe::storage::vector_store::HnswVectorStore;
+    use ospipe::storage::embedding::EmbeddingEngine;
+    use ospipe::storage::vector_store::SearchFilter;
+
+    #[test]
+    fn test_hnsw_store_insert_and_search() {
+        let config = StorageConfig::default();
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let engine = EmbeddingEngine::new(384);
+
+        let frames = vec![
+            CapturedFrame::new_screen("VS Code", "main.rs", "fn main() { println!(\"hello\"); }", 0),
+            CapturedFrame::new_screen("Firefox", "Docs", "Rust programming language", 0),
+            CapturedFrame::new_audio("Mic", "discussing architecture", None),
+        ];
+
+        for frame in &frames {
+            let emb = engine.embed(frame.text_content());
+            store.insert(frame, &emb).unwrap();
+        }
+
+        assert_eq!(store.len(), 3);
+        assert!(!store.is_empty());
+
+        // Search for the first frame
+        let query = engine.embed("fn main() { println!(\"hello\"); }");
+        let results = store.search(&query, 2).unwrap();
+        assert!(!results.is_empty());
+        assert!(results.len() <= 2);
+    }
+
+    #[test]
+    fn test_hnsw_store_delete() {
+        let config = StorageConfig::default();
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let engine = EmbeddingEngine::new(384);
+
+        let frame = CapturedFrame::new_screen("App", "Win", "to delete", 0);
+        let id = frame.id;
+        let emb = engine.embed(frame.text_content());
+        store.insert(&frame, &emb).unwrap();
+        assert_eq!(store.len(), 1);
+
+        let removed = store.delete(&id).unwrap();
+        assert!(removed);
+        assert_eq!(store.len(), 0);
+        assert!(store.get(&id).is_none());
+
+        // Second delete returns false
+        let removed_again = store.delete(&id).unwrap();
+        assert!(!removed_again);
+    }
+
+    #[test]
+    fn test_hnsw_store_update_metadata() {
+        let config = StorageConfig::default();
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let engine = EmbeddingEngine::new(384);
+
+        let frame = CapturedFrame::new_screen("App", "Win", "update test", 0);
+        let id = frame.id;
+        let emb = engine.embed(frame.text_content());
+        store.insert(&frame, &emb).unwrap();
+
+        let new_meta = serde_json::json!({
+            "app_name": "NewApp",
+            "tag": "updated",
+        });
+        store.update_metadata(&id, new_meta).unwrap();
+
+        let stored = store.get(&id).unwrap();
+        assert_eq!(
+            stored.metadata.get("app_name").and_then(|v| v.as_str()),
+            Some("NewApp"),
+        );
+        assert_eq!(
+            stored.metadata.get("tag").and_then(|v| v.as_str()),
+            Some("updated"),
+        );
+    }
+
+    #[test]
+    fn test_hnsw_store_update_metadata_not_found() {
+        let config = StorageConfig::default();
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let missing = uuid::Uuid::new_v4();
+        let result = store.update_metadata(&missing, serde_json::json!({}));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hnsw_store_filtered_search() {
+        let config = StorageConfig::default();
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let engine = EmbeddingEngine::new(384);
+
+        let f1 = CapturedFrame::new_screen("VS Code", "editor", "rust code", 0);
+        let f2 = CapturedFrame::new_screen("Firefox", "browser", "rust docs", 0);
+
+        let e1 = engine.embed(f1.text_content());
+        let e2 = engine.embed(f2.text_content());
+        store.insert(&f1, &e1).unwrap();
+        store.insert(&f2, &e2).unwrap();
+
+        let filter = SearchFilter {
+            app: Some("VS Code".to_string()),
+            ..Default::default()
+        };
+        let query = engine.embed("rust");
+        let results = store.search_filtered(&query, 10, &filter).unwrap();
+
+        // Only the VS Code frame should match the filter
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, f1.id);
+    }
+
+    #[test]
+    fn test_hnsw_store_dimension_mismatch() {
+        let config = StorageConfig::default(); // 384-dim
+        let mut store = HnswVectorStore::new(config).unwrap();
+        let frame = CapturedFrame::new_screen("App", "Win", "text", 0);
+
+        let wrong_emb = vec![1.0f32; 128];
+        let result = store.insert(&frame, &wrong_emb);
+        assert!(result.is_err());
+    }
+
+    // --- RuvectorEmbeddingModel tests ---
+
+    use ospipe::storage::traits::RuvectorEmbeddingModel;
+    use ospipe::storage::traits::EmbeddingModel;
+
+    #[test]
+    fn test_ruvector_embedding_model_basic() {
+        let model = RuvectorEmbeddingModel::hash(128);
+        assert_eq!(model.dimension(), 128);
+
+        let v = model.embed("test text");
+        assert_eq!(v.len(), 128);
+
+        // Normalized
+        let mag: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!(
+            (mag - 1.0).abs() < 1e-4,
+            "RuvectorEmbeddingModel should produce normalized vectors, got {}",
+            mag,
+        );
+    }
+
+    #[test]
+    fn test_ruvector_embedding_model_determinism() {
+        let model = RuvectorEmbeddingModel::hash(64);
+        let v1 = model.embed("consistent");
+        let v2 = model.embed("consistent");
+        assert_eq!(v1, v2, "Same input must produce identical vectors");
     }
 }

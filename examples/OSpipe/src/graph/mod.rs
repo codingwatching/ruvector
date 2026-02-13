@@ -38,6 +38,7 @@ pub struct Entity {
 #[cfg(not(target_arch = "wasm32"))]
 mod inner {
     use super::*;
+    use crate::error::OsPipeError;
     use ruvector_graph::{EdgeBuilder, GraphDB, NodeBuilder, PropertyValue};
 
     /// A knowledge graph that stores entity relationships extracted from captured

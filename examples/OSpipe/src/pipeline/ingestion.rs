@@ -3,10 +3,12 @@
 use crate::capture::CapturedFrame;
 use crate::config::OsPipeConfig;
 use crate::error::Result;
+use crate::graph::KnowledgeGraph;
 use crate::pipeline::dedup::FrameDeduplicator;
 use crate::safety::{SafetyDecision, SafetyGate};
+use crate::search::enhanced::EnhancedSearch;
 use crate::storage::embedding::EmbeddingEngine;
-use crate::storage::vector_store::VectorStore;
+use crate::storage::vector_store::{SearchResult, VectorStore};
 use uuid::Uuid;
 
 /// Result of ingesting a single frame.
@@ -46,13 +48,21 @@ pub struct PipelineStats {
 
 /// The main ingestion pipeline that processes captured frames.
 ///
-/// Frames flow through: Safety Gate -> Deduplication -> Embedding -> Storage
+/// Frames flow through:
+///   Safety Gate -> Deduplication -> Embedding -> Storage -> Graph (extract entities)
+///
+/// Search flow:
+///   Route -> Search -> Rerank (attention) -> Diversity (quantum) -> Return
 pub struct IngestionPipeline {
     embedding_engine: EmbeddingEngine,
     vector_store: VectorStore,
     safety_gate: SafetyGate,
     dedup: FrameDeduplicator,
     stats: PipelineStats,
+    /// Optional knowledge graph for entity extraction after storage.
+    knowledge_graph: Option<KnowledgeGraph>,
+    /// Optional enhanced search orchestrator (router + reranker + quantum).
+    enhanced_search: Option<EnhancedSearch>,
 }
 
 impl IngestionPipeline {
@@ -69,7 +79,29 @@ impl IngestionPipeline {
             safety_gate,
             dedup,
             stats: PipelineStats::default(),
+            knowledge_graph: None,
+            enhanced_search: None,
         })
+    }
+
+    /// Attach a knowledge graph for entity extraction on ingested frames.
+    ///
+    /// When a graph is attached, every successfully stored frame will have
+    /// its text analysed for entities (persons, URLs, emails, mentions),
+    /// which are then added to the graph as nodes linked to the frame.
+    pub fn with_graph(mut self, kg: KnowledgeGraph) -> Self {
+        self.knowledge_graph = Some(kg);
+        self
+    }
+
+    /// Attach an enhanced search orchestrator.
+    ///
+    /// When attached, the [`search`](Self::search) method will route the
+    /// query, fetch extra candidates, re-rank with attention, and apply
+    /// quantum-inspired diversity selection before returning results.
+    pub fn with_enhanced_search(mut self, es: EnhancedSearch) -> Self {
+        self.enhanced_search = Some(es);
+        self
     }
 
     /// Ingest a single captured frame through the pipeline.
@@ -123,6 +155,12 @@ impl IngestionPipeline {
         self.dedup.add(id, embedding);
         self.stats.total_ingested += 1;
 
+        // Step 5: Graph entity extraction (if knowledge graph is attached)
+        if let Some(ref kg) = self.knowledge_graph {
+            let frame_id_str = id.to_string();
+            let _ = kg.ingest_frame_entities(&frame_id_str, store_frame.text_content());
+        }
+
         Ok(IngestResult::Stored { id })
     }
 
@@ -148,5 +186,27 @@ impl IngestionPipeline {
     /// Return a reference to the embedding engine.
     pub fn embedding_engine(&self) -> &EmbeddingEngine {
         &self.embedding_engine
+    }
+
+    /// Return a reference to the knowledge graph, if one is attached.
+    pub fn knowledge_graph(&self) -> Option<&KnowledgeGraph> {
+        self.knowledge_graph.as_ref()
+    }
+
+    /// Search the pipeline's vector store.
+    ///
+    /// If an [`EnhancedSearch`] orchestrator is attached, the query is routed,
+    /// candidates are fetched with headroom, re-ranked with attention, and
+    /// diversity-selected via quantum-inspired algorithms.
+    ///
+    /// Otherwise, a basic vector similarity search is performed.
+    pub fn search(&self, query: &str, k: usize) -> Result<Vec<SearchResult>> {
+        let embedding = self.embedding_engine.embed(query);
+
+        if let Some(ref es) = self.enhanced_search {
+            es.search(query, &embedding, &self.vector_store, k)
+        } else {
+            self.vector_store.search(&embedding, k)
+        }
     }
 }

@@ -21,6 +21,10 @@ export interface OsPipeConfig {
   hybridWeight?: number;
   /** Enable MMR deduplication (default: true) */
   rerank?: boolean;
+  /** Request timeout in milliseconds (default: 10000) */
+  timeout?: number;
+  /** Maximum retries for failed requests (default: 3) */
+  maxRetries?: number;
 }
 
 /** Options for semantic vector search queries. */
@@ -214,6 +218,8 @@ export class OsPipe {
   private defaultK: number;
   private hybridWeight: number;
   private rerank: boolean;
+  private timeout: number;
+  private maxRetries: number;
 
   constructor(config: OsPipeConfig = {}) {
     this.baseUrl = config.baseUrl ?? "http://localhost:3030";
@@ -221,6 +227,92 @@ export class OsPipe {
     this.defaultK = config.defaultK ?? 10;
     this.hybridWeight = config.hybridWeight ?? 0.7;
     this.rerank = config.rerank ?? true;
+    this.timeout = config.timeout ?? 10_000;
+    this.maxRetries = config.maxRetries ?? 3;
+  }
+
+  // ---- Internal Helpers ----
+
+  /**
+   * Fetch with exponential backoff retry and per-request timeout.
+   *
+   * Retries are only attempted for network errors and HTTP 5xx responses.
+   * Client errors (4xx) are never retried.
+   *
+   * @param url - Request URL
+   * @param options - Standard RequestInit options
+   * @param retries - Maximum number of retry attempts (default: this.maxRetries)
+   * @param backoffMs - Initial backoff delay in milliseconds (default: 300)
+   * @returns The fetch Response
+   * @throws {Error} After all retries are exhausted or on a non-retryable error
+   */
+  private async fetchWithRetry(
+    url: string,
+    options?: RequestInit,
+    retries?: number,
+    backoffMs = 300,
+  ): Promise<Response> {
+    const maxAttempts = retries ?? this.maxRetries;
+
+    for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      // Merge the timeout signal with any caller-provided signal.
+      const callerSignal = options?.signal;
+      if (callerSignal?.aborted) {
+        clearTimeout(timeoutId);
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+
+      // If the caller provided a signal, listen for its abort to propagate.
+      const onCallerAbort = () => controller.abort();
+      callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+
+        // Do not retry client errors (4xx).
+        if (response.status >= 400 && response.status < 500) {
+          return response;
+        }
+
+        // Retry on server errors (5xx).
+        if (response.status >= 500 && attempt < maxAttempts) {
+          await this.sleep(backoffMs * Math.pow(2, attempt));
+          continue;
+        }
+
+        return response;
+      } catch (error: unknown) {
+        // If the caller aborted, propagate immediately without retry.
+        if (callerSignal?.aborted) {
+          throw error;
+        }
+
+        // If this was the last attempt, throw.
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+
+        // Retry on network / timeout errors.
+        await this.sleep(backoffMs * Math.pow(2, attempt));
+      } finally {
+        clearTimeout(timeoutId);
+        callerSignal?.removeEventListener("abort", onCallerAbort);
+      }
+    }
+
+    // Unreachable, but satisfies the type checker.
+    throw new Error("fetchWithRetry: unexpected exit");
+  }
+
+  /** Sleep helper for backoff delays. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // ---- Semantic Vector Search ----
@@ -250,19 +342,22 @@ export class OsPipe {
     options: SemanticSearchOptions = {}
   ): Promise<SearchResult[]> {
     const k = options.k ?? this.defaultK;
-    const response = await fetch(`${this.baseUrl}/${this.apiVersion}/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        mode: "semantic",
-        k,
-        metric: options.metric ?? "cosine",
-        filters: options.filters,
-        rerank: options.rerank ?? this.rerank,
-        confidence: options.confidence ?? false,
-      }),
-    });
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/search`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          mode: "semantic",
+          k,
+          metric: options.metric ?? "cosine",
+          filters: options.filters,
+          rerank: options.rerank ?? this.rerank,
+          confidence: options.confidence ?? false,
+        }),
+      },
+    );
     if (!response.ok) {
       throw new Error(`Search failed: ${response.statusText}`);
     }
@@ -290,11 +385,14 @@ export class OsPipe {
    * ```
    */
   async queryGraph(cypher: string): Promise<GraphResult> {
-    const response = await fetch(`${this.baseUrl}/${this.apiVersion}/graph`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: cypher }),
-    });
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/graph`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: cypher }),
+      },
+    );
     if (!response.ok) {
       throw new Error(`Graph query failed: ${response.statusText}`);
     }
@@ -326,11 +424,14 @@ export class OsPipe {
    * ```
    */
   async queryDelta(options: DeltaQueryOptions): Promise<DeltaResult[]> {
-    const response = await fetch(`${this.baseUrl}/${this.apiVersion}/delta`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(options),
-    });
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/delta`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options),
+      },
+    );
     if (!response.ok) {
       throw new Error(`Delta query failed: ${response.statusText}`);
     }
@@ -365,6 +466,8 @@ export class OsPipe {
       threshold?: number;
       /** Only emit events of these categories */
       categories?: AttentionEvent["category"][];
+      /** AbortSignal to cancel the stream */
+      signal?: AbortSignal;
     } = {}
   ): AsyncGenerator<AttentionEvent> {
     const params = new URLSearchParams();
@@ -375,8 +478,14 @@ export class OsPipe {
       params.set("categories", options.categories.join(","));
     }
 
+    if (options.signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
+
     const url = `${this.baseUrl}/${this.apiVersion}/stream/attention?${params}`;
-    const response = await fetch(url);
+    const response = await this.fetchWithRetry(url, {
+      signal: options.signal,
+    });
     if (!response.ok || !response.body) {
       throw new Error(`Attention stream failed: ${response.statusText}`);
     }
@@ -387,6 +496,10 @@ export class OsPipe {
 
     try {
       while (true) {
+        if (options.signal?.aborted) {
+          break;
+        }
+
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -451,7 +564,7 @@ export class OsPipe {
     if (options.endTime) params.set("end_time", options.endTime);
     if (options.appName) params.set("app_name", options.appName);
 
-    const response = await fetch(`${this.baseUrl}/search?${params}`);
+    const response = await this.fetchWithRetry(`${this.baseUrl}/search?${params}`);
     if (!response.ok) {
       throw new Error(`Screenpipe search failed: ${response.statusText}`);
     }
@@ -477,11 +590,14 @@ export class OsPipe {
    * ```
    */
   async routeQuery(query: string): Promise<QueryRoute> {
-    const response = await fetch(`${this.baseUrl}/${this.apiVersion}/route`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/route`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      },
+    );
     if (!response.ok) {
       throw new Error(`Route failed: ${response.statusText}`);
     }
@@ -496,8 +612,8 @@ export class OsPipe {
    * @throws {Error} If the stats request fails
    */
   async stats(): Promise<PipelineStats> {
-    const response = await fetch(
-      `${this.baseUrl}/${this.apiVersion}/stats`
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/stats`,
     );
     if (!response.ok) {
       throw new Error(`Stats failed: ${response.statusText}`);
@@ -516,8 +632,8 @@ export class OsPipe {
     version: string;
     backends: string[];
   }> {
-    const response = await fetch(
-      `${this.baseUrl}/${this.apiVersion}/health`
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/${this.apiVersion}/health`,
     );
     if (!response.ok) {
       throw new Error(`Health check failed: ${response.statusText}`);

@@ -179,41 +179,378 @@ fn is_ssn_at(chars: &[char], pos: usize) -> bool {
         && chars[pos + 10].is_ascii_digit()
 }
 
-/// Detect and redact email addresses.
+/// Detect and redact email addresses while preserving surrounding whitespace.
+///
+/// Scans character-by-character for `@` signs, then expands outward to find
+/// the full `local@domain.tld` span and replaces it in-place, keeping all
+/// surrounding whitespace (tabs, newlines, multi-space runs) intact.
 fn redact_emails(text: &str) -> (String, bool) {
-    let mut result = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(text.len());
     let mut found = false;
+    let mut i = 0;
 
-    // Simple email detection: look for word@word.word patterns
-    let words: Vec<&str> = text.split_whitespace().collect();
-    for (idx, word) in words.iter().enumerate() {
-        if idx > 0 {
-            result.push(' ');
-        }
+    while i < len {
+        if chars[i] == '@' {
+            // Try to identify an email around this '@'.
+            // Scan backwards for the local part.
+            let mut local_start = i;
+            while local_start > 0 && is_email_local_char(chars[local_start - 1]) {
+                local_start -= 1;
+            }
 
-        // Strip trailing punctuation for matching but keep for non-email words
-        let trimmed = word.trim_end_matches([',', '.', ';', ')']);
-        let suffix = &word[trimmed.len()..];
+            // Scan forwards for the domain part.
+            let mut domain_end = i + 1;
+            let mut has_dot = false;
+            while domain_end < len && is_email_domain_char(chars[domain_end]) {
+                if chars[domain_end] == '.' {
+                    has_dot = true;
+                }
+                domain_end += 1;
+            }
+            // Trim trailing dots/hyphens from domain (not valid at end).
+            while domain_end > i + 1
+                && (chars[domain_end - 1] == '.' || chars[domain_end - 1] == '-')
+            {
+                if chars[domain_end - 1] == '.' {
+                    // Re-check if we still have a dot in the trimmed domain.
+                    has_dot = chars[i + 1..domain_end - 1].contains(&'.');
+                }
+                domain_end -= 1;
+            }
 
-        if is_email_like(trimmed) {
-            result.push_str("[EMAIL_REDACTED]");
-            result.push_str(suffix);
-            found = true;
+            let local_len = i - local_start;
+            let domain_len = domain_end - (i + 1);
+
+            if local_len > 0 && domain_len >= 3 && has_dot {
+                // Valid email: replace the span [local_start..domain_end]
+                // We need to remove any characters already pushed for the local part.
+                // They were pushed in the normal flow below, so truncate them.
+                let already_pushed = i - local_start;
+                let new_len = result.len() - already_pushed;
+                result.truncate(new_len);
+                result.push_str("[EMAIL_REDACTED]");
+                found = true;
+                i = domain_end;
+            } else {
+                // Not a valid email, keep the '@' as-is.
+                result.push(chars[i]);
+                i += 1;
+            }
         } else {
-            result.push_str(word);
+            result.push(chars[i]);
+            i += 1;
         }
     }
 
     (result, found)
 }
 
-/// Simple heuristic check for email-like patterns.
-fn is_email_like(word: &str) -> bool {
-    if let Some(at_pos) = word.find('@') {
-        let local = &word[..at_pos];
-        let domain = &word[at_pos + 1..];
-        !local.is_empty() && domain.contains('.') && domain.len() >= 3
-    } else {
-        false
+/// Characters valid in the local part of an email address.
+fn is_email_local_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '.' || c == '+' || c == '-' || c == '_'
+}
+
+/// Characters valid in the domain part of an email address.
+fn is_email_domain_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '.' || c == '-'
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::SafetyConfig;
+
+    // ---------------------------------------------------------------
+    // Email redaction whitespace preservation tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_email_redaction_preserves_tabs() {
+        let (result, found) = redact_emails("contact\tuser@example.com\there");
+        assert!(found);
+        assert_eq!(result, "contact\t[EMAIL_REDACTED]\there");
+    }
+
+    #[test]
+    fn test_email_redaction_preserves_newlines() {
+        let (result, found) = redact_emails("contact\nuser@example.com\nhere");
+        assert!(found);
+        assert_eq!(result, "contact\n[EMAIL_REDACTED]\nhere");
+    }
+
+    #[test]
+    fn test_email_redaction_preserves_multi_spaces() {
+        let (result, found) = redact_emails("contact   user@example.com   here");
+        assert!(found);
+        assert_eq!(result, "contact   [EMAIL_REDACTED]   here");
+    }
+
+    #[test]
+    fn test_email_redaction_preserves_mixed_whitespace() {
+        let (result, found) = redact_emails("contact\t  user@example.com\n  here");
+        assert!(found);
+        assert_eq!(result, "contact\t  [EMAIL_REDACTED]\n  here");
+    }
+
+    #[test]
+    fn test_email_redaction_basic() {
+        let (result, found) = redact_emails("email user@example.com here");
+        assert!(found);
+        assert_eq!(result, "email [EMAIL_REDACTED] here");
+    }
+
+    #[test]
+    fn test_email_redaction_no_email() {
+        let (result, found) = redact_emails("no email here");
+        assert!(!found);
+        assert_eq!(result, "no email here");
+    }
+
+    #[test]
+    fn test_email_redaction_multiple_emails() {
+        let (result, found) = redact_emails("a@b.com and c@d.org");
+        assert!(found);
+        assert_eq!(result, "[EMAIL_REDACTED] and [EMAIL_REDACTED]");
+    }
+
+    #[test]
+    fn test_email_redaction_at_start() {
+        let (result, found) = redact_emails("user@example.com is the contact");
+        assert!(found);
+        assert_eq!(result, "[EMAIL_REDACTED] is the contact");
+    }
+
+    #[test]
+    fn test_email_redaction_at_end() {
+        let (result, found) = redact_emails("contact: user@example.com");
+        assert!(found);
+        assert_eq!(result, "contact: [EMAIL_REDACTED]");
+    }
+
+    // ---------------------------------------------------------------
+    // Safety gate integration tests for consistency
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_safety_gate_email_preserves_whitespace() {
+        let config = SafetyConfig::default();
+        let gate = SafetyGate::new(config);
+        let decision = gate.check("contact\tuser@example.com\nhere");
+        match decision {
+            SafetyDecision::AllowRedacted(redacted) => {
+                assert_eq!(redacted, "contact\t[EMAIL_REDACTED]\nhere");
+            }
+            other => panic!("Expected AllowRedacted, got {:?}", other),
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Routing consistency tests (WASM vs native)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_wasm_routing_matches_native_temporal() {
+        use crate::search::router::QueryRouter;
+        use crate::search::router::QueryRoute;
+        use crate::wasm::helpers::route_query;
+
+        let router = QueryRouter::new();
+        let queries = [
+            "what did I see yesterday",
+            "show me last week",
+            "results from today",
+        ];
+        for q in &queries {
+            assert_eq!(
+                router.route(q),
+                QueryRoute::Temporal,
+                "Native router failed for: {}", q
+            );
+            assert_eq!(
+                route_query(q),
+                "Temporal",
+                "WASM router failed for: {}", q
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_routing_matches_native_graph() {
+        use crate::search::router::QueryRouter;
+        use crate::search::router::QueryRoute;
+        use crate::wasm::helpers::route_query;
+
+        let router = QueryRouter::new();
+        let queries = [
+            "documents related to authentication",
+            "things connected to the API module",
+        ];
+        for q in &queries {
+            assert_eq!(
+                router.route(q),
+                QueryRoute::Graph,
+                "Native router failed for: {}", q
+            );
+            assert_eq!(
+                route_query(q),
+                "Graph",
+                "WASM router failed for: {}", q
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_routing_matches_native_keyword_short() {
+        use crate::search::router::QueryRouter;
+        use crate::search::router::QueryRoute;
+        use crate::wasm::helpers::route_query;
+
+        let router = QueryRouter::new();
+        let queries = [
+            "hello",
+            "rust programming",
+        ];
+        for q in &queries {
+            assert_eq!(
+                router.route(q),
+                QueryRoute::Keyword,
+                "Native router failed for: {}", q
+            );
+            assert_eq!(
+                route_query(q),
+                "Keyword",
+                "WASM router failed for: {}", q
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_routing_matches_native_keyword_quoted() {
+        use crate::search::router::QueryRouter;
+        use crate::search::router::QueryRoute;
+        use crate::wasm::helpers::route_query;
+
+        let router = QueryRouter::new();
+        let q = "\"exact phrase search\"";
+        assert_eq!(router.route(q), QueryRoute::Keyword);
+        assert_eq!(route_query(q), "Keyword");
+    }
+
+    #[test]
+    fn test_wasm_routing_matches_native_hybrid() {
+        use crate::search::router::QueryRouter;
+        use crate::search::router::QueryRoute;
+        use crate::wasm::helpers::route_query;
+
+        let router = QueryRouter::new();
+        let queries = [
+            "how to implement authentication in Rust",
+            "explain how embeddings work",
+            "something about machine learning",
+        ];
+        for q in &queries {
+            assert_eq!(
+                router.route(q),
+                QueryRoute::Hybrid,
+                "Native router failed for: {}", q
+            );
+            assert_eq!(
+                route_query(q),
+                "Hybrid",
+                "WASM router failed for: {}", q
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Safety consistency tests (WASM vs native)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_wasm_safety_matches_native_cc() {
+        use crate::wasm::helpers::safety_classify;
+
+        // Native: CC -> AllowRedacted; WASM should return "redact"
+        let config = SafetyConfig::default();
+        let gate = SafetyGate::new(config);
+        let content = "pay with 4111-1111-1111-1111";
+        assert!(matches!(gate.check(content), SafetyDecision::AllowRedacted(_)));
+        assert_eq!(safety_classify(content), "redact");
+    }
+
+    #[test]
+    fn test_wasm_safety_matches_native_ssn() {
+        use crate::wasm::helpers::safety_classify;
+
+        let config = SafetyConfig::default();
+        let gate = SafetyGate::new(config);
+        let content = "my ssn 123-45-6789";
+        assert!(matches!(gate.check(content), SafetyDecision::AllowRedacted(_)));
+        assert_eq!(safety_classify(content), "redact");
+    }
+
+    #[test]
+    fn test_wasm_safety_matches_native_email() {
+        use crate::wasm::helpers::safety_classify;
+
+        let config = SafetyConfig::default();
+        let gate = SafetyGate::new(config);
+        let content = "email user@example.com here";
+        assert!(matches!(gate.check(content), SafetyDecision::AllowRedacted(_)));
+        assert_eq!(safety_classify(content), "redact");
+    }
+
+    #[test]
+    fn test_wasm_safety_matches_native_custom_deny() {
+        use crate::wasm::helpers::safety_classify;
+
+        // Native: custom_patterns -> Deny; WASM: sensitive keywords -> "deny"
+        let config = SafetyConfig {
+            custom_patterns: vec!["password".to_string()],
+            ..Default::default()
+        };
+        let gate = SafetyGate::new(config);
+        let content = "my password is foo";
+        assert!(matches!(gate.check(content), SafetyDecision::Deny { .. }));
+        assert_eq!(safety_classify(content), "deny");
+    }
+
+    #[test]
+    fn test_wasm_safety_matches_native_allow() {
+        use crate::wasm::helpers::safety_classify;
+
+        let config = SafetyConfig::default();
+        let gate = SafetyGate::new(config);
+        let content = "the weather is nice";
+        assert_eq!(gate.check(content), SafetyDecision::Allow);
+        assert_eq!(safety_classify(content), "allow");
+    }
+
+    // ---------------------------------------------------------------
+    // MMR tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_mmr_produces_different_order_than_cosine() {
+        use crate::search::mmr::MmrReranker;
+
+        let mmr = MmrReranker::new(0.3);
+        let query = vec![1.0, 0.0, 0.0, 0.0];
+        let results = vec![
+            ("a".to_string(), 0.95, vec![1.0, 0.0, 0.0, 0.0]),
+            ("b".to_string(), 0.90, vec![0.99, 0.01, 0.0, 0.0]),
+            ("c".to_string(), 0.60, vec![0.0, 1.0, 0.0, 0.0]),
+        ];
+
+        let ranked = mmr.rerank(&query, &results, 3);
+        assert_eq!(ranked.len(), 3);
+
+        // Pure cosine order: a, b, c
+        // MMR with diversity: a, c, b (c is diverse, b is near-duplicate of a)
+        assert_eq!(ranked[0].0, "a");
+        assert_eq!(ranked[1].0, "c", "MMR should promote diverse result");
+        assert_eq!(ranked[2].0, "b");
     }
 }

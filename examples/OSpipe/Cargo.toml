@@ -39,18 +39,28 @@ cognitum-gate-kernel = { path = "../../crates/cognitum-gate-kernel", default-fea
 ruqu-algorithms = { version = "2.0.5", path = "../../crates/ruqu-algorithms", default-features = false }
 ruvector-attention = { path = "../../crates/ruvector-attention", default-features = false }
 
+# HTTP server dependencies (native only)
+axum = { version = "0.7", features = ["json"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tower = { version = "0.5" }
+tokio = { workspace = true }
+
 # WASM-only dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 serde-wasm-bindgen = "0.6"
 getrandom = { version = "0.2", features = ["js"] }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [dev-dependencies]
 tokio = { workspace = true }
 
 [features]
-default = []
+default = ["console_error_panic_hook"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

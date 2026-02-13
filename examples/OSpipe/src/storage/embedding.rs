@@ -4,9 +4,14 @@
 //! development and testing. In production, this would be replaced with
 //! a real model (ONNX, Candle, or an API-based provider via ruvector-core's
 //! EmbeddingProvider trait).
+//!
+//! `EmbeddingEngine` also implements [`EmbeddingModel`](super::traits::EmbeddingModel)
+//! so it can be used anywhere a trait-based embedding source is required.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+use super::traits::EmbeddingModel;
 
 /// Engine that generates vector embeddings from text.
 ///
@@ -55,6 +60,22 @@ impl EmbeddingEngine {
 
     /// Return the dimensionality of embeddings produced by this engine.
     pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+}
+
+/// `EmbeddingEngine` satisfies [`EmbeddingModel`] so existing code can
+/// pass an `&EmbeddingEngine` wherever a `&dyn EmbeddingModel` is needed.
+impl EmbeddingModel for EmbeddingEngine {
+    fn embed(&self, text: &str) -> Vec<f32> {
+        EmbeddingEngine::embed(self, text)
+    }
+
+    fn batch_embed(&self, texts: &[&str]) -> Vec<Vec<f32>> {
+        EmbeddingEngine::batch_embed(self, texts)
+    }
+
+    fn dimension(&self) -> usize {
         self.dimension
     }
 }

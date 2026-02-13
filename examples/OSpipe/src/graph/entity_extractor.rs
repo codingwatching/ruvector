@@ -22,21 +22,19 @@ pub fn extract_entities(text: &str) -> Vec<(String, String)> {
     // --- URL detection ---
     for word in text.split_whitespace() {
         let trimmed = word.trim_matches(|c: char| c == ',' || c == '.' || c == ')' || c == '(' || c == ';');
-        if (trimmed.starts_with("http://") || trimmed.starts_with("https://")) && trimmed.len() > 10 {
-            if seen.insert(("Url", trimmed.to_string())) {
+        if (trimmed.starts_with("http://") || trimmed.starts_with("https://")) && trimmed.len() > 10
+            && seen.insert(("Url", trimmed.to_string())) {
                 entities.push(("Url".to_string(), trimmed.to_string()));
             }
-        }
     }
 
     // --- Email detection ---
     for word in text.split_whitespace() {
         let trimmed = word.trim_matches(|c: char| c == ',' || c == '.' || c == ')' || c == '(' || c == ';' || c == '<' || c == '>');
-        if is_email_like(trimmed) {
-            if seen.insert(("Email", trimmed.to_string())) {
+        if is_email_like(trimmed)
+            && seen.insert(("Email", trimmed.to_string())) {
                 entities.push(("Email".to_string(), trimmed.to_string()));
             }
-        }
     }
 
     // --- @mention detection ---
@@ -111,7 +109,7 @@ fn extract_capitalized_phrases(text: &str) -> Vec<String> {
                 // and is a common article/pronoun. We still keep it if part of a longer
                 // multi-word phrase that itself is capitalized.
                 let is_sentence_start = start == 0
-                    || words.get(start.wrapping_sub(1)).map_or(false, |prev| {
+                    || words.get(start.wrapping_sub(1)).is_some_and(|prev| {
                         prev.ends_with('.') || prev.ends_with('!') || prev.ends_with('?')
                     });
 
@@ -134,7 +132,7 @@ fn extract_capitalized_phrases(text: &str) -> Vec<String> {
 fn is_capitalized(word: &str) -> bool {
     word.chars()
         .next()
-        .map_or(false, |c| c.is_uppercase())
+        .is_some_and(|c| c.is_uppercase())
 }
 
 /// Common sentence-starting words that are not proper nouns.

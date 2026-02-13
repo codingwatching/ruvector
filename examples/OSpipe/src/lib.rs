@@ -30,10 +30,14 @@ pub mod config;
 pub mod error;
 pub mod graph;
 pub mod learning;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod persistence;
 pub mod pipeline;
 pub mod quantum;
 pub mod safety;
 pub mod search;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod server;
 pub mod storage;
 
 pub mod wasm;

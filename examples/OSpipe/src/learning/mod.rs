@@ -163,6 +163,12 @@ mod native {
         compressor: TensorCompress,
     }
 
+    impl Default for EmbeddingQuantizer {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl EmbeddingQuantizer {
         /// Create a new quantizer instance.
         pub fn new() -> Self {

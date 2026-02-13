@@ -11,6 +11,15 @@ use wasm_bindgen::prelude::*;
 
 use super::helpers;
 
+/// Initialize WASM module: installs `console_error_panic_hook` so that Rust
+/// panics produce readable error messages in the browser developer console
+/// instead of the default `unreachable` with no context.
+#[wasm_bindgen(start)]
+pub fn init() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
+
 // ---------------------------------------------------------------------------
 // Internal data structures
 // ---------------------------------------------------------------------------
