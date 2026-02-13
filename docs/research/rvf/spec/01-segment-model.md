@@ -36,14 +36,16 @@ Offset  Size  Field              Description
 0x00    4     magic              0x52564653 ("RVFS" in ASCII)
 0x04    1     version            Segment format version (currently 1)
 0x05    1     seg_type           Segment type enum (see below)
-0x06    2     flags              Bitfield: compressed, encrypted, signed, sealed
+0x06    2     flags              Bitfield: compressed, encrypted, signed, sealed, etc.
 0x08    8     segment_id         Monotonically increasing segment ordinal
 0x10    8     payload_length     Byte length of payload (after header, before footer)
 0x18    8     timestamp_ns       Nanosecond UNIX timestamp of segment creation
-0x20    4     checksum_algo      Hash algorithm enum: 0=CRC32C, 1=XXH3, 2=SHAKE-256
-0x24    4     reserved           Must be zero
+0x20    1     checksum_algo      Hash algorithm enum: 0=CRC32C, 1=XXH3-128, 2=SHAKE-256
+0x21    1     compression        Compression enum: 0=none, 1=LZ4, 2=ZSTD, 3=custom
+0x22    2     reserved_0         Must be zero
+0x24    4     reserved_1         Must be zero
 0x28    16    content_hash       First 128 bits of payload hash (algorithm per checksum_algo)
-0x38    4     compression        Compression enum: 0=none, 1=LZ4, 2=ZSTD, 3=custom
+0x38    4     uncompressed_len   Original payload size (0 if no compression)
 0x3C    4     alignment_pad      Padding to reach 64-byte boundary
 ```
 
@@ -65,7 +67,9 @@ Bit 4:  PARTIAL       Segment is a partial write (streaming ingest)
 Bit 5:  TOMBSTONE     Segment logically deletes a prior segment
 Bit 6:  HOT           Segment contains temperature-promoted data
 Bit 7:  OVERLAY       Segment contains overlay/delta data
-Bits 8-15: reserved
+Bit 8:  SNAPSHOT      Segment contains full snapshot (not delta)
+Bit 9:  CHECKPOINT    Segment is a safe rollback point
+Bits 10-15: reserved
 ```
 
 ## 3. Segment Types
@@ -85,6 +89,7 @@ Value  Name            Purpose
 0x0A   WITNESS_SEG     Capability manifests, proof of computation, audit trails
 0x0B   PROFILE_SEG     Domain profile declarations (RVDNA, RVText, etc.)
 0x0C   CRYPTO_SEG      Key material, signature chains, certificate anchors
+0x0D   METAIDX_SEG     Metadata inverted indexes for filtered search
 ```
 
 ### Reserved Range

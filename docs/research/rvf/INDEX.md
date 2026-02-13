@@ -17,6 +17,10 @@
 | 04 | [Progressive Indexing](spec/04-progressive-indexing.md) | Layer A/B/C availability, lazy build, partial search |
 | 05 | [Overlay Epochs](spec/05-overlay-epochs.md) | Streaming min-cut, epoch boundaries, rollback |
 | 06 | [Query Optimization](spec/06-query-optimization.md) | SIMD alignment, prefetch, varint IDs, cache analysis |
+| 07 | [Deletion & Lifecycle](spec/07-deletion-lifecycle.md) | Vector deletion, JOURNAL_SEG wire format, deletion bitmaps, compaction |
+| 08 | [Filtered Search](spec/08-filtered-search.md) | META_SEG wire format, filter expressions, metadata indexes |
+| 09 | [Concurrency & Versioning](spec/09-concurrency-versioning.md) | Writer locking, reader-writer coordination, space reclamation |
+| 10 | [Operations API](spec/10-operations-api.md) | Batch ops, error codes, network streaming, compaction scheduling |
 
 #### Wire Format (`wire/`)
 
