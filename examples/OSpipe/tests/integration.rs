@@ -1,7 +1,7 @@
 //! Integration tests for OSpipe.
 
-use ospipe::capture::{CaptureSource, CapturedFrame, FrameContent};
-use ospipe::config::{OsPipeConfig, SafetyConfig, SearchConfig, StorageConfig};
+use ospipe::capture::{CaptureSource, CapturedFrame};
+use ospipe::config::{OsPipeConfig, SafetyConfig, StorageConfig};
 use ospipe::pipeline::{IngestionPipeline, IngestResult};
 use ospipe::safety::{SafetyDecision, SafetyGate};
 use ospipe::search::router::{QueryRoute, QueryRouter};

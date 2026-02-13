@@ -192,7 +192,7 @@ fn redact_emails(text: &str) -> (String, bool) {
         }
 
         // Strip trailing punctuation for matching but keep for non-email words
-        let trimmed = word.trim_end_matches(|c: char| c == ',' || c == '.' || c == ';' || c == ')');
+        let trimmed = word.trim_end_matches([',', '.', ';', ')']);
         let suffix = &word[trimmed.len()..];
 
         if is_email_like(trimmed) {

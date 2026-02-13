@@ -194,6 +194,11 @@ impl OsPipeWasm {
         self.embeddings.len()
     }
 
+    /// Returns true if no embeddings are stored.
+    pub fn is_empty(&self) -> bool {
+        self.embeddings.is_empty()
+    }
+
     /// Return pipeline statistics as a JSON string.
     pub fn stats(&self) -> String {
         serde_json::json!({

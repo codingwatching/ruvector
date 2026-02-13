@@ -103,9 +103,9 @@ impl IngestionPipeline {
 
         // Step 4: Store the frame
         // If the text was redacted, create a modified frame with the safe text
-        let store_frame = if safe_text != frame.text_content() {
-            let mut modified = frame.clone();
-            modified.content = match &frame.content {
+        let mut store_frame = frame;
+        if safe_text != store_frame.text_content() {
+            store_frame.content = match &store_frame.content {
                 crate::capture::FrameContent::OcrText(_) => {
                     crate::capture::FrameContent::OcrText(safe_text)
                 }
@@ -116,16 +116,14 @@ impl IngestionPipeline {
                     crate::capture::FrameContent::UiEvent(safe_text)
                 }
             };
-            modified
-        } else {
-            frame.clone()
-        };
+        }
 
         self.vector_store.insert(&store_frame, &embedding)?;
-        self.dedup.add(store_frame.id, embedding);
+        let id = store_frame.id;
+        self.dedup.add(id, embedding);
         self.stats.total_ingested += 1;
 
-        Ok(IngestResult::Stored { id: store_frame.id })
+        Ok(IngestResult::Stored { id })
     }
 
     /// Ingest a batch of frames.

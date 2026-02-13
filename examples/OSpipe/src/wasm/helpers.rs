@@ -110,11 +110,10 @@ fn try_parse_cc_at(chars: &[char], start: usize) -> Option<usize> {
             pos += 1;
         }
         // After the first 3 groups, allow an optional separator.
-        if group < 3 {
-            if pos < chars.len() && (chars[pos] == '-' || chars[pos] == ' ') {
+        if group < 3
+            && pos < chars.len() && (chars[pos] == '-' || chars[pos] == ' ') {
                 pos += 1;
             }
-        }
     }
     Some(pos)
 }

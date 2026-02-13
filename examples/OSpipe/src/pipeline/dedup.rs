@@ -4,6 +4,8 @@
 //! frames against them to avoid storing near-duplicate content
 //! (e.g., consecutive screen captures of the same static page).
 
+use std::collections::VecDeque;
+
 use crate::storage::embedding::cosine_similarity;
 use uuid::Uuid;
 
@@ -13,7 +15,7 @@ pub struct FrameDeduplicator {
     /// Cosine similarity threshold above which a frame is considered duplicate.
     threshold: f32,
     /// Sliding window of recent embeddings (id, vector).
-    recent_embeddings: Vec<(Uuid, Vec<f32>)>,
+    recent_embeddings: VecDeque<(Uuid, Vec<f32>)>,
     /// Maximum number of recent embeddings to keep.
     window_size: usize,
 }
@@ -26,7 +28,7 @@ impl FrameDeduplicator {
     pub fn new(threshold: f32, window_size: usize) -> Self {
         Self {
             threshold,
-            recent_embeddings: Vec::with_capacity(window_size),
+            recent_embeddings: VecDeque::with_capacity(window_size),
             window_size,
         }
     }
@@ -65,9 +67,9 @@ impl FrameDeduplicator {
     /// If the window is full, the oldest entry is evicted.
     pub fn add(&mut self, id: Uuid, embedding: Vec<f32>) {
         if self.recent_embeddings.len() >= self.window_size {
-            self.recent_embeddings.remove(0);
+            self.recent_embeddings.pop_front();
         }
-        self.recent_embeddings.push((id, embedding));
+        self.recent_embeddings.push_back((id, embedding));
     }
 
     /// Return the current number of embeddings in the window.

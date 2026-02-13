@@ -4,7 +4,7 @@
 //!
 //! - [`helpers`] - Pure helper functions (cosine similarity, hashing, safety
 //!   checks, query routing) that are available on all targets for testing.
-//! - [`bindings`] - wasm-bindgen exports, gated behind `target_arch = "wasm32"`.
+//! - `bindings` - wasm-bindgen exports, gated behind `target_arch = "wasm32"`.
 
 /// Pure helper functions with no WASM dependencies.
 /// Always compiled so that unit tests can run on the host target.
