@@ -1,4 +1,4 @@
-# ADR-031: Vector-Native COW Branching (RVCOW) and Real Computational Containers
+# ADR-031: Vector-Native COW Branching (RVCOW) and Real Cognitive Containers
 
 | Field | Value |
 |-------|-------|
@@ -20,7 +20,7 @@ This ADR addresses both problems in a single coordinated design:
 
 1. **RVCOW** — Vector-native copy-on-write branching at cluster granularity, with SIMD-aligned slabs, delta encoding for LoRA, membership filters for shared HNSW indexes, and provenance tracking per cluster.
 
-2. **Real Computational Containers** — Replace all stub artifacts with production binaries: a custom MicroLinux kernel, QEMU microVM launcher, real eBPF programs compiled from C, and a working `serve` command.
+2. **Real Cognitive Containers** — Replace all stub artifacts with production binaries: a custom MicroLinux kernel, QEMU microVM launcher, real eBPF programs compiled from C, and a working `serve` command.
 
 ### Why Ship Together (Phased)
 
@@ -76,7 +76,7 @@ RVCOW's `KernelBinding` footer ties the kernel's signed data to the manifest roo
 
 ## 4. Decision
 
-We adopt **mutable COW with snapshot-freeze** using **four new segment types** (0x20-0x23) and a **KernelBinding footer** (128 bytes, padded) for the computational container. The complete design follows.
+We adopt **mutable COW with snapshot-freeze** using **four new segment types** (0x20-0x23) and a **KernelBinding footer** (128 bytes, padded) for the cognitive container. The complete design follows.
 
 ---
 

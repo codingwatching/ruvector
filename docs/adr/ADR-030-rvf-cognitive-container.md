@@ -1,4 +1,4 @@
-# ADR-030: RVF Computational Container -- Self-Booting Vector Files
+# ADR-030: RVF Cognitive Container -- Self-Booting Vector Files
 
 **Status**: Proposed
 **Date**: 2026-02-14

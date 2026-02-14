@@ -7,12 +7,12 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> &bull;
-  <a href="#what-rvf-contains">What It Contains</a> &bull;
-  <a href="#sealed-cognitive-engines">Cognitive Engines</a> &bull;
-  <a href="#architecture">Architecture</a> &bull;
-  <a href="#performance">Performance</a> &bull;
-  <a href="#comparison">Comparison</a>
+  <a href="#quick-start">🚀 Quick Start</a> &bull;
+  <a href="#what-rvf-contains">📦 What It Contains</a> &bull;
+  <a href="#sealed-cognitive-engines">🧠 Cognitive Engines</a> &bull;
+  <a href="#architecture">🏗️ Architecture</a> &bull;
+  <a href="#performance">⚡ Performance</a> &bull;
+  <a href="#comparison">📊 Comparison</a>
 </p>
 
 <p align="center">
@@ -23,11 +23,13 @@
   <img alt="License" src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=flat-square" />
   <img alt="MSRV" src="https://img.shields.io/badge/MSRV-1.87-purple?style=flat-square" />
   <img alt="no_std" src="https://img.shields.io/badge/no__std-compatible-green?style=flat-square" />
+  <a href="https://crates.io/crates/rvf-runtime"><img alt="crates.io" src="https://img.shields.io/crates/v/rvf-runtime?style=flat-square&label=crates.io" /></a>
+  <a href="https://www.npmjs.com/package/@ruvector/rvf"><img alt="npm" src="https://img.shields.io/npm/v/@ruvector/rvf?style=flat-square&label=npm" /></a>
 </p>
 
 ---
 
-## What is RVF?
+## 🧠 What is RVF? A Cognitive Container
 
 **RVF (RuVector Format)** is a universal binary substrate that merges database, model, graph engine, kernel, and attestation into a single deployable file. 
 
@@ -35,37 +37,76 @@ A `.rvf` file can store vector embeddings, carry LoRA adapter deltas, embed GNN 
 
 This is not a database format. It is an **executable knowledge unit**.
 
+#### 🖥️ Compute & Execution
+
 | Capability | How | Segment |
 |------------|-----|---------|
-| **Self-boot as Linux microVM** | Embeds real kernel + initramfs; QEMU microvm boots in <125 ms | `KERNEL_SEG` (0x0E) |
-| **Accelerate via eBPF** | XDP distance, socket filter, TC routing compiled from real C | `EBPF_SEG` (0x0F) |
-| **Run anywhere, degrade to WASM** | 5.5 KB tile microkernel or ~46 KB control plane in browser | `WASM_SEG` |
-| **Branch with COW** | Git-like branching at cluster granularity; shared HNSW + membership filter | `COW_MAP` / `MEMBERSHIP` (0x20-0x23) |
-| **AI storage: LoRA + GNN + quantum** | Adapter deltas, graph state, VQE snapshots in one file | `OVERLAY` / `GRAPH` / `SKETCH` |
-| **Emit a witness chain** | Tamper-evident hash chain; every operation attested | `WITNESS_SEG` (0x0A) |
-| **Bind kernel measurement to data** | 128-byte `KernelBinding` ties kernel to manifest hash | `KERNEL_SEG` + `CRYPTO_SEG` |
-| **Post-quantum signatures** | ML-DSA-65 / SLH-DSA-128s alongside Ed25519 | `CRYPTO_SEG` (0x0C) |
-| **Remain backward-compatible** | Unknown segments skipped; pure data readers unaffected | Format rule |
+| 🖥️ **Self-boot as a microservice** | The file contains a real Linux kernel. Drop it on a VM and it boots as a running service in under 125 ms. No install, no dependencies. | `KERNEL_SEG` (0x0E) |
+| ⚡ **Hardware-speed lookups via eBPF** | Hot vectors are served directly in the Linux kernel data path, bypassing userspace entirely. Three real C programs handle distance, filtering, and routing. | `EBPF_SEG` (0x0F) |
+| 🌐 **Runs in any browser** | A 5.5 KB WebAssembly runtime lets the same file serve queries in a browser tab with zero backend. | `WASM_SEG` |
+
+#### 🧠 AI & Data Storage
+
+| Capability | How | Segment |
+|------------|-----|---------|
+| 🧠 **Ship models, graphs, and quantum state** | One file carries LoRA fine-tune weights, graph neural network state, and quantum circuit snapshots alongside vectors. No separate model registry needed. | `OVERLAY` / `GRAPH` / `SKETCH` |
+| 🌿 **Git-like branching** | Create a child file that shares all parent data. Only changed vectors are copied. A 1M-vector parent with 100 edits produces a ~2.5 MB child instead of a 512 MB copy. | `COW_MAP` / `MEMBERSHIP` (0x20-0x23) |
+| 📊 **Instant queries while loading** | Start answering queries at 70% accuracy immediately. Accuracy improves to 95%+ as the full index loads in the background. No waiting. | `INDEX_SEG` |
+| 🔍 **Search with filters** | Combine vector similarity with metadata conditions like "genre = sci-fi AND year > 2020" in a single query. | `META_IDX_SEG` (0x0D) |
+| 💥 **Never corrupts on crash** | Power loss mid-write? The file is always readable. Append-only design means incomplete writes are simply ignored on recovery. No write-ahead log needed. | Format rule |
+
+#### 🔐 Security & Trust
+
+| Capability | How | Segment |
+|------------|-----|---------|
+| 🔗 **Tamper-evident audit trail** | Every insert, query, and deletion is recorded in a hash-linked chain. Change one byte anywhere and the entire chain fails verification. | `WITNESS_SEG` (0x0A) |
+| 🔐 **Kernel locked to its data** | A cryptographic binding prevents anyone from swapping a signed kernel from one file into another. The kernel only boots if the data matches. | `KERNEL_SEG` + `CRYPTO_SEG` |
+| 🛡️ **Quantum-safe signatures** | Files can be signed with ML-DSA-65 (post-quantum) alongside Ed25519, so signatures survive future quantum computers. | `CRYPTO_SEG` (0x0C) |
+| 🧬 **Track where data came from** | Every file records its parent, grandparent, and full derivation history with cryptographic hashes. Like DNA for data. | `MANIFEST_SEG` |
+
+#### 📦 Ecosystem & Tooling
+
+| Capability | How | Segment |
+|------------|-----|---------|
+| 🤖 **Plug into AI agents** | An MCP server lets Claude Code, Cursor, and other AI tools create, query, and manage vector stores directly. | npm package |
+| 📦 **Use from any language** | Published as 13 Rust crates, 4 npm packages, a CLI tool, and an HTTP server. Works from Rust, Node.js, browsers, and the command line. | 13 crates + 4 npm |
+| ♻️ **Always backward-compatible** | Old tools skip new segment types they don't understand. A file with COW branching still works in a reader that only knows basic vectors. | Format rule |
 
 ```
-                          .rvf file
-              +---------------------------+
-              | MANIFEST  (4 KB, instant) |
-              | VEC_SEG   (embeddings)    |   Store it  -- single-file vector DB
-              | INDEX_SEG (HNSW graph)    |   Send it   -- wire-format streaming
-              | OVERLAY   (LoRA deltas)   |   Run it    -- boots Linux or WASM
-              | KERNEL    (Linux/uni)     |   Trust it  -- witness + attestation
-              | EBPF      (XDP accel)     |   Track it  -- DNA-style lineage
-              | WASM      (5.5 KB)        |
-              | WITNESS   (audit chain)   |
-              | CRYPTO    (signatures)    |
-              +---------------------------+
-                    |            |
-          +---------+            +---------+
-          |                                |
-   Boots as Linux              Runs in browser
-   microservice on             via 5.5 KB WASM
-   bare metal / VM             microkernel
+         📦 Anatomy of a .rvf Cognitive Container (20 segment types)
+       ┌─────────────────────────────────────────────────────────────┐
+       │                       .rvf file                             │
+       ├──────────────────────────┬──────────────────────────────────┤
+       │  📋 Core Data            │  🧠 AI & Models                 │
+       │  MANIFEST  (4 KB root)   │  OVERLAY   (LoRA deltas)         │
+       │  VEC_SEG   (embeddings)  │  GRAPH     (GNN state)           │
+       │  INDEX_SEG (HNSW graph)  │  SKETCH    (quantum / VQE)       │
+       │  QUANT     (codebooks)   │  META      (key-value)           │
+       │  HOT       (promoted)    │  PROFILE   (domain config)       │
+       │  META_IDX  (filter idx)  │  JOURNAL   (mutations)           │
+       ├──────────────────────────┼──────────────────────────────────┤
+       │  🌿 COW Branching        │  🔐 Security & Trust            │
+       │  COW_MAP   (ownership)   │  WITNESS   (audit chain)         │
+       │  REFCOUNT  (ref counts)  │  CRYPTO    (signatures)          │
+       │  MEMBERSHIP (visibility) │  KERNEL    (Linux + binding)     │
+       │  DELTA     (sparse patch)│  EBPF      (XDP / TC / socket)   │
+       │                          │  WASM      (5.5 KB runtime)      │
+       ├──────────────────────────┴──────────────────────────────────┤
+       │                                                             │
+       │   Store it ─── single-file vector DB, no external deps      │
+       │   Ship it  ─── wire-format streaming, one file = one unit   │
+       │   Run it   ─── boots Linux, runs in browser, eBPF in kernel │
+       │   Trust it ─── witness chain + attestation + PQ signatures  │
+       │   Branch it ── COW at cluster granularity, <3 ms            │
+       │   Track it ─── DNA-style lineage from parent to child       │
+       │                                                             │
+       │         ┌──────────┐              ┌──────────┐              │
+       │         │ 🖥️ Boots │             │ 🌐 Runs  │              │
+       │         │ as Linux │              │ in any   │              │
+       │         │ microVM  │              │ browser  │              │
+       │         │ <125 ms  │              │ 5.5 KB   │              │
+       │         └──────────┘              └──────────┘              │
+       └─────────────────────────────────────────────────────────────┘
 ```
 
 ### The Category Shift
@@ -103,7 +144,48 @@ A single `.rvf` file is crash-safe (no WAL needed), self-describing, and progres
 
 ---
 
-## Quick Start
+## 📦 Published Packages
+
+### Rust Crates (crates.io)
+
+| Crate | Version | Description |
+|-------|---------|-------------|
+| [`rvf-types`](https://crates.io/crates/rvf-types) | 0.1.0 | Segment types, 20 headers, enums (`no_std`) |
+| [`rvf-wire`](https://crates.io/crates/rvf-wire) | 0.1.0 | Wire format read/write (`no_std`) |
+| [`rvf-manifest`](https://crates.io/crates/rvf-manifest) | 0.1.0 | Two-level manifest, FileIdentity, COW pointers |
+| [`rvf-quant`](https://crates.io/crates/rvf-quant) | 0.1.0 | Scalar, product, and binary quantization |
+| [`rvf-index`](https://crates.io/crates/rvf-index) | 0.1.0 | HNSW progressive indexing (Layer A/B/C) |
+| [`rvf-crypto`](https://crates.io/crates/rvf-crypto) | 0.1.0 | SHAKE-256, Ed25519, witness chains, attestation |
+| [`rvf-runtime`](https://crates.io/crates/rvf-runtime) | 0.1.0 | Full store API, COW engine, compaction |
+| [`rvf-kernel`](https://crates.io/crates/rvf-kernel) | 0.1.0 | Linux kernel builder, initramfs, Docker pipeline |
+| [`rvf-ebpf`](https://crates.io/crates/rvf-ebpf) | 0.1.0 | BPF C compiler (XDP, socket filter, TC) |
+| [`rvf-launch`](https://crates.io/crates/rvf-launch) | 0.1.0 | QEMU microvm launcher, KVM/TCG, QMP |
+| [`rvf-server`](https://crates.io/crates/rvf-server) | 0.1.0 | HTTP REST + TCP streaming server |
+| [`rvf-import`](https://crates.io/crates/rvf-import) | 0.1.0 | JSON, CSV, NumPy importers |
+| [`rvf-cli`](https://crates.io/crates/rvf-cli) | 0.1.0 | Unified CLI with 17 subcommands |
+
+### npm Packages (npmjs.org)
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| [`@ruvector/rvf`](https://www.npmjs.com/package/@ruvector/rvf) | 0.1.0 | Unified TypeScript SDK |
+| [`@ruvector/rvf-node`](https://www.npmjs.com/package/@ruvector/rvf-node) | 0.1.0 | Node.js N-API native bindings |
+| [`@ruvector/rvf-wasm`](https://www.npmjs.com/package/@ruvector/rvf-wasm) | 0.1.0 | WASM browser package |
+| [`@ruvector/rvf-mcp-server`](https://www.npmjs.com/package/@ruvector/rvf-mcp-server) | 0.1.0 | MCP server for AI agents |
+
+### Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| **Linux** (x86_64, aarch64) | Full | KVM acceleration, eBPF, SIMD (AVX2/NEON) |
+| **macOS** (x86_64, Apple Silicon) | Full | TCG fallback for QEMU, NEON SIMD on ARM |
+| **Windows** (x86_64) | Core | Store, query, index, crypto work. QEMU launcher requires WSL or Windows QEMU. |
+| **WASM** (browser, edge) | Full | 5.5 KB microkernel, ~46 KB control plane |
+| **no_std** (embedded) | Types only | `rvf-types` and `rvf-wire` are `no_std` compatible |
+
+---
+
+## 🚀 Quick Start
 
 ### Install
 
@@ -241,7 +323,7 @@ rvf inspect output/linux_microkernel.rvf
 
 ---
 
-## What RVF Contains
+## 📋 What RVF Contains
 
 An RVF file is a sequence of typed segments. Each segment is self-describing, 64-byte aligned, and independently integrity-checked. The format supports 20 segment types that together constitute a complete cognitive runtime:
 
@@ -272,7 +354,7 @@ An RVF file is a sequence of typed segments. Each segment is self-describing, 64
 
 ---
 
-## Sealed Cognitive Engines
+## 🧠 Sealed Cognitive Engines
 
 When an RVF file combines these segments, it stops being a database and becomes a **deployable intelligence capsule**:
 
@@ -323,7 +405,7 @@ This is not a database. It is a **sealed, auditable, self-booting domain expert*
 
 ---
 
-## RuVector Ecosystem Integration
+## 🔌 RuVector Ecosystem Integration
 
 RVF is the canonical binary format across 75+ Rust crates in the RuVector ecosystem:
 
@@ -346,7 +428,7 @@ The same `.rvf` file format runs on cloud servers, Firecracker microVMs, TEE enc
 
 ---
 
-## Features
+## ✨ Features
 
 ### Storage & Indexing
 
@@ -400,7 +482,7 @@ The same `.rvf` file format runs on cloud servers, Firecracker microVMs, TEE enc
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
   +-----------------------------------------------------------------+
@@ -467,7 +549,7 @@ An `.rvf` file is a sequence of 64-byte-aligned segments. Each segment has a sel
 
 ---
 
-## Performance
+## ⚡ Performance
 
 | Metric | Target | Achieved |
 |--------|--------|----------|
@@ -499,7 +581,7 @@ RVF doesn't make you wait for the full index:
 
 ---
 
-## Comparison
+## 📊 Comparison
 
 | Feature | RVF | Annoy | FAISS | Qdrant | Milvus |
 |---------|-----|-------|-------|--------|--------|
@@ -568,7 +650,7 @@ RVF doesn't make you wait for the full index:
 
 ---
 
-## Lineage Provenance
+## 🧬 Lineage Provenance
 
 RVF supports DNA-style derivation chains for tracking how files were produced from one another. Each `.rvf` file carries a 68-byte `FileIdentity` recording its unique ID, its parent's ID, and a cryptographic hash of the parent's manifest. This enables tamper-evident provenance verification from any file back to its root ancestor.
 
@@ -620,7 +702,7 @@ assert_eq!(child.parent_id(), parent.file_id());
 
 ---
 
-## Self-Booting RVF (Cognitive Container)
+## 🖥️ Self-Booting RVF (Cognitive Container)
 
 RVF supports an optional three-tier execution model that allows a single `.rvf` file to carry executable compute alongside its vector data. A file can serve queries from a browser (Tier 1 WASM), accelerate hot-path lookups in the Linux kernel (Tier 2 eBPF), or boot as a standalone microservice inside a Firecracker microVM or TEE enclave (Tier 3 unikernel) -- all from the same file.
 
@@ -711,7 +793,7 @@ For the full specification including wire formats, attestation binding, and impl
 
 ---
 
-## Library Adapters
+## 🔗 Library Adapters
 
 RVF provides drop-in adapters for 6 libraries in the RuVector ecosystem:
 
@@ -1465,7 +1547,7 @@ The root manifest (Level 0) occupies the last 4,096 bytes of the most recent MAN
 
 ---
 
-## RVCOW: Vector-Native Copy-on-Write Branching
+## 🌿 RVCOW: Vector-Native Copy-on-Write Branching
 
 RVF supports copy-on-write branching at cluster granularity (ADR-031). Instead of copying an entire file to create a variant, a derived file stores only the clusters that changed. This enables Git-like branching for vector databases.
 
@@ -1559,11 +1641,11 @@ rvf verify-attestation <file>            # Verify KernelBinding + attestation
 rvf rebuild-refcounts <file>             # Recompute refcounts from COW map
 ```
 
-For the full specification, see [ADR-031: RVCOW Branching and Real Cognitive Containers](docs/adr/ADR-031-rvcow-branching-and-real-computational-containers.md).
+For the full specification, see [ADR-031: RVCOW Branching and Real Cognitive Containers](docs/adr/ADR-031-rvcow-branching-and-real-cognitive-containers.md).
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 ```bash
 git clone https://github.com/ruvnet/ruvector
@@ -1573,7 +1655,7 @@ cargo test --workspace
 
 All contributions must pass `cargo clippy --all-targets` with zero warnings and maintain the existing test count (currently 795+).
 
-## License
+## 📄 License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
 
