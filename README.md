@@ -18,18 +18,18 @@ Most vector databases are static — they store embeddings and search them. That
 
 | | Pinecone/Weaviate | RuVector |
 |---|---|---|
-| 🧠 **Search improves over time** | ❌ | ✅ GNN layers learn from usage |
-| 🤖 **Run LLMs locally** | ❌ | ✅ ruvllm + RuvLTRA models ($0) |
-| 🔗 **Graph queries (Cypher)** | ❌ | ✅ `MATCH (a)-[:SIMILAR]->(b)` |
-| 📚 **Self-learning AI hooks** | ❌ | ✅ Q-learning, HNSW memory |
-| 🚀 **Self-booting microservice** | ❌ | ✅ [RVF cognitive container](./crates/rvf/README.md) boots Linux in 125 ms |
-| ⚡ **Real-time graph updates** | ❌ Rebuild index | ✅ Dynamic min-cut (no rebuild) |
-| 📦 **Single-file deployment** | ❌ Server required | ✅ One `.rvf` file — no server, no deps |
-| 🔐 **Cryptographic audit trail** | ❌ | ✅ Witness chains + post-quantum signatures |
-| 🌐 **Works offline** | ❌ | ✅ Browser, edge, embedded, bare metal |
-| 💰 **Cost** | Per-query pricing | ✅ $0 — fully open source (MIT) |
-| 📈 **Horizontal scaling** | 💰 Paid | ✅ Raft consensus, free |
-| 🌿 **Git-like branching** | ❌ | ✅ COW at cluster granularity, <3 ms |
+| 🧠 **Search improves over time** | ❌ | ✅ The more you search, the better results get |
+| 🤖 **Run LLMs locally** | ❌ | ✅ Run AI models on your own machine for free |
+| 🔗 **Graph queries** | ❌ | ✅ Ask questions about relationships between data |
+| 📚 **Self-learning** | ❌ | ✅ System watches what works and gets smarter |
+| 🚀 **Self-booting microservice** | ❌ | ✅ [One file boots into a running service](./crates/rvf/README.md) in 125 ms |
+| ⚡ **Real-time graph updates** | ❌ Must rebuild | ✅ Update connections instantly, no downtime |
+| 📦 **Single-file deployment** | ❌ Server required | ✅ One file — copy it anywhere and it just works |
+| 🔐 **Tamper-proof audit trail** | ❌ | ✅ Every operation is cryptographically recorded |
+| 🌐 **Works offline** | ❌ | ✅ Runs in browsers, phones, IoT, and bare metal |
+| 💰 **Cost** | Per-query pricing | ✅ Free forever — open source (MIT) |
+| 📈 **Scales horizontally** | 💰 Paid tiers | ✅ Add nodes freely, no per-vector fees |
+| 🌿 **Git-like branching** | ❌ | ✅ Branch your data like code — only changes are copied |
 
 **One package. Everything included:** vector search, graph queries, GNN learning, distributed clustering, local LLMs, 40+ attention mechanisms, cognitive containers ([RVF](./crates/rvf/README.md) — self-booting `.rvf` files with eBPF, witness chains, and COW branching), and WASM support.
 
