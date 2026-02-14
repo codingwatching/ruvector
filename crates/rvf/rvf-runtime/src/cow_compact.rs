@@ -38,6 +38,12 @@ pub struct CowCompactor {
     pub strip_unknown: bool,
 }
 
+impl Default for CowCompactor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CowCompactor {
     /// Create a new compactor with default settings.
     pub fn new() -> Self {

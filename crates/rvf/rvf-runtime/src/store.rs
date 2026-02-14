@@ -912,7 +912,7 @@ impl RvfStore {
         let cluster_size = vectors_per_cluster * bytes_per_vec;
         let total_vecs = self.vectors.len() as u64;
         let cluster_count = if vectors_per_cluster > 0 {
-            ((total_vecs + vectors_per_cluster as u64 - 1) / vectors_per_cluster as u64) as u32
+            total_vecs.div_ceil(vectors_per_cluster as u64) as u32
         } else {
             0
         };

@@ -16,10 +16,10 @@
 </p>
 
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-543_passing-brightgreen?style=flat-square" />
-  <img alt="Examples" src="https://img.shields.io/badge/examples-40_runnable-brightgreen?style=flat-square" />
-  <img alt="Crates" src="https://img.shields.io/badge/crates-13-blue?style=flat-square" />
-  <img alt="Lines" src="https://img.shields.io/badge/rust-34.5k_lines-orange?style=flat-square" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-795_passing-brightgreen?style=flat-square" />
+  <img alt="Examples" src="https://img.shields.io/badge/examples-45_runnable-brightgreen?style=flat-square" />
+  <img alt="Crates" src="https://img.shields.io/badge/crates-16-blue?style=flat-square" />
+  <img alt="Lines" src="https://img.shields.io/badge/rust-90.7k_lines-orange?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=flat-square" />
   <img alt="MSRV" src="https://img.shields.io/badge/MSRV-1.87-purple?style=flat-square" />
   <img alt="no_std" src="https://img.shields.io/badge/no__std-compatible-green?style=flat-square" />
@@ -35,15 +35,17 @@ A `.rvf` file can store vector embeddings, carry LoRA adapter deltas, embed GNN 
 
 This is not a database format. It is an **executable knowledge unit**.
 
-                                                                                                                                                                                        
-  • Self boot, self contained Linux PS as a microVM                                                                                                                                                               
-  • Accelerate via eBPF                                                                                                                                                                  
-  • Run anywhere, and degrade to WASM                                                                                                                                                                      
-  • Emit a witness chain                                                                                                                                                                 
-  • Bind kernel measurement to data                                                                                                                                                      
-  • Ai Storage including LoRA + GNN + quantum state                                                                                                                                                     
-  • Remain backward compatible as pure data                                                                                                                                              
-                                        
+| Capability | How | Segment |
+|------------|-----|---------|
+| **Self-boot as Linux microVM** | Embeds real kernel + initramfs; QEMU microvm boots in <125 ms | `KERNEL_SEG` (0x0E) |
+| **Accelerate via eBPF** | XDP distance, socket filter, TC routing compiled from real C | `EBPF_SEG` (0x0F) |
+| **Run anywhere, degrade to WASM** | 5.5 KB tile microkernel or ~46 KB control plane in browser | `WASM_SEG` |
+| **Branch with COW** | Git-like branching at cluster granularity; shared HNSW + membership filter | `COW_MAP` / `MEMBERSHIP` (0x20-0x23) |
+| **AI storage: LoRA + GNN + quantum** | Adapter deltas, graph state, VQE snapshots in one file | `OVERLAY` / `GRAPH` / `SKETCH` |
+| **Emit a witness chain** | Tamper-evident hash chain; every operation attested | `WITNESS_SEG` (0x0A) |
+| **Bind kernel measurement to data** | 128-byte `KernelBinding` ties kernel to manifest hash | `KERNEL_SEG` + `CRYPTO_SEG` |
+| **Post-quantum signatures** | ML-DSA-65 / SLH-DSA-128s alongside Ed25519 | `CRYPTO_SEG` (0x0C) |
+| **Remain backward-compatible** | Unknown segments skipped; pure data readers unaffected | Format rule |
 
 ```
                           .rvf file
@@ -241,7 +243,7 @@ rvf inspect output/linux_microkernel.rvf
 
 ## What RVF Contains
 
-An RVF file is a sequence of typed segments. Each segment is self-describing, 64-byte aligned, and independently integrity-checked. The format supports 16 segment types that together constitute a complete cognitive runtime:
+An RVF file is a sequence of typed segments. Each segment is self-describing, 64-byte aligned, and independently integrity-checked. The format supports 20 segment types that together constitute a complete cognitive runtime:
 
 ```
 .rvf file (Sealed Cognitive Engine)
@@ -262,6 +264,10 @@ An RVF file is a sequence of typed segments. Each segment is self-describing, 64
   +-- PROFILE_SEG ..... Domain profile (RVDNA/RVText/RVGraph/RVVision)
   +-- HOT_SEG ......... Temperature-promoted hot data
   +-- META_IDX_SEG .... Metadata inverted indexes for filtered search
+  +-- COW_MAP_SEG ..... Cluster ownership map for COW branching (0x20)
+  +-- REFCOUNT_SEG .... Cluster reference counts, rebuildable (0x21)
+  +-- MEMBERSHIP_SEG .. Vector visibility filter for branches (0x22)
+  +-- DELTA_SEG ....... Sparse delta patches / LoRA overlays (0x23)
 ```
 
 ---
@@ -342,22 +348,55 @@ The same `.rvf` file format runs on cloud servers, Firecracker microVMs, TEE enc
 
 ## Features
 
+### Storage & Indexing
+
 | Feature | Description |
 |---------|-------------|
 | **Append-only segments** | Crash-safe without WAL. Every write is atomic with per-segment integrity checksums. |
 | **Progressive indexing** | Three-tier HNSW (Layer A/B/C). First query at 70% recall before full index loads. |
 | **Temperature-tiered quantization** | Hot vectors stay fp16, warm use product quantization, cold use binary &mdash; automatically. |
-| **Confidential Core attestation** | Record TEE attestation quotes (SGX, SEV-SNP, TDX, ARM CCA) alongside your vectors. |
-| **Post-quantum signatures** | ML-DSA-65 and SLH-DSA-128s segment signing alongside classical Ed25519. |
-| **WASM microkernel** | 5.5 KB binary queries vectors in browsers and edge functions. |
-| **Computational container** | Embed a unikernel (KERNEL_SEG) or eBPF program (EBPF_SEG) for self-booting files. |
-| **DNA-style lineage** | FileIdentity tracks parent/child derivation chains with cryptographic hash verification. |
-| **16 segment types** | VEC, INDEX, MANIFEST, QUANT, WITNESS, CRYPTO, KERNEL, EBPF, and 8 more. |
 | **Metadata filtering** | Filtered k-NN with boolean expressions (AND/OR/NOT/IN/RANGE). |
 | **4 KB instant boot** | Root manifest fits in one page read. Cold boot < 5 ms. |
+| **20 segment types** | VEC, INDEX, MANIFEST, QUANT, WITNESS, CRYPTO, KERNEL, EBPF, COW_MAP, MEMBERSHIP, DELTA, and 9 more. |
+
+### COW Branching (RVCOW)
+
+| Feature | Description |
+|---------|-------------|
+| **COW branching** | Git-like copy-on-write at cluster granularity. Derive child stores that share parent data; only changed clusters are copied. |
+| **Membership filters** | Shared HNSW index across branches with bitmap visibility control. Include/exclude modes. |
+| **Snapshot freeze** | Immutable snapshot at any generation. Metadata-only operation, no data copy. |
+| **Delta segments** | Sparse patches for LoRA overlays. Hot-path guard upgrades to full slab. |
+| **Rebuildable refcounts** | No WAL. Refcounts derived from COW map chain during compaction. |
+
+### Cognitive Containers
+
+| Feature | Description |
+|---------|-------------|
+| **Real Linux microkernel** | Docker-built bzImage, cpio/newc initramfs, QEMU microvm launcher with KVM/TCG. |
+| **Real eBPF programs** | 3 production BPF C programs (XDP distance, socket filter, TC routing) compiled with clang. |
+| **KernelBinding** | 128-byte signed footer ties kernel to manifest hash. Prevents segment-swap attacks. |
+| **WASM microkernel** | 5.5 KB binary queries vectors in browsers and edge functions. |
+| **3-tier execution** | Same file: WASM in browser (Tier 1), eBPF in kernel (Tier 2), Linux microVM (Tier 3). |
+
+### Security & Trust
+
+| Feature | Description |
+|---------|-------------|
+| **Confidential Core attestation** | Record TEE attestation quotes (SGX, SEV-SNP, TDX, ARM CCA) alongside your vectors. |
+| **Post-quantum signatures** | ML-DSA-65 and SLH-DSA-128s segment signing alongside classical Ed25519. |
+| **DNA-style lineage** | FileIdentity tracks parent/child derivation chains with cryptographic hash verification. |
+| **Witness chains** | Tamper-evident hash-linked audit trails. Every operation cryptographically recorded. |
+
+### Ecosystem & Tooling
+
+| Feature | Description |
+|---------|-------------|
 | **Domain profiles** | `.rvdna`, `.rvtext`, `.rvgraph`, `.rvvis` extensions map to optimized profiles. |
-| **Unified CLI** | 9 subcommands: create, ingest, query, delete, status, inspect, compact, derive, serve. |
+| **Unified CLI** | 17 subcommands: create, ingest, query, delete, status, inspect, compact, derive, serve, launch, embed-kernel, embed-ebpf, filter, freeze, verify-witness, verify-attestation, rebuild-refcounts. |
 | **6 library adapters** | Drop-in integration for claude-flow, agentdb, ospipe, agentic-flow, rvlite, sona. |
+| **MCP server** | Model Context Protocol integration for Claude Code, Cursor, and AI agents. |
+| **Node.js bindings** | N-API bindings with lineage, kernel/eBPF, and inspection support. |
 
 ---
 
@@ -383,8 +422,13 @@ The same `.rvf` file format runs on cloud servers, Firecracker microVMs, TEE enc
       |        |         |          |           |
   +---v---+ +--v----+ +--v-----+ +-v--------+ +v-----------+ +v------+
   |server | | node  | | wasm   | | kernel   | | ebpf       | | cli   |
-  |HTTP   | | N-API | | ~46 KB | | microVM  | | XDP/TC     | | clap  |
-  +-------+ +-------+ +--------+ +----------+ +------------+ +-------+
+  |HTTP   | | N-API | | ~46 KB | |bzImage+  | |clang BPF   | |17 cmds|
+  |REST+  | |       | |        | |initramfs | |XDP/TC/sock | |       |
+  |TCP    | |       | |        | +----------+ +------------+ +-------+
+  +-------+ +-------+ +--------+ +-v--------+
+                                  | launch   |
+                                  |QEMU+QMP  |
+                                  +----------+
 ```
 
 ### Segment Model
@@ -404,16 +448,19 @@ An `.rvf` file is a sequence of 64-byte-aligned segments. Each segment has a sel
 
 | Crate | Lines | Purpose |
 |-------|------:|---------|
-| `rvf-types` | 3,184 | Segment types, headers, kernel/eBPF headers, lineage, enums (`no_std`) |
+| `rvf-types` | 5,200+ | Segment types, 20 headers, COW/membership/delta/kernel-binding types, enums (`no_std`) |
 | `rvf-wire` | 2,011 | Wire format read/write (`no_std`) |
-| `rvf-manifest` | 1,580 | Two-level manifest with 4 KB root, FileIdentity codec |
+| `rvf-manifest` | 1,700+ | Two-level manifest with 4 KB root, FileIdentity codec, COW pointers, double-root scheme |
 | `rvf-index` | 2,691 | HNSW progressive indexing (Layer A/B/C) |
 | `rvf-quant` | 1,443 | Scalar, product, and binary quantization |
 | `rvf-crypto` | 1,725 | SHAKE-256, Ed25519, witness chains, attestation, lineage witnesses |
-| `rvf-runtime` | 3,607 | Full store API with compaction, lineage derivation, kernel/eBPF embed |
+| `rvf-runtime` | 5,500+ | Full store API, COW engine, membership filters, compaction, branch/freeze |
+| `rvf-kernel` | 2,400+ | Real Linux kernel builder, cpio/newc initramfs, Docker build, SHA3-256 verification |
+| `rvf-launch` | 1,200+ | QEMU microvm launcher, KVM/TCG detection, QMP shutdown protocol |
+| `rvf-ebpf` | 1,100+ | Real BPF C compiler (XDP, socket filter, TC), vmlinux.h generation |
 | `rvf-wasm` | 1,616 | WASM control plane: in-memory store, query, segment inspection (~46 KB) |
 | `rvf-node` | 852 | Node.js N-API bindings with lineage, kernel/eBPF, and inspection |
-| `rvf-cli` | 665 | Unified CLI with 9 subcommands (create, ingest, query, delete, status, inspect, compact, derive, serve) |
+| `rvf-cli` | 1,800+ | Unified CLI with 17 subcommands (create, ingest, query, delete, status, inspect, compact, derive, serve, launch, embed-kernel, embed-ebpf, filter, freeze, verify-witness, verify-attestation, rebuild-refcounts) |
 | `rvf-server` | 1,165 | HTTP REST + TCP streaming server |
 | `rvf-import` | 980 | JSON, CSV, NumPy (.npy) importers |
 | **Adapters** | **6,493** | **6 library integrations (see below)** |
@@ -431,6 +478,14 @@ An `.rvf` file is a sequence of 64-byte-aligned segments. Each segment has a sel
 | WASM binary (control plane) | < 50 KB | **~46 KB** |
 | Segment header size | 64 bytes | 64 bytes |
 | Minimum file overhead | < 1 KB | < 256 bytes |
+| COW branch creation (10K vecs) | < 10 ms | **2.6 ms** (child = 162 bytes) |
+| COW branch creation (100K vecs) | < 50 ms | **6.8 ms** (child = 162 bytes) |
+| COW read (local cluster, pread) | < 5 us | **1,348 ns/vector** |
+| COW read (inherited from parent) | < 5 us | **1,442 ns/vector** |
+| Write coalescing (32 vecs, 1 cluster) | 1 COW event | **654 us**, 1 event |
+| CowMap lookup | < 100 ns | **28 ns** |
+| Membership filter contains() | < 100 ns | **23-33 ns** |
+| Snapshot freeze | < 100 ns | **30-52 ns** |
 
 ### Progressive Loading
 
@@ -451,7 +506,12 @@ RVF doesn't make you wait for the full index:
 | Single-file format | Yes | Yes | No | No | No |
 | Crash-safe (no WAL) | Yes | No | No | Needs WAL | Needs WAL |
 | Progressive loading | Yes (3 layers) | No | No | No | No |
+| COW branching | Yes (cluster-level) | No | No | No | No |
+| Membership filters | Yes (shared HNSW) | No | No | No | No |
+| Snapshot freeze | Yes (zero-copy) | No | No | No | No |
 | WASM support | Yes (5.5 KB) | No | No | No | No |
+| Self-booting kernel | Yes (real Linux) | No | No | No | No |
+| eBPF acceleration | Yes (XDP/TC/socket) | No | No | No | No |
 | `no_std` compatible | Yes | No | No | No | No |
 | Post-quantum sigs | Yes (ML-DSA-65) | No | No | No | No |
 | TEE attestation | Yes | No | No | No | No |
@@ -459,9 +519,52 @@ RVF doesn't make you wait for the full index:
 | Temperature tiering | Automatic | No | Manual | No | No |
 | Quantization | 3-tier auto | No | Yes (manual) | Yes | Yes |
 | Lineage provenance | Yes (DNA-style) | No | No | No | No |
-| Computational container | Yes (WASM/eBPF/unikernel) | No | No | No | No |
 | Domain profiles | 5 profiles | No | No | No | No |
 | Append-only | Yes | Build-once | Build-once | Log-based | Log-based |
+
+### vs Docker / OCI Containers
+
+| | RVF Cognitive Container | Docker / OCI |
+|---|---|---|
+| **File format** | Single `.rvf` file | Layered tarball images |
+| **Boot target** | QEMU microVM (microvm machine) | Container runtime (runc, containerd) |
+| **Vector data** | Native segment, HNSW-indexed | External volume mount |
+| **Branching** | Vector-native COW at cluster granularity | Layer-based COW (filesystem) |
+| **eBPF** | Embedded in file, verified | Separate deployment |
+| **Attestation** | Witness chain + KernelBinding | External signing (cosign, notary) |
+| **Size (hello world)** | ~17 KB (with initramfs + vectors) | ~5 MB (Alpine) |
+
+### vs Traditional Vector Databases
+
+| | RVF | Pinecone / Milvus / Qdrant |
+|---|---|---|
+| **Deployment** | Single file, zero dependencies | Server process + storage |
+| **Branching** | Native COW, 2.6 ms for 10K vectors | Copy entire collection |
+| **Multi-tenant** | Membership filter on shared index | Separate collections |
+| **Edge deploy** | `scp file.rvf host:` + boot | Install + configure + import |
+| **Provenance** | Cryptographic witness chain | External audit logs |
+| **Compute** | Embedded kernel + eBPF | N/A |
+
+### vs Git LFS / DVC
+
+| | RVF COW | Git LFS / DVC |
+|---|---|---|
+| **Granularity** | Vector cluster (256 KB) | Whole file |
+| **Index sharing** | Shared HNSW + membership filter | No index awareness |
+| **Query during branch** | Yes, sub-microsecond | No query capability |
+| **Delta encoding** | Sparse row patches (LoRA) | Binary diff |
+
+### vs SQLite / DuckDB
+
+| | RVF | SQLite | DuckDB |
+|---|---|---|---|
+| **Vector-native** | Yes (HNSW, quantization, COW) | No (extension needed) | No (extension needed) |
+| **Self-booting** | Yes (KERNEL_SEG) | No | No |
+| **eBPF acceleration** | Yes (XDP, TC, socket) | No | No |
+| **Cryptographic audit** | Yes (witness chains) | No | No |
+| **Progressive loading** | 3-tier HNSW (70% &rarr; 95% recall) | N/A | N/A |
+| **WASM support** | 5.5 KB microkernel | Yes (via wasm) | No |
+| **Single file** | Yes | Yes | Yes |
 
 ---
 
@@ -517,7 +620,7 @@ assert_eq!(child.parent_id(), parent.file_id());
 
 ---
 
-## Self-Booting RVF (Computational Container)
+## Self-Booting RVF (Cognitive Container)
 
 RVF supports an optional three-tier execution model that allows a single `.rvf` file to carry executable compute alongside its vector data. A file can serve queries from a browser (Tier 1 WASM), accelerate hot-path lookups in the Linux kernel (Tier 2 eBPF), or boot as a standalone microservice inside a Firecracker microVM or TEE enclave (Tier 3 unikernel) -- all from the same file.
 
@@ -604,7 +707,7 @@ if let Some((header, program_data)) = store.extract_ebpf()? {
 - **TEE priority**: SEV-SNP first, SGX second, ARM CCA third
 - **Size limits**: kernel images capped at 128 MiB, eBPF programs at 16 MiB
 
-For the full specification including wire formats, attestation binding, and implementation phases, see [ADR-030: RVF Computational Container](docs/adr/ADR-030-rvf-computational-container.md).
+For the full specification including wire formats, attestation binding, and implementation phases, see [ADR-030: RVF Cognitive Container](docs/adr/ADR-030-rvf-computational-container.md).
 
 ---
 
@@ -624,7 +727,7 @@ RVF provides drop-in adapters for 6 libraries in the RuVector ecosystem:
 ---
 
 <details>
-<summary><strong>40 Runnable Examples</strong></summary>
+<summary><strong>45 Runnable Examples</strong></summary>
 
 Every example uses real RVF APIs end-to-end &mdash; no mocks, no stubs. Run any example with:
 
@@ -674,7 +777,7 @@ cargo run --example <name>
 | 20 | `medical_imaging` | Radiology embedding search with `.rvvis` profile |
 | 21 | `legal_discovery` | Legal document similarity with `.rvtext` profile |
 
-#### Computational Containers (5)
+#### Cognitive Containers (5)
 
 | # | Example | What It Demonstrates |
 |---|---------|---------------------|
@@ -712,6 +815,21 @@ cargo run --example <name>
 | 38 | `linux_microkernel` | 20-package Linux distro with SSH keys and kernel embed |
 | 39 | `mcp_in_rvf` | MCP server runtime + eBPF filter embedded in RVF |
 | 40 | `network_interfaces` | 6-chassis / 60-interface network telemetry with anomaly detection |
+
+#### COW Branching & Generation (3)
+
+| # | Example | What It Demonstrates |
+|---|---------|---------------------|
+| 41 | [`cow_branching`](../../examples/rvf/examples/cow_branching.rs) | COW derive, cluster-level copy, write coalescing, parent inheritance |
+| 42 | [`membership_filter`](../../examples/rvf/examples/membership_filter.rs) | Include/exclude bitmap filters for shared HNSW traversal |
+| 43 | [`snapshot_freeze`](../../examples/rvf/examples/snapshot_freeze.rs) | Generation snapshots, immutable freeze, generation tracking |
+
+#### Appliance & Generation (2)
+
+| # | Example | What It Demonstrates |
+|---|---------|---------------------|
+| 44 | [`claude_code_appliance`](../../examples/rvf/examples/claude_code_appliance.rs) | Bootable AI dev environment: real kernel + eBPF + vectors + witness + crypto |
+| 45 | [`generate_all`](../../examples/rvf/examples/generate_all.rs) | Batch generation of all 45 example `.rvf` files |
 
 See the [examples README](../../examples/rvf/README.md) for tutorials, usage patterns, and detailed walkthroughs.
 
@@ -1117,6 +1235,10 @@ let dist = hamming_distance(&bits_a, &bits_b);
 | `0x0D` | META_IDX | Metadata inverted indexes |
 | `0x0E` | KERNEL | Compressed unikernel image (self-booting) |
 | `0x0F` | EBPF | eBPF program for kernel-level acceleration |
+| `0x20` | COW_MAP | Cluster ownership map (local vs parent) |
+| `0x21` | REFCOUNT | Cluster reference counts (rebuildable) |
+| `0x22` | MEMBERSHIP | Vector visibility filter for branches |
+| `0x23` | DELTA | Sparse delta patches (LoRA overlays) |
 
 ### Segment Flags
 
@@ -1189,6 +1311,8 @@ Changing any byte in any entry causes all subsequent `prev_hash` values to fail 
 | `0x0B` | LINEAGE_SNAPSHOT | Lineage snapshot checkpoint |
 | `0x0C` | LINEAGE_TRANSFORM | Lineage transform operation |
 | `0x0D` | LINEAGE_VERIFY | Lineage verification event |
+| `0x0E` | CLUSTER_COW | COW cluster copy event |
+| `0x0F` | CLUSTER_DELTA | Delta patch applied to cluster |
 
 ### Creating a Witness Chain
 
@@ -1435,7 +1559,7 @@ rvf verify-attestation <file>            # Verify KernelBinding + attestation
 rvf rebuild-refcounts <file>             # Recompute refcounts from COW map
 ```
 
-For the full specification, see [ADR-031: RVCOW Branching and Real Computational Containers](docs/adr/ADR-031-rvcow-branching-and-real-computational-containers.md).
+For the full specification, see [ADR-031: RVCOW Branching and Real Cognitive Containers](docs/adr/ADR-031-rvcow-branching-and-real-computational-containers.md).
 
 ---
 
@@ -1447,7 +1571,7 @@ cd ruvector/crates/rvf
 cargo test --workspace
 ```
 
-All contributions must pass `cargo clippy --all-targets` with zero warnings and maintain the existing test count (currently 543+).
+All contributions must pass `cargo clippy --all-targets` with zero warnings and maintain the existing test count (currently 795+).
 
 ## License
 

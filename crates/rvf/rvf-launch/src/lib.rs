@@ -194,7 +194,7 @@ impl MicroVm {
             "k": k,
         });
         let body = serde_json::to_vec(&payload)
-            .map_err(|e| LaunchError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| LaunchError::Io(std::io::Error::other(e)))?;
 
         // Use a raw TCP connection to send an HTTP POST (avoids depending
         // on a full HTTP client library).

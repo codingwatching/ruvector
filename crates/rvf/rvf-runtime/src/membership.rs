@@ -30,7 +30,7 @@ pub struct MembershipFilter {
 impl MembershipFilter {
     /// Create a new include-mode filter with given capacity. All bits start clear.
     pub fn new_include(vector_count: u64) -> Self {
-        let words = ((vector_count + 63) / 64) as usize;
+        let words = vector_count.div_ceil(64) as usize;
         Self {
             mode: FilterMode::Include,
             bitmap: vec![0u64; words],
@@ -42,7 +42,7 @@ impl MembershipFilter {
 
     /// Create a new exclude-mode filter with given capacity. All bits start clear.
     pub fn new_exclude(vector_count: u64) -> Self {
-        let words = ((vector_count + 63) / 64) as usize;
+        let words = vector_count.div_ceil(64) as usize;
         Self {
             mode: FilterMode::Exclude,
             bitmap: vec![0u64; words],
@@ -148,7 +148,7 @@ impl MembershipFilter {
         let mode = FilterMode::try_from(header.filter_mode)
             .map_err(|_| RvfError::Code(ErrorCode::MembershipInvalid))?;
 
-        let word_count = ((header.vector_count + 63) / 64) as usize;
+        let word_count = header.vector_count.div_ceil(64) as usize;
         let expected_bytes = word_count * 8;
         if data.len() < expected_bytes {
             return Err(RvfError::Code(ErrorCode::MembershipInvalid));

@@ -277,7 +277,7 @@ fn pad4(data: &mut Vec<u8>) {
     let rem = data.len() % 4;
     if rem != 0 {
         let padding = 4 - rem;
-        data.extend(std::iter::repeat(0u8).take(padding));
+        data.extend(std::iter::repeat_n(0u8, padding));
     }
 }
 
