@@ -10,6 +10,7 @@ members = [
     "rvf-runtime",
     "rvf-kernel",
     "rvf-wasm",
+    "rvf-wasm-api",
     "rvf-solver-wasm",
     "rvf-node",
     "rvf-server",
@@ -24,6 +25,7 @@ members = [
     "rvf-ebpf",
     "rvf-cli",
     "tests/rvf-integration",
+    "tests/rvf-compat-tests",
     "benches",
 ]
 
@@ -51,6 +53,7 @@ rvf-adapter-agentic-flow = { path = "rvf-adapters/agentic-flow" }
 rvf-adapter-rvlite = { path = "rvf-adapters/rvlite" }
 rvf-adapter-sona = { path = "rvf-adapters/sona" }
 rvf-import = { path = "rvf-import" }
+rvf-wasm-api = { path = "rvf-wasm-api" }
 
 # External
 serde = { version = "1", default-features = false, features = ["derive"] }
@@ -58,5 +61,6 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 crc32c = "0.6"
 sha3 = "0.10"
 ed25519-dalek = "2"
+sha2 = "0.10"
 rand = "0.8"
 tempfile = "3"

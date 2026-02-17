@@ -1,0 +1,16 @@
+[package]
+name = "rvf-compat-tests"
+version = "0.1.0"
+edition = "2021"
+description = "RVF v1 WASM API compatibility test suite (ADR-040)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ruvnet/ruvector"
+rust-version = "1.77"
+publish = false
+
+[dependencies]
+rvf-wasm-api = { path = "../../rvf-wasm-api", features = ["ed25519", "io", "telemetry"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]

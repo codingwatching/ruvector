@@ -1,0 +1,29 @@
+[package]
+name = "rvf-wasm-api"
+version = "0.1.0"
+edition = "2021"
+description = "RVF v1 Minimal WASM API for cognitive containers"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ruvnet/ruvector"
+rust-version = "1.77"
+categories = ["wasm", "database-implementations", "cryptography"]
+keywords = ["rvf", "wasm", "cognitive-container", "deterministic"]
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["std"]
+std = []
+wasm = []
+io = []
+telemetry = []
+ed25519 = ["dep:ed25519-dalek"]
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+ed25519-dalek = { version = "2", default-features = false, optional = true }
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"

@@ -96,6 +96,8 @@ members = [
     "crates/rvf/rvf-import",
     "crates/rvf/rvf-cli",
     "crates/rvf/tests/rvf-integration",
+    "crates/rvf/tests/rvf-compat-tests",
+    "crates/rvf/rvf-wasm-api",
     "crates/rvf/benches",
 ]
 resolver = "2"

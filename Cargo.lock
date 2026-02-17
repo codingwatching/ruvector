@@ -9479,6 +9479,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rvf-compat-tests"
+version = "0.1.0"
+dependencies = [
+ "rvf-wasm-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rvf-crypto"
 version = "0.2.0"
 dependencies = [
@@ -9606,6 +9615,15 @@ dependencies = [
  "ed25519-dalek",
  "rand_core 0.6.4",
  "serde",
+]
+
+[[package]]
+name = "rvf-wasm-api"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rand 0.8.5",
+ "sha2",
 ]
 
 [[package]]
