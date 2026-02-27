@@ -186,9 +186,14 @@ User Query → [SONA Engine] → Model Response → User Feedback
 
 ### Built by rUv, powered by [Cognitum.one](https://cognitum.one)
 
+<details>
+<summary><strong>Cognitum Hardware — The Agentic Appliance & Chip</strong></summary>
+
 **Cognitum v0 — The Agentic Appliance**: Run tens of thousands of always-on agents at no incremental cost beyond the box. Learns in proximity to any signal — sensors, networks, machines — at near-zero power (~5 uW/inference, <15W total). Sub-millisecond response, 500x cheaper than cloud AI. No cloud bills, no per-agent fees. Like a nervous system, not a brain.
 
 **Cognitum v1 — The Agentic Chip**: Same architecture on a single 257-core custom chip. Runs on less than 2W — a AA battery. Idle-to-8 GHz burst on demand, 2 TB/s interconnect, built-in encryption per core.
+
+</details>
 
 ### A Complete AI Operating System
 
